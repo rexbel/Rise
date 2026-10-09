@@ -15,6 +15,8 @@
     "cosmos:probe": "tsx scripts/cosmos-probe.ts",
     "tunnel": "bash scripts/tunnel.sh",
     "tunnel:named": "bash scripts/tunnel-named.sh",
+    "services": "bash scripts/install-services.sh",
+    "deploy:local": "npm run build && bash scripts/install-services.sh app",
     "seed": "python3 -I seed/build_seed.py ../synthetic_hospital/patient_profiles.db seed/patients.json"
   },
   "dependencies": {

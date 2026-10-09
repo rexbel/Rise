@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Template: scripts/install-services.sh fills __REPO__, __HOME__, __PORT__ and __PATH__. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>health.nextrex.rise.watchdog</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__REPO__/scripts/rise-watchdog.sh</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__PATH__</string>
+    <key>PORT</key><string>__PORT__</string>
+  </dict>
+  <key>StartInterval</key><integer>60</integer>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/rise/watchdog.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/rise/watchdog.log</string>
+</dict>
+</plist>

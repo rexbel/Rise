@@ -4,8 +4,14 @@
     {
       "name": "rise-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "-p", "3400"],
-      "port": 3400,
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "-p",
+        "3401"
+      ],
+      "port": 3401,
       "autoPort": true
     }
   ]

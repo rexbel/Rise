@@ -90,12 +90,12 @@ Hosting: Next.js on the demo laptop ──> Cloudflare Tunnel ──> rise.nextr
 ```bash
 npm install
 cp .env.example .env.local   # optional; the demo runs without keys
-npm run dev -- -p 3400        # http://localhost:3400
+npm run dev -- -p 3401        # dev server (3400 is the always-on production service)
 npm run check                 # typecheck + tests
 npm run voice                 # re-render changed voice lines (needs ELEVENLABS_* in .env.local)
 npm run cosmos:probe          # check the Cosmos endpoint: model, latency, one real second look
-npm run tunnel:named          # https://rise.nextrex.health -> :3400 (named tunnel "rise")
-bash scripts/install-tunnel-service.sh  # same tunnel as a login service (survives restarts)
+npm run services              # keep rise.nextrex.health up: production app on :3400 + tunnel, as login services
+npm run deploy:local          # after code changes: rebuild and restart the always-on app
 ```
 
 Phone camera access needs HTTPS, so test on a phone through the tunnel. The YOLO model (`public/models/pose.onnx`) is not committed; export it with `scripts/export_pose_onnx.py` (version pins for Intel Macs are in [docs/PREFLIGHT.md](docs/PREFLIGHT.md)). Without it, RehabNinja uses MediaPipe.

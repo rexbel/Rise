@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Template: scripts/install-services.sh fills __NODE__, __REPO__, __HOME__, __PORT__ and __PATH__. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>health.nextrex.rise.app</string>
+  <key>WorkingDirectory</key><string>__REPO__</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__NODE__</string>
+    <string>__REPO__/node_modules/.bin/next</string>
+    <string>start</string>
+    <string>-p</string>
+    <string>__PORT__</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__PATH__</string>
+    <key>NODE_ENV</key><string>production</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <!-- next-server's graceful shutdown can wait forever on the tunnel's keep-alive connections. -->
+  <key>ExitTimeOut</key><integer>5</integer>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/rise/app.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/rise/app.log</string>
+</dict>
+</plist>
