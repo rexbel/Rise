@@ -29,3 +29,5 @@ After Demo Lock: defects and copy only. New ideas go to the plan's Post-hackatho
 | AI adapters | `lib/ai/` |
 | Twilio / VAST / FHIR | `lib/adapters/` |
 | Laptop pose fallback | `services/rise-pose/` |
+
+Cursor prompts for each phase: [docs/CURSOR-PROMPTS.md](CURSOR-PROMPTS.md). CI (typecheck, tests, lint, build) runs on every push: `.github/workflows/ci.yml`.
