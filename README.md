@@ -4,7 +4,7 @@ Rise lets a care team send a post-surgical patient a 2-minute, CDC-standard chai
 
 Built for the Real-Time Video Agents Hack – NYC (VAST Builders Challenge). All patient data is synthetic.
 
-> Status: pre-event scaffold. Product features are built on the day; see [docs/DAY-OF.md](docs/DAY-OF.md). Build plan: [Rise — Hackathon Build Plan](https://claude.ai/code/artifact/dd20cc44-fbae-45d1-aa14-2fcd2f7f796a).
+> Status: pre-event scaffold. Product features are built on the day; see [docs/DAY-OF.md](docs/DAY-OF.md). Build plan: [docs/BUILD-PLAN.md](docs/BUILD-PLAN.md) (snapshot of the [live doc](https://claude.ai/code/artifact/dd20cc44-fbae-45d1-aa14-2fcd2f7f796a)). Two builders on two branches: `rex/pose` and `jeremiah/vast` (plan §6b).
 
 ## Problem
 After a knee or hip replacement or hip fracture repair, the day-7 phone call hears "I'm fine," and functional decline goes unseen until the next visit or the ED.
@@ -14,7 +14,7 @@ After a knee or hip replacement or hip fracture repair, the day-7 phone call hea
 - **Care coordinator / post-acute nurse**: launches check-ins, watches them live, reviews and acts on triage cards.
 
 ## Solution
-CDC STEADI 30-Second Chair Stand on the patient's phone → on-device pose tracking (YOLO, MediaPipe fallback) counts stands and checks arm use → deterministic rules + NVIDIA Cosmos observation + W&B agent note → triage card on the clinic console → a human approves every escalation. Monitoring runs in 30-day episodes alongside in-person care, never instead of it.
+CDC STEADI 30-Second Chair Stand on the patient's phone → on-device pose tracking (YOLO, MediaPipe fallback) counts stands and checks arm use → deterministic rules + NVIDIA Cosmos observation + W&B agent note → triage card on the clinic console → a human approves every escalation. Every session clip lands in VAST, so the console can search all check-ins in plain language ("every time a patient pushed off the chair"). Monitoring runs in 30-day episodes alongside in-person care, never instead of it.
 
 ## Demo
 - Demo link: _TBD (Cloudflare tunnel URL on the day)_
@@ -57,7 +57,8 @@ Seven synthetic patients in [seed/patients.json](seed/patients.json) (see [seed/
 Timed Up and Go and full 4-Stage Balance · spoken answers via CareBridge Voice · validation study vs. clinician scoring · FHIR write-back to Epic / Oracle Health · caregiver view.
 
 ## Team and credits
-- Rex Belgarde — everything.
+- Rex Belgarde — YOLO pose, patient phone, triage rules and cadence, Twilio.
+- Jeremiah — VAST ingest and search, Cosmos, W&B agent and Weave eval, live relay, clinic console.
 - Patients: [Synthetic Hospital v1.3](https://github.com/sparkcpark/synthetic_hospital) (MIT), Park, Chen, Dettmers, 2026.
 - Protocol: CDC STEADI [30-Second Chair Stand](https://www.cdc.gov/steadi/media/pdfs/STEADI-Assessment-30Sec-508.pdf) and [4-Stage Balance](https://www.cdc.gov/steadi/media/pdfs/STEADI-Assessment-4Stage-508.pdf).
 - Patient language: SAMHSA's six trauma-informed principles.

@@ -1,5 +1,7 @@
 # Preflight (tonight)
 
+Rex owns the list below. Jeremiah's list is at the end. Both: repo pushed and CI green before bed.
+
 Everything here is environment setup or seed data. Confirm at the 9:00 keynote whether pre-scaffolded code is allowed; if not, start from a fresh repo and copy `seed/`, `config/`, `content/`, and `public/voice/` only.
 
 - [ ] `git push` this scaffold to github.com/rexbel/Rise
@@ -14,3 +16,11 @@ Everything here is environment setup or seed data. Confirm at the 9:00 keynote w
 - [ ] **Stage kit:** phone stand or tripod, armless chair, charger, HDMI/USB-C adapter
 - [ ] **Accounts ready:** W&B API key, ElevenLabs, Twilio, Cloudflare; Cosmos/VAST endpoints come from organizers
 - [ ] Charge everything; download the backup video tools you'll use for the screen recording
+
+## Jeremiah
+- [ ] Clone github.com/rexbel/Rise; `npm install && npm run check && npm run dev`; open `/clinic`
+- [ ] Read [BUILD-PLAN.md](BUILD-PLAN.md) §5 (console C1–C4), §6 (architecture, model guards), §6b (ownership and seams), §9 (your demo beats)
+- [ ] Read the VAST, Cosmos, and W&B Inference / Weave docs available before the event; note what auth and upload/search calls look like
+- [ ] W&B API key ready; `pip`/`npm` Weave install checked
+- [ ] Plan the contracts you need in `lib/types.ts` for the 9:40 PR: `ClipRef`, `SearchHit`
+- [ ] Screen recorder installed for the backup recording you own
