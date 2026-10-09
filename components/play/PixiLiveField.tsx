@@ -1,14 +1,15 @@
 "use client"
 
 /**
- * Full-bleed Fruit Ninja overlay on the live camera.
- * Fruits sit on the knees; clean form → slice hits; bent form → bomb / miss.
+ * Full-bleed RehabNinja overlay on the live camera.
+ * Fruits on target joints; clean apex → slash; form break → bomb.
  */
 
-import { useEffect, useLayoutEffect, useRef } from "react"
+import { useEffect, useRef } from "react"
 import { Application, Container, Graphics, Text } from "pixi.js"
 import type { LiveVisual } from "@/lib/play/findings"
 import type { HitMissEvent } from "@/lib/play/hitMiss"
+import type { ExerciseId } from "@/lib/play/programs"
 import type { Keypoints17 } from "@/lib/play/types"
 
 type Fx = {
@@ -42,8 +43,11 @@ export function PixiLiveField({
   combo,
   elapsedMs,
   durationMs,
+  progress,
   frozen,
   showGhost = false,
+  exerciseId = "sit_to_stand",
+  dimmed = false,
 }: {
   keypoints: Keypoints17 | null
   visual: LiveVisual
@@ -52,17 +56,42 @@ export function PixiLiveField({
   combo: number
   elapsedMs: number
   durationMs: number
+  progress: number
   frozen: boolean
   showGhost?: boolean
+  exerciseId?: ExerciseId
+  dimmed?: boolean
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const appRef = useRef<Application | null>(null)
   const fxRef = useRef<Fx[]>([])
   const juiceRef = useRef<Juice[]>([])
-  const stateRef = useRef({ keypoints, visual, hitCount, combo, elapsedMs, durationMs, frozen, showGhost })
-  useLayoutEffect(() => {
-    stateRef.current = { keypoints, visual, hitCount, combo, elapsedMs, durationMs, frozen, showGhost }
+  const stateRef = useRef({
+    keypoints,
+    visual,
+    hitCount,
+    combo,
+    elapsedMs,
+    durationMs,
+    progress,
+    frozen,
+    showGhost,
+    exerciseId,
+    dimmed,
   })
+  stateRef.current = {
+    keypoints,
+    visual,
+    hitCount,
+    combo,
+    elapsedMs,
+    durationMs,
+    progress,
+    frozen,
+    showGhost,
+    exerciseId,
+    dimmed,
+  }
 
   useEffect(() => {
     if (!events.length) return
@@ -78,9 +107,9 @@ export function PixiLiveField({
         angle,
       })
       const color = e.kind === "hit" ? 0x22c55e : 0xea580c
-      for (let i = 0; i < 14; i++) {
+      for (let i = 0; i < 16; i++) {
         const a = Math.random() * Math.PI * 2
-        const sp = 0.08 + Math.random() * 0.22
+        const sp = 0.1 + Math.random() * 0.25
         juiceRef.current.push({
           x: e.x,
           y: e.y,
@@ -89,7 +118,7 @@ export function PixiLiveField({
           born: now,
           life: 400 + Math.random() * 350,
           color,
-          r: 3 + Math.random() * 5,
+          r: 4 + Math.random() * 6,
         })
       }
     }
@@ -125,52 +154,8 @@ export function PixiLiveField({
 
         const g = new Graphics()
         const fxLayer = new Graphics()
-        const ui = new Container()
         world.addChild(g)
         world.addChild(fxLayer)
-        world.addChild(ui)
-
-        const hitLabel = new Text({
-          text: "0 hits",
-          style: {
-            fill: "#fafafa",
-            fontSize: 28,
-            fontWeight: "700",
-            fontFamily: "system-ui, sans-serif",
-            dropShadow: { color: "#000000", alpha: 0.7, blur: 6, distance: 2 },
-          },
-        })
-        hitLabel.x = 20
-        hitLabel.y = 18
-        ui.addChild(hitLabel)
-
-        const comboLabel = new Text({
-          text: "",
-          style: {
-            fill: "#fb923c",
-            fontSize: 22,
-            fontWeight: "700",
-            fontFamily: "system-ui, sans-serif",
-            dropShadow: { color: "#000000", alpha: 0.7, blur: 4, distance: 1 },
-          },
-        })
-        comboLabel.x = 20
-        comboLabel.y = 54
-        ui.addChild(comboLabel)
-
-        const hint = new Text({
-          text: "Slice fruit — keep knees over feet as you stand",
-          style: {
-            fill: "#fafafa",
-            fontSize: 16,
-            fontWeight: "500",
-            fontFamily: "system-ui, sans-serif",
-            dropShadow: { color: "#000000", alpha: 0.75, blur: 4, distance: 1 },
-          },
-        })
-        hint.x = 20
-        hint.y = 86
-        ui.addChild(hint)
 
         app.ticker.add(() => {
           const w = app.screen.width
@@ -179,16 +164,16 @@ export function PixiLiveField({
           const now = performance.now()
           fxRef.current = fxRef.current.filter((f) => now - f.born < f.life)
           juiceRef.current = juiceRef.current.filter((j) => now - j.born < j.life)
+          world.alpha = s.dimmed ? 0.45 : 1
 
           g.clear()
           fxLayer.clear()
 
-          // Time bar
-          const progress = s.durationMs > 0 ? Math.min(1, s.elapsedMs / s.durationMs) : 0
+          const prog = Math.max(0, Math.min(1, s.progress))
           g.roundRect(20, h - 28, w - 40, 10, 5)
-          g.fill({ color: 0x09090b, alpha: 0.5 })
-          g.roundRect(20, h - 28, (w - 40) * progress, 10, 5)
-          g.fill({ color: 0xfafafa, alpha: 0.92 })
+          g.fill({ color: 0x09090b, alpha: 0.55 })
+          g.roundRect(20, h - 28, (w - 40) * prog, 10, 5)
+          g.fill({ color: 0xfafafa, alpha: 0.95 })
 
           if (s.showGhost) {
             const ghostT = (now / 3200) % 1
@@ -196,26 +181,41 @@ export function PixiLiveField({
             drawGhost(g, w, h, stand)
           }
 
-          const bent = s.visual.kneeInward > 0.03 || s.visual.armsOut || s.frozen
-          const bob = Math.sin(now / 280) * 6
+          const bent =
+            s.visual.kneeInward > 0.035 ||
+            (s.exerciseId !== "single_leg_balance" && s.visual.armsOut) ||
+            s.frozen ||
+            (s.exerciseId === "single_leg_balance" && s.visual.sway > 0.08)
+          const pulse = 1 + Math.sin(now / 220) * 0.12
+          const bob = Math.sin(now / 280) * 8
 
-          // Live fruit on knees (and wrists if arms out)
+          // Near-apex pulse cue for STS/squat
+          const nearApex = s.visual.standAmount > 0.45 && s.visual.standAmount < 0.7 && !bent && s.visual.trackingOk
+
           if (s.keypoints && s.visual.trackingOk) {
-            const lk = s.keypoints[13]
-            const rk = s.keypoints[14]
-            drawFruit(g, lk.x * w, lk.y * h + bob, bent ? "bomb" : "melon", 1)
-            drawFruit(g, rk.x * w, rk.y * h - bob * 0.6, bent ? "bomb" : "apple", 1)
-            if (s.visual.armsOut) {
-              drawFruit(g, s.keypoints[9].x * w, s.keypoints[9].y * h, "bomb", 0.85)
-              drawFruit(g, s.keypoints[10].x * w, s.keypoints[10].y * h, "bomb", 0.85)
+            if (s.exerciseId === "single_leg_balance") {
+              const ax = ((s.keypoints[15].x + s.keypoints[16].x) / 2) * w
+              const ay = ((s.keypoints[15].y + s.keypoints[16].y) / 2) * h
+              const r = 48 * pulse
+              g.circle(ax, ay, r)
+              g.stroke({ width: 4, color: bent ? 0xea580c : 0xfafafa, alpha: 0.5 })
+              g.circle(ax, ay, r * prog)
+              g.stroke({ width: 6, color: 0x22c55e, alpha: 0.9 })
+              drawFruit(g, ax, ay, bent ? "bomb" : "melon", 1.15 * pulse)
+            } else {
+              const scale = (nearApex ? 1.25 : 1.1) * pulse
+              drawFruit(g, s.keypoints[13].x * w, s.keypoints[13].y * h + bob, bent ? "bomb" : "melon", scale)
+              drawFruit(g, s.keypoints[14].x * w, s.keypoints[14].y * h - bob * 0.6, bent ? "bomb" : "apple", scale)
+              if (s.visual.armsOut) {
+                drawFruit(g, s.keypoints[9].x * w, s.keypoints[9].y * h, "bomb", 1)
+                drawFruit(g, s.keypoints[10].x * w, s.keypoints[10].y * h, "bomb", 1)
+              }
             }
           } else if (!s.keypoints) {
-            // Demo placeholder fruits when no body yet
-            drawFruit(g, w * 0.42, h * 0.62 + bob, "melon", 0.7)
-            drawFruit(g, w * 0.58, h * 0.62 - bob * 0.5, "apple", 0.7)
+            drawFruit(g, w * 0.42, h * 0.62 + bob, "melon", 0.9)
+            drawFruit(g, w * 0.58, h * 0.62 - bob * 0.5, "apple", 0.9)
           }
 
-          // Slash + halves + juice
           for (const f of fxRef.current) {
             const age = (now - f.born) / f.life
             const px = f.x * w
@@ -225,18 +225,11 @@ export function PixiLiveField({
               drawHalf(fxLayer, px, py, f.angle, age, 1, 0x16a34a)
               drawHalf(fxLayer, px, py, f.angle, age, -1, 0x15803d)
             } else {
-              // Bomb burst
-              const r = 18 + age * 40
+              const r = 22 + age * 50
               fxLayer.circle(px, py, r)
-              fxLayer.stroke({ width: 4, color: 0xea580c, alpha: 1 - age })
-              fxLayer.circle(px, py, 10 + age * 8)
+              fxLayer.stroke({ width: 5, color: 0xea580c, alpha: 1 - age })
+              fxLayer.circle(px, py, 12 + age * 10)
               fxLayer.fill({ color: 0x1c1917, alpha: 0.9 - age * 0.5 })
-              for (let i = 0; i < 6; i++) {
-                const a = f.angle + (i / 6) * Math.PI * 2
-                fxLayer.moveTo(px, py)
-                fxLayer.lineTo(px + Math.cos(a) * (20 + age * 50), py + Math.sin(a) * (20 + age * 50))
-              }
-              fxLayer.stroke({ width: 3, color: 0xf97316, alpha: 1 - age })
             }
           }
 
@@ -248,10 +241,6 @@ export function PixiLiveField({
             fxLayer.circle(jx, jy, j.r * (1 - age * 0.5))
             fxLayer.fill({ color: j.color, alpha: 1 - age })
           }
-
-          hitLabel.text = `${s.hitCount} hits`
-          comboLabel.text = s.combo > 1 ? `combo x${s.combo}` : ""
-          hint.alpha = s.hitCount === 0 ? 0.95 : 0.35
         })
       })
 
@@ -276,60 +265,57 @@ export function PixiLiveField({
 }
 
 function drawFruit(g: Graphics, x: number, y: number, kind: "melon" | "apple" | "bomb", scale: number) {
-  const r = 28 * scale
+  const r = 34 * scale
   if (kind === "bomb") {
     g.circle(x, y, r * 0.95)
-    g.fill({ color: 0x1c1917, alpha: 0.92 })
+    g.fill({ color: 0x1c1917, alpha: 0.95 })
     g.circle(x, y, r * 0.95)
-    g.stroke({ width: 3, color: 0xf97316, alpha: 0.95 })
+    g.stroke({ width: 4, color: 0xf97316, alpha: 1 })
     g.moveTo(x, y - r * 0.9)
-    g.lineTo(x + r * 0.25, y - r * 1.35)
-    g.stroke({ width: 3, color: 0xfbbf24, alpha: 1 })
+    g.lineTo(x + r * 0.28, y - r * 1.4)
+    g.stroke({ width: 4, color: 0xfbbf24, alpha: 1 })
     return
   }
   if (kind === "melon") {
     g.circle(x, y, r)
-    g.fill({ color: 0x16a34a, alpha: 0.95 })
+    g.fill({ color: 0x16a34a, alpha: 0.97 })
     g.ellipse(x, y, r * 0.55, r)
-    g.fill({ color: 0x15803d, alpha: 0.5 })
-    g.moveTo(x - r * 0.7, y)
-    g.lineTo(x + r * 0.7, y)
-    g.stroke({ width: 2, color: 0x14532d, alpha: 0.8 })
-    g.circle(x + r * 0.25, y - r * 0.35, r * 0.18)
-    g.fill({ color: 0xffffff, alpha: 0.35 })
+    g.fill({ color: 0x15803d, alpha: 0.55 })
+    g.moveTo(x - r * 0.75, y)
+    g.lineTo(x + r * 0.75, y)
+    g.stroke({ width: 3, color: 0x14532d, alpha: 0.85 })
+    g.circle(x + r * 0.28, y - r * 0.35, r * 0.2)
+    g.fill({ color: 0xffffff, alpha: 0.4 })
     return
   }
-  // apple
-  g.circle(x, y, r * 0.9)
-  g.fill({ color: 0xdc2626, alpha: 0.95 })
-  g.circle(x - r * 0.15, y - r * 0.1, r * 0.85)
-  g.fill({ color: 0xb91c1c, alpha: 0.45 })
+  g.circle(x, y, r * 0.92)
+  g.fill({ color: 0xdc2626, alpha: 0.97 })
   g.moveTo(x, y - r * 0.75)
-  g.lineTo(x + r * 0.15, y - r * 1.15)
-  g.stroke({ width: 3, color: 0x78350f, alpha: 1 })
-  g.ellipse(x + r * 0.35, y - r * 0.95, r * 0.28, r * 0.14)
+  g.lineTo(x + r * 0.18, y - r * 1.2)
+  g.stroke({ width: 4, color: 0x78350f, alpha: 1 })
+  g.ellipse(x + r * 0.38, y - r * 0.98, r * 0.3, r * 0.15)
   g.fill({ color: 0x22c55e, alpha: 0.95 })
 }
 
 function drawSlash(g: Graphics, x: number, y: number, angle: number, age: number) {
-  const len = 40 + age * 90
+  const len = 55 + age * 110
   const c = Math.cos(angle)
   const s = Math.sin(angle)
   g.moveTo(x - c * len, y - s * len)
   g.lineTo(x + c * len, y + s * len)
-  g.stroke({ width: 5, color: 0xfafafa, alpha: 1 - age })
+  g.stroke({ width: 7, color: 0xfafafa, alpha: 1 - age })
   g.moveTo(x - c * len * 0.7, y - s * len * 0.7)
   g.lineTo(x + c * len * 0.7, y + s * len * 0.7)
-  g.stroke({ width: 2, color: 0x86efac, alpha: 0.8 - age })
+  g.stroke({ width: 3, color: 0x86efac, alpha: 0.85 - age })
 }
 
 function drawHalf(g: Graphics, x: number, y: number, angle: number, age: number, side: 1 | -1, color: number) {
   const nx = -Math.sin(angle) * side
   const ny = Math.cos(angle) * side
-  const dist = age * 55
+  const dist = age * 70
   const hx = x + nx * dist
-  const hy = y + ny * dist - age * 20
-  g.ellipse(hx, hy, 22, 14)
+  const hy = y + ny * dist - age * 24
+  g.ellipse(hx, hy, 28, 16)
   g.fill({ color, alpha: 1 - age * 0.85 })
 }
 

@@ -1,15 +1,16 @@
 "use client"
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Pause as PauseIcon, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PixiLiveField } from "@/components/play/PixiLiveField"
 import { usePlay } from "@/components/play/PlayProvider"
 import ui from "@/content/play-ui.json"
+import { rulePack } from "@/lib/play/exerciseRules"
 import { createFindingTracker, type LiveVisual } from "@/lib/play/findings"
 import { createHitMissTracker, type HitMissEvent } from "@/lib/play/hitMiss"
+import { coachLine, exerciseById } from "@/lib/play/programs"
 import { createSyntheticBus, type SyntheticBus } from "@/lib/play/poseBus"
-import { scriptDurationMs } from "@/lib/play/syntheticPose"
 import { speak } from "@/lib/play/speak"
 import { playTone } from "@/lib/play/tones"
 import { clientLog } from "@/lib/play/clientLog"
@@ -25,51 +26,61 @@ const idleVisual: LiveVisual = {
   standing: false,
   hard: false,
   asymmetry: false,
+  standAmount: 0.2,
+  sway: 0,
 }
 
-/** Full-viewport Fruit Ninja stage: camera + overlays + Stop always visible. */
+/** Soft tracking: step-back only after sustained loss (~2s at 15fps). */
+const TRACKING_LOST_FRAMES = 30
+
+/** Full-viewport RehabNinja stage. */
 export function LivePlay() {
   const { session, dispatch, setElapsedMs, elapsedMs, hitCount, hitLog, pushHitLog, resetHits } = usePlay()
+  const pack = rulePack(session.exerciseId)
+  const ex = exerciseById(session.exerciseId)
   const [keypoints, setKeypoints] = useState<Keypoints17 | null>(null)
   const [visual, setVisual] = useState<LiveVisual>(idleVisual)
   const [fxEvents, setFxEvents] = useState<HitMissEvent[]>([])
   const [combo, setCombo] = useState(0)
   const [usingDemo, setUsingDemo] = useState(false)
   const [camHint, setCamHint] = useState<string | null>(null)
+  const [holdMs, setHoldMs] = useState(0)
+  const [showCoach, setShowCoach] = useState(true)
   const busRef = useRef<SyntheticBus | null>(null)
   const trackerRef = useRef(createFindingTracker())
   const hitMissRef = useRef(createHitMissTracker())
   const lostFor = useRef(0)
   const phaseRef = useRef<PlayPhase>(session.phase)
-  useLayoutEffect(() => {
-    phaseRef.current = session.phase
-  }, [session.phase])
+  phaseRef.current = session.phase
   const completedRef = useRef(false)
+  const hitCountRef = useRef(0)
 
   const inSet = session.phase === "live" || session.phase === "stepBack" || session.phase === "paused"
-  // Fresh visual state at the start of every set (adjusting state on a prop change, not in an effect).
-  const [wasInSet, setWasInSet] = useState(inSet)
-  if (inSet !== wasInSet) {
-    setWasInSet(inSet)
-    if (inSet) {
-      setCombo(0)
-      setFxEvents([])
-      setUsingDemo(false)
-      setCamHint(null)
-    }
-  }
-  const durationMs = scriptDurationMs(session.riseId)
+
+  const maybeComplete = useCallback(
+    (tMs: number, hits: number, holdCleanMs: number) => {
+      if (completedRef.current || phaseRef.current !== "live") return
+      const doneReps = pack.progressMode === "reps" && hits >= pack.targetReps
+      const doneHold = pack.progressMode === "hold" && holdCleanMs >= pack.holdSec * 1000
+      const timedOut = tMs >= pack.maxDurationMs
+      if (doneReps || doneHold || timedOut) {
+        completedRef.current = true
+        dispatch({ type: "SET_COMPLETE", durationMs: tMs })
+      }
+    },
+    [dispatch, pack],
+  )
 
   const onPoseFrame = useCallback(
     (frame: PoseFrame) => {
-      const { visual: vis, finding } = trackerRef.current.push(frame)
+      const { visual: vis, finding } = trackerRef.current.push(frame, session.exerciseId)
       setKeypoints(frame.keypoints)
       setVisual(vis)
       setElapsedMs(frame.t)
 
       if (!vis.trackingOk) {
         lostFor.current += 1
-        if (lostFor.current === 9) dispatch({ type: "TRACKING_LOST" })
+        if (lostFor.current === TRACKING_LOST_FRAMES) dispatch({ type: "TRACKING_LOST" })
       } else {
         if (lostFor.current > 0 && phaseRef.current === "stepBack") {
           dispatch({ type: "TRACKING_OK" })
@@ -79,31 +90,31 @@ export function LivePlay() {
       if (finding) dispatch({ type: "FINDING", finding })
 
       if (phaseRef.current === "live") {
-        const events = hitMissRef.current.push(vis, frame.keypoints, frame.t)
+        const events = hitMissRef.current.push(vis, frame.keypoints, frame.t, session.exerciseId)
+        const snap = hitMissRef.current.snapshot()
+        setHoldMs(snap.holdCleanMs)
         if (events.length) {
           setFxEvents(events)
           for (const e of events) {
             playTone(e.kind === "hit" ? "hit" : "miss")
             pushHitLog(e.kind)
-            setCombo((c) => (e.kind === "hit" ? c + 1 : 0))
+            if (e.kind === "hit") {
+              hitCountRef.current += 1
+              setCombo((c) => c + 1)
+            } else {
+              setCombo(0)
+            }
           }
         }
-        if (!completedRef.current && frame.t >= durationMs) {
-          completedRef.current = true
-          dispatch({ type: "SET_COMPLETE", durationMs })
-        }
+        maybeComplete(frame.t, hitCountRef.current, snap.holdCleanMs)
       }
     },
-    [dispatch, setElapsedMs, pushHitLog, durationMs],
+    [dispatch, setElapsedMs, pushHitLog, session.exerciseId, maybeComplete],
   )
 
-  // Destructured: the hook's object holds a ref, which must not be read during render.
-  const { videoRef: camVideoRef, start: camStart, stop: camStop, pause: camPause, resume: camResume, status: camStatus, error: camError } =
-    usePlayCamera(onPoseFrame)
-  const camApi = useRef({ start: camStart, stop: camStop, pause: camPause, resume: camResume, status: camStatus, error: camError })
-  useLayoutEffect(() => {
-    camApi.current = { start: camStart, stop: camStop, pause: camPause, resume: camResume, status: camStatus, error: camError }
-  }, [camStart, camStop, camPause, camResume, camStatus, camError])
+  const camera = usePlayCamera(onPoseFrame)
+  const camApi = useRef(camera)
+  camApi.current = camera
 
   useEffect(() => {
     if (!inSet) return
@@ -111,10 +122,19 @@ export function LivePlay() {
     trackerRef.current.reset()
     hitMissRef.current.reset()
     resetHits()
+    hitCountRef.current = 0
+    setCombo(0)
+    setFxEvents([])
+    setHoldMs(0)
     completedRef.current = false
+    setUsingDemo(false)
+    setCamHint(null)
+    setShowCoach(true)
+    const coachTimer = window.setTimeout(() => setShowCoach(false), 5000)
+    speak(coachLine(session.exerciseId, ui.live))
 
     void (async () => {
-      clientLog("info", "live set starting camera", { riseId: session.riseId })
+      clientLog("info", "live set starting camera", { riseId: session.riseId, exerciseId: session.exerciseId })
       const result = await camApi.current.start("user")
       if (cancelled || result === "cancelled") return
       if (result === "live") {
@@ -126,11 +146,15 @@ export function LivePlay() {
       clientLog("warn", "falling back to demo replay", camApi.current.error)
       setUsingDemo(true)
       setCamHint(camApi.current.error ?? ui.live.demo_badge)
-      const bus = createSyntheticBus(session.riseId, () => {
-        if (phaseRef.current === "live" || phaseRef.current === "stepBack") {
-          dispatch({ type: "SET_COMPLETE", durationMs: scriptDurationMs(session.riseId) })
-        }
-      })
+      const bus = createSyntheticBus(
+        session.riseId,
+        () => {
+          if (phaseRef.current === "live" || phaseRef.current === "stepBack") {
+            dispatch({ type: "SET_COMPLETE", durationMs: pack.maxDurationMs })
+          }
+        },
+        session.exerciseId,
+      )
       bus.subscribe(onPoseFrame)
       bus.start()
       busRef.current = bus
@@ -139,12 +163,13 @@ export function LivePlay() {
 
     return () => {
       cancelled = true
+      window.clearTimeout(coachTimer)
       camApi.current.stop()
       busRef.current?.stop()
       busRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inSet, session.riseId, dispatch, resetHits])
+  }, [inSet, session.riseId, session.exerciseId, dispatch, resetHits])
 
   useEffect(() => {
     const bus = busRef.current
@@ -163,30 +188,18 @@ export function LivePlay() {
     if (session.phase === "stepBack") speak(ui.live.step_back)
   }, [session.phase])
 
-  useEffect(() => {
-    const onErr = (ev: ErrorEvent) => {
-      clientLog("error", "window error", { message: ev.message, source: ev.filename, line: ev.lineno })
-    }
-    const onRej = (ev: PromiseRejectionEvent) => {
-      clientLog("error", "unhandled rejection", String(ev.reason))
-    }
-    window.addEventListener("error", onErr)
-    window.addEventListener("unhandledrejection", onRej)
-    return () => {
-      window.removeEventListener("error", onErr)
-      window.removeEventListener("unhandledrejection", onRej)
-    }
-  }, [])
-
   const stepBack = session.phase === "stepBack"
   const paused = session.phase === "paused"
-  // The demo bus reports its clock through onPoseFrame, so elapsedMs covers both paths.
-  const elapsed = elapsedMs
-  const loadingCam = camStatus === "requesting" || camStatus === "loading"
+  const elapsed = usingDemo ? (busRef.current?.tMs() ?? elapsedMs) : elapsedMs
+  const loadingCam = camera.status === "requesting" || camera.status === "loading"
+  const progress =
+    pack.progressMode === "hold"
+      ? Math.min(1, holdMs / (pack.holdSec * 1000))
+      : Math.min(1, hitCount / pack.targetReps)
+  const softTracking = !visual.trackingOk && !stepBack && !paused
 
   return (
     <div className="relative flex h-full min-h-0 flex-1 flex-col bg-black text-zinc-50">
-      {/* Full-bleed camera stage */}
       <div
         className="relative min-h-0 flex-1 overflow-hidden"
         onClick={() => {
@@ -201,10 +214,10 @@ export function LivePlay() {
         role="presentation"
       >
         <video
-          ref={camVideoRef}
+          ref={camera.videoRef}
           playsInline
           muted
-          className={`absolute inset-0 h-full w-full object-cover -scale-x-100 ${usingDemo ? "opacity-0" : "opacity-100"}`}
+          className={`absolute inset-0 h-full w-full object-cover -scale-x-100 ${usingDemo ? "opacity-0" : softTracking ? "opacity-60" : "opacity-100"}`}
         />
         {usingDemo ? (
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,#1c1917_0%,#0a0a0c_70%)]" aria-hidden />
@@ -216,17 +229,24 @@ export function LivePlay() {
           hitCount={hitCount}
           combo={combo}
           elapsedMs={elapsed}
-          durationMs={durationMs}
+          durationMs={pack.maxDurationMs}
+          progress={progress}
           frozen={visual.hard}
           showGhost={usingDemo}
+          exerciseId={session.exerciseId}
+          dimmed={softTracking}
         />
 
-        {/* Top HUD */}
         <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-3 bg-gradient-to-b from-black/70 to-transparent p-4 pt-[max(1rem,env(safe-area-inset-top))]">
           <div>
-            <p className="text-xs font-medium tracking-wide text-orange-400">Rise · Fruit Ninja</p>
-            <p className="text-lg font-semibold text-zinc-50 sm:text-xl">{ui.live.prompt}</p>
-            <p className="mt-0.5 max-w-md text-sm text-zinc-300">{ui.live.how}</p>
+            <p className="text-xs font-medium tracking-wide text-orange-400">{ui.brand}</p>
+            <p className="text-lg font-semibold text-zinc-50 sm:text-xl">{ex.name}</p>
+            <p className="mt-0.5 max-w-md text-sm text-zinc-300">{ex.ninjaHint}</p>
+            {showCoach ? (
+              <p className="mt-2 max-w-md text-base font-medium text-amber-100" aria-live="polite">
+                {coachLine(session.exerciseId, ui.live)}
+              </p>
+            ) : null}
           </div>
           <div className="flex flex-col items-end gap-2">
             {usingDemo ? (
@@ -234,12 +254,25 @@ export function LivePlay() {
                 {ui.live.demo_badge}
               </span>
             ) : null}
-            <div className="flex items-center gap-2 rounded-full bg-zinc-950/80 px-3 py-1.5 text-lg font-semibold text-orange-400">
-              <Zap className="size-5 fill-orange-400" aria-hidden />
-              x{Math.max(1, combo)}
+            <div className="rounded-full bg-zinc-950/80 px-3 py-1.5 text-sm font-semibold text-zinc-100">
+              {pack.progressMode === "hold"
+                ? `${ui.live.hold_label} ${Math.min(pack.holdSec, Math.floor(holdMs / 1000))}s / ${pack.holdSec}s`
+                : `${ui.live.reps_label} ${hitCount} / ${pack.targetReps}`}
             </div>
+            {combo > 1 ? (
+              <div className="flex items-center gap-2 rounded-full bg-zinc-950/80 px-3 py-1.5 text-lg font-semibold text-orange-400">
+                <Zap className="size-5 fill-orange-400" aria-hidden />
+                x{combo}
+              </div>
+            ) : null}
           </div>
         </div>
+
+        {softTracking ? (
+          <div className="pointer-events-none absolute inset-x-0 top-28 flex justify-center px-4">
+            <p className="rounded-lg bg-zinc-950/80 px-3 py-2 text-sm text-amber-100">{ui.live.tracking_soft}</p>
+          </div>
+        ) : null}
 
         {loadingCam ? (
           <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/60 text-xl text-zinc-100">
@@ -273,7 +306,6 @@ export function LivePlay() {
           </div>
         ) : null}
 
-        {/* Soft step-back banner — keeps camera visible */}
         {stepBack ? (
           <div
             className="absolute inset-x-0 bottom-28 mx-auto max-w-lg px-4"
@@ -290,7 +322,6 @@ export function LivePlay() {
         ) : null}
       </div>
 
-      {/* Hit timeline */}
       <div className="flex h-2.5 shrink-0 gap-0.5 bg-zinc-950" aria-label="Hit timeline">
         {hitLog.length === 0 ? (
           <div className="h-full w-full bg-zinc-800" />
@@ -304,7 +335,6 @@ export function LivePlay() {
         )}
       </div>
 
-      {/* Always-visible Stop / Pause */}
       <div className="grid shrink-0 grid-cols-2 gap-3 bg-zinc-950 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <Button
           type="button"

@@ -4,21 +4,23 @@ import { Badge } from "@/components/ui/badge"
 import { Zap } from "lucide-react"
 import { usePlay } from "@/components/play/PlayProvider"
 import { pickFinding } from "@/lib/play/formatPatient"
+import { exerciseById } from "@/lib/play/programs"
 import type { SeedPatient } from "@/lib/types"
 
-/** Demo side panel — hit timeline + line state (not clinical debug labels). */
+/** Demo side panel — hit timeline + workout (not clinical debug labels). */
 export function ClinicStrip({ patient }: { patient: SeedPatient }) {
   const { session, hitCount, hitLog } = usePlay()
   const findings = session.finishedSet?.findings ?? session.findings
   const finding = pickFinding(findings)
+  const workout = exerciseById(session.finishedSet?.exerciseId ?? session.exerciseId)
   const lineLabel = finding
     ? finding.id === "arms"
-      ? "Line bent — hands"
+      ? "Form — hands"
       : finding.id === "valgus"
-        ? "Line bent — knee"
+        ? "Form — knee"
         : "Form changed"
     : session.phase === "live" || session.phase === "paused" || session.phase === "stepBack"
-      ? "Keeping the line…"
+      ? "RehabNinja in progress…"
       : "Ready"
 
   return (
@@ -29,10 +31,12 @@ export function ClinicStrip({ patient }: { patient: SeedPatient }) {
       </div>
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/80 p-4">
-        <p className="text-xs tracking-wide text-zinc-500">Combo</p>
+        <p className="text-xs tracking-wide text-zinc-500">Workout</p>
+        <p className="mt-1 text-lg font-medium text-zinc-50">{workout.name}</p>
+        <p className="mt-3 text-xs tracking-wide text-zinc-500">Hits</p>
         <p className="mt-1 flex items-center gap-2 text-3xl font-semibold text-orange-400">
           <Zap className="size-7 fill-orange-400" aria-hidden />
-          {hitCount} hits
+          {hitCount}
         </p>
         <p className="mt-2 text-base text-zinc-300">{lineLabel}</p>
       </div>

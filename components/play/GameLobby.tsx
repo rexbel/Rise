@@ -18,7 +18,7 @@ export function GameLobby() {
 
       <div className="relative z-10 mx-auto flex w-full max-w-lg flex-1 flex-col justify-center gap-8 px-6 py-16">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="text-sm font-medium tracking-wide text-orange-400">Rise · Keep the Line</p>
+          <p className="text-sm font-medium tracking-wide text-orange-400">{ui.brand}</p>
           <Badge className="border-0 bg-orange-500 text-white hover:bg-orange-500">Live play</Badge>
           <Badge variant="secondary" className="bg-zinc-800 text-zinc-300">
             {ui.synthetic}
@@ -26,7 +26,7 @@ export function GameLobby() {
         </div>
 
         <div className="space-y-4">
-          <h1 className="text-5xl font-semibold tracking-tight sm:text-6xl">Keep the Line</h1>
+          <h1 className="text-5xl font-semibold tracking-tight sm:text-6xl">RehabNinja</h1>
           <p className="max-w-md text-xl leading-snug text-zinc-400">{ui.lobby.tagline}</p>
         </div>
 

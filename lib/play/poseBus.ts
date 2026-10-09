@@ -1,7 +1,8 @@
-import { poseAt, scriptDurationMs, HZ } from "@/lib/play/syntheticPose"
+import { poseAtExercise, exerciseDurationMs, HZ } from "@/lib/play/syntheticPose"
+import type { ExerciseId } from "@/lib/play/programs"
 import type { Keypoints17, PoseBus, PoseFrame } from "@/lib/play/types"
 
-/** Same frame contract YOLO will later fill. Demo replay uses synthetic keypoints. */
+/** Same frame contract live camera fills. Demo replay uses synthetic keypoints. */
 export function estimate(keypoints: Keypoints17 | null, t: number): PoseFrame {
   return { t, keypoints }
 }
@@ -14,17 +15,21 @@ export type SyntheticBus = PoseBus & {
   tMs: () => number
 }
 
-export function createSyntheticBus(riseId: string, onComplete?: () => void): SyntheticBus {
+export function createSyntheticBus(
+  riseId: string,
+  onComplete?: () => void,
+  exerciseId: ExerciseId = "sit_to_stand",
+): SyntheticBus {
   const listeners = new Set<(f: PoseFrame) => void>()
   let timer: ReturnType<typeof setInterval> | null = null
   let t = 0
   let paused = false
   let started = false
-  const duration = scriptDurationMs(riseId)
+  const duration = exerciseDurationMs(exerciseId, riseId)
 
   function tick() {
     if (paused) return
-    const frame = estimate(poseAt(riseId, t), t)
+    const frame = estimate(poseAtExercise(exerciseId, riseId, t), t)
     for (const cb of listeners) cb(frame)
     t += STEP
     if (t > duration) {

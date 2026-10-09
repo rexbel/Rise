@@ -11,6 +11,7 @@ import { SessionReport } from "@/components/play/SessionReport"
 import { usePlay } from "@/components/play/PlayProvider"
 import ui from "@/content/play-ui.json"
 import lines from "@/content/patient-lines.json"
+import { todaysProgram } from "@/lib/play/programs"
 import { isLiveShell, nextQuestionId } from "@/lib/play/phaseView"
 import { questionKind, questionText } from "@/lib/play/questionCopy"
 import { speak } from "@/lib/play/speak"
@@ -25,7 +26,7 @@ export function PhoneColumn({ patient }: { patient: SeedPatient }) {
     <div className="mx-auto flex h-full min-h-[640px] w-full max-w-[420px] flex-col border border-zinc-800 bg-zinc-950 text-zinc-50 shadow-sm">
       <header className="flex items-center justify-between gap-2 border-b border-zinc-800 px-4 py-3">
         <div>
-          <p className="text-xs font-medium tracking-wide text-orange-400">Rise · Keep the Line</p>
+          <p className="text-xs font-medium tracking-wide text-orange-400">{ui.brand}</p>
           <p className="text-base font-medium">{firstName}</p>
         </div>
         <div className="flex gap-1">
@@ -50,11 +51,25 @@ export function PhoneColumn({ patient }: { patient: SeedPatient }) {
 function PhoneBody({ patient }: { patient: SeedPatient }) {
   const { session, dispatch, begin, voiceStopOn, setVoiceStopOn } = usePlay()
   const { phase } = session
+  const workouts = todaysProgram(patient)
+
+  useEffect(() => {
+    if (phase !== "howto" && phase !== "home") return
+    const first = workouts[0]?.id
+    if (first && !workouts.some((w) => w.id === session.exerciseId)) {
+      dispatch({ type: "SELECT_EXERCISE", exerciseId: first })
+    }
+  }, [phase, workouts, session.exerciseId, dispatch])
 
   if (phase === "howto" || phase === "home") {
     return (
       <div className="flex flex-1 flex-col justify-center gap-4 overflow-y-auto">
-        <ConditionCard patient={patient} />
+        <ConditionCard
+          patient={patient}
+          selectedId={session.exerciseId}
+          onSelect={(id) => dispatch({ type: "SELECT_EXERCISE", exerciseId: id })}
+        />
+        <p className="text-sm text-zinc-500">{ui.program.pick_hint}</p>
         <h2 className="text-2xl font-semibold leading-snug text-zinc-50">{ui.howto.title}</h2>
         <p className="text-xl text-zinc-400">{ui.howto.body}</p>
         <Button

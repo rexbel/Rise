@@ -1,28 +1,29 @@
 /**
- * muse.fit / Fruit Ninja scoring for Keep the Line.
- * Hits from good-frame streaks; misses flash on the bad joint.
+ * RehabNinja scoring: clean rep apex → hit; form break → bomb/miss.
  * Never emits stand counts or STEADI.
  */
 
 import type { LiveVisual } from "@/lib/play/findings"
+import { KNEE_BEND_SOFT } from "@/lib/play/findings"
+import type { ExerciseId } from "@/lib/play/programs"
 import type { Keypoints17 } from "@/lib/play/types"
 
 export type LineQuality = "held" | "bent" | "lost"
 
-/** muse.fit demo defaults */
-export const HIT_STREAK = 8
-export const HIT_COOLDOWN_MS = 1200
+export const HIT_STREAK_BACKUP = 12
+export const HIT_COOLDOWN_MS = 900
 export const MISS_COOLDOWN_MS = 500
-export const KNEE_BEND = 0.03
+export const HOLD_HIT_EVERY_MS = 2500
+export const APEX_RISE = 0.12
+export const APEX_MIN = 0.55
 
 export type HitMissKind = "hit" | "miss"
 
-export type HitMissJoint = "midKnees" | "leftKnee" | "rightKnee" | "leftWrist" | "rightWrist"
+export type HitMissJoint = "midKnees" | "leftKnee" | "rightKnee" | "leftWrist" | "rightWrist" | "midAnkles"
 
 export type HitMissEvent = {
   kind: HitMissKind
   atMs: number
-  /** Normalized 0..1 playfield coords for FX */
   x: number
   y: number
   joint: HitMissJoint
@@ -34,17 +35,27 @@ export type HitMissState = {
   lastHitAt: number
   lastMissAt: number
   wasBent: boolean
+  holdCleanMs: number
 }
 
 export type HitMissTracker = {
-  push: (visual: LiveVisual, keypoints: Keypoints17 | null, tMs: number) => HitMissEvent[]
+  push: (
+    visual: LiveVisual,
+    keypoints: Keypoints17 | null,
+    tMs: number,
+    exerciseId?: ExerciseId,
+  ) => HitMissEvent[]
   reset: () => void
   snapshot: () => HitMissState
 }
 
-export function toLineQuality(visual: LiveVisual): LineQuality {
+export function toLineQuality(visual: LiveVisual, exerciseId: ExerciseId = "sit_to_stand"): LineQuality {
   if (!visual.trackingOk) return "lost"
-  if (visual.hard || visual.kneeInward > KNEE_BEND || visual.armsOut) return "bent"
+  if (visual.hard) return "bent"
+  if (visual.kneeInward > KNEE_BEND_SOFT) return "bent"
+  if (exerciseId !== "single_leg_balance" && visual.armsOut) return "bent"
+  if (exerciseId === "single_leg_balance" && visual.sway > 0.08) return "bent"
+  if (exerciseId === "mini_squat" && visual.fast) return "bent"
   return "held"
 }
 
@@ -55,22 +66,44 @@ function midKnees(kp: Keypoints17): { x: number; y: number } {
   }
 }
 
+function midAnkles(kp: Keypoints17): { x: number; y: number } {
+  return {
+    x: (kp[15].x + kp[16].x) / 2,
+    y: (kp[15].y + kp[16].y) / 2,
+  }
+}
+
 function missTarget(
   visual: LiveVisual,
   kp: Keypoints17 | null,
+  exerciseId: ExerciseId,
 ): { x: number; y: number; joint: HitMissJoint } {
   if (!kp) return { x: 0.5, y: 0.55, joint: "midKnees" }
+  if (exerciseId === "single_leg_balance") {
+    const m = midAnkles(kp)
+    return { ...m, joint: "midAnkles" }
+  }
   if (visual.armsOut) {
     const leftWorse = kp[9].y > kp[10].y
     const i = leftWorse ? 9 : 10
     return { x: kp[i].x, y: kp[i].y, joint: leftWorse ? "leftWrist" : "rightWrist" }
   }
-  if (visual.kneeInward > KNEE_BEND) {
-    const mid = (kp[15].x + kp[16].x) / 2
+  if (visual.kneeInward > KNEE_BEND_SOFT) {
+    const mid = (kp[11].x + kp[12].x) / 2
     const leftIn = kp[13].x - mid
     const rightIn = mid - kp[14].x
     if (leftIn >= rightIn) return { x: kp[13].x, y: kp[13].y, joint: "leftKnee" }
     return { x: kp[14].x, y: kp[14].y, joint: "rightKnee" }
+  }
+  const m = midKnees(kp)
+  return { ...m, joint: "midKnees" }
+}
+
+function hitTarget(kp: Keypoints17 | null, exerciseId: ExerciseId): { x: number; y: number; joint: HitMissJoint } {
+  if (!kp) return { x: 0.5, y: 0.55, joint: "midKnees" }
+  if (exerciseId === "single_leg_balance") {
+    const m = midAnkles(kp)
+    return { ...m, joint: "midAnkles" }
   }
   const m = midKnees(kp)
   return { ...m, joint: "midKnees" }
@@ -82,6 +115,10 @@ export function createHitMissTracker(): HitMissTracker {
   let lastHitAt = -Infinity
   let lastMissAt = -Infinity
   let wasBent = false
+  let holdCleanMs = 0
+  let prevStand = 0.3
+  let rising = false
+  let prevT: number | null = null
 
   function reset() {
     hitCount = 0
@@ -89,43 +126,88 @@ export function createHitMissTracker(): HitMissTracker {
     lastHitAt = -Infinity
     lastMissAt = -Infinity
     wasBent = false
+    holdCleanMs = 0
+    prevStand = 0.3
+    rising = false
+    prevT = null
   }
 
   function snapshot(): HitMissState {
-    return { hitCount, goodStreak, lastHitAt, lastMissAt, wasBent }
+    return { hitCount, goodStreak, lastHitAt, lastMissAt, wasBent, holdCleanMs }
   }
 
-  function push(visual: LiveVisual, keypoints: Keypoints17 | null, tMs: number): HitMissEvent[] {
+  function emitHit(tMs: number, kp: Keypoints17 | null, exerciseId: ExerciseId, events: HitMissEvent[]) {
+    if (tMs - lastHitAt < HIT_COOLDOWN_MS) return
+    const target = hitTarget(kp, exerciseId)
+    events.push({ kind: "hit", atMs: tMs, ...target })
+    hitCount += 1
+    lastHitAt = tMs
+    goodStreak = 0
+  }
+
+  function push(
+    visual: LiveVisual,
+    keypoints: Keypoints17 | null,
+    tMs: number,
+    exerciseId: ExerciseId = "sit_to_stand",
+  ): HitMissEvent[] {
     const events: HitMissEvent[] = []
-    const quality = toLineQuality(visual)
+    const quality = toLineQuality(visual, exerciseId)
+    const dt = prevT == null ? 0 : Math.max(0, tMs - prevT)
+    prevT = tMs
 
     if (quality === "lost") {
       goodStreak = 0
       wasBent = false
+      rising = false
+      holdCleanMs = 0
+      prevStand = visual.standAmount
       return events
     }
 
     const bent = quality === "bent"
     if (bent) {
       goodStreak = 0
+      rising = false
+      holdCleanMs = 0
       if (!wasBent && tMs - lastMissAt >= MISS_COOLDOWN_MS) {
-        const target = missTarget(visual, keypoints)
+        const target = missTarget(visual, keypoints, exerciseId)
         events.push({ kind: "miss", atMs: tMs, ...target })
         lastMissAt = tMs
       }
       wasBent = true
+      prevStand = visual.standAmount
       return events
     }
 
     wasBent = false
-    goodStreak += 1
-    if (goodStreak >= HIT_STREAK && tMs - lastHitAt >= HIT_COOLDOWN_MS) {
-      const m = keypoints ? midKnees(keypoints) : { x: 0.5, y: 0.55 }
-      events.push({ kind: "hit", atMs: tMs, x: m.x, y: m.y, joint: "midKnees" })
-      hitCount += 1
-      lastHitAt = tMs
-      goodStreak = 0
+
+    if (exerciseId === "single_leg_balance") {
+      holdCleanMs += dt
+      if (holdCleanMs >= HOLD_HIT_EVERY_MS && tMs - lastHitAt >= HIT_COOLDOWN_MS) {
+        emitHit(tMs, keypoints, exerciseId, events)
+        holdCleanMs = 0
+      }
+      prevStand = visual.standAmount
+      return events
     }
+
+    // Apex: rising through standAmount threshold with quality held
+    const s = visual.standAmount
+    const delta = s - prevStand
+    if (delta > 0.02) rising = true
+    if (rising && prevStand < APEX_MIN && s >= APEX_MIN && delta >= 0) {
+      emitHit(tMs, keypoints, exerciseId, events)
+      rising = false
+    }
+    if (s < 0.4) rising = false
+    // Backup streak if apex never fires (slow movers)
+    goodStreak += 1
+    if (goodStreak >= HIT_STREAK_BACKUP && tMs - lastHitAt >= HIT_COOLDOWN_MS * 2) {
+      emitHit(tMs, keypoints, exerciseId, events)
+    }
+    if (delta < -APEX_RISE) rising = false
+    prevStand = s
     return events
   }
 
