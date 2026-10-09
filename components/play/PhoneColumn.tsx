@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import { FrameSilhouette } from "@/components/play/FrameSilhouette"
-import { LivePlay } from "@/components/play/LivePlay"
 import { usePlay } from "@/components/play/PlayProvider"
 import ui from "@/content/play-ui.json"
 import lines from "@/content/patient-lines.json"
@@ -100,7 +99,10 @@ function PhoneBody({ patient }: { patient: SeedPatient }) {
     )
   }
   if (phase === "countdown") return <Countdown />
-  if (isLiveShell(phase) || phase === "paused") return <LivePlay />
+  // Live / paused render full-screen via PlaySessionView (not the phone column).
+  if (isLiveShell(phase) || phase === "paused") {
+    return <p className="text-lg text-zinc-400">Opening full-screen play…</p>
+  }
   if (phase === "questions") return <Questions />
   if (phase === "emergencyConfirm") {
     return (

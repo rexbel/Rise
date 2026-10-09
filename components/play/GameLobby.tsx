@@ -27,8 +27,8 @@ export function GameLobby() {
         <div className="space-y-4">
           <h1 className="text-5xl font-semibold tracking-tight sm:text-6xl">Keep the Line</h1>
           <p className="max-w-md text-xl leading-snug text-zinc-400">
-            Mirror the ghost. Score hits when your knee stays over your foot. Misses flash on the joint — like a
-            rhythm game for rehab.
+            Full-screen Fruit Ninja on your camera. Sit to stand with knees over feet — slice fruit for hits, avoid
+            bombs when form breaks.
           </p>
         </div>
 

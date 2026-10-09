@@ -22,7 +22,7 @@ export function ClinicStrip({ patient }: { patient: SeedPatient }) {
       : "Ready"
 
   return (
-    <aside className="hidden w-80 shrink-0 flex-col gap-5 border-l border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-100 lg:flex">
+    <aside className="hidden h-full w-80 shrink-0 flex-col gap-5 overflow-y-auto border-l border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-100 lg:flex">
       <div className="flex flex-wrap items-center gap-2">
         <p className="font-medium">{patient.display_name.split(" ")[0]}</p>
         {session.demo ? <Badge className="border-0 bg-zinc-800 text-zinc-300">Demo replay</Badge> : null}

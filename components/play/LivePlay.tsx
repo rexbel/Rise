@@ -12,6 +12,7 @@ import { createSyntheticBus, type SyntheticBus } from "@/lib/play/poseBus"
 import { scriptDurationMs } from "@/lib/play/syntheticPose"
 import { speak } from "@/lib/play/speak"
 import { playTone } from "@/lib/play/tones"
+import { clientLog } from "@/lib/play/clientLog"
 import { usePlayCamera } from "@/lib/play/usePlayCamera"
 import type { Keypoints17, PlayPhase, PoseFrame } from "@/lib/play/types"
 
@@ -26,8 +27,9 @@ const idleVisual: LiveVisual = {
   asymmetry: false,
 }
 
+/** Full-viewport Fruit Ninja stage: camera + overlays + Stop always visible. */
 export function LivePlay() {
-  const { session, dispatch, setElapsedMs, elapsedMs, hitCount, hitLog, pushHitLog, resetHits, demo } = usePlay()
+  const { session, dispatch, setElapsedMs, elapsedMs, hitCount, hitLog, pushHitLog, resetHits } = usePlay()
   const [keypoints, setKeypoints] = useState<Keypoints17 | null>(null)
   const [visual, setVisual] = useState<LiveVisual>(idleVisual)
   const [fxEvents, setFxEvents] = useState<HitMissEvent[]>([])
@@ -86,7 +88,6 @@ export function LivePlay() {
   const camApi = useRef(camera)
   camApi.current = camera
 
-  // Prefer live camera + YOLO/MediaPipe; fall back to synthetic demo replay.
   useEffect(() => {
     if (!inSet) return
     let cancelled = false
@@ -100,14 +101,16 @@ export function LivePlay() {
     setCamHint(null)
 
     void (async () => {
-      const ok = await camApi.current.start("user")
-      if (cancelled) return
-      if (ok) {
+      clientLog("info", "live set starting camera", { riseId: session.riseId })
+      const result = await camApi.current.start("user")
+      if (cancelled || result === "cancelled") return
+      if (result === "live") {
         setUsingDemo(false)
         setCamHint(null)
+        clientLog("info", "live camera path active")
         return
       }
-      // Camera or model failed — seeded Fruit Ninja replay so the demo still runs.
+      clientLog("warn", "falling back to demo replay", camApi.current.error)
       setUsingDemo(true)
       setCamHint(camApi.current.error ?? ui.live.demo_badge)
       const bus = createSyntheticBus(session.riseId, () => {
@@ -127,7 +130,8 @@ export function LivePlay() {
       busRef.current?.stop()
       busRef.current = null
     }
-  }, [inSet, session.riseId, dispatch, resetHits, onPoseFrame])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inSet, session.riseId, dispatch, resetHits])
 
   useEffect(() => {
     const bus = busRef.current
@@ -146,44 +150,42 @@ export function LivePlay() {
     if (session.phase === "stepBack") speak(ui.live.step_back)
   }, [session.phase])
 
+  useEffect(() => {
+    const onErr = (ev: ErrorEvent) => {
+      clientLog("error", "window error", { message: ev.message, source: ev.filename, line: ev.lineno })
+    }
+    const onRej = (ev: PromiseRejectionEvent) => {
+      clientLog("error", "unhandled rejection", String(ev.reason))
+    }
+    window.addEventListener("error", onErr)
+    window.addEventListener("unhandledrejection", onRej)
+    return () => {
+      window.removeEventListener("error", onErr)
+      window.removeEventListener("unhandledrejection", onRej)
+    }
+  }, [])
+
   const stepBack = session.phase === "stepBack"
   const paused = session.phase === "paused"
   const elapsed = usingDemo ? (busRef.current?.tMs() ?? elapsedMs) : elapsedMs
   const loadingCam = camera.status === "requesting" || camera.status === "loading"
 
   return (
-    <div className="flex flex-1 flex-col gap-3 text-zinc-50">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <p className="text-xs font-medium tracking-wide text-orange-400">Keep the Line</p>
-          <p className="text-sm text-zinc-400">{ui.live.prompt}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {usingDemo || demo ? (
-            <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-xs text-zinc-400">
-              {ui.live.demo_badge}
-            </span>
-          ) : camera.tier ? (
-            <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-xs text-zinc-500">
-              {camera.tier}
-              {camera.fps ? ` · ${camera.fps}fps` : ""}
-            </span>
-          ) : null}
-          <div className="flex items-center gap-2 rounded-full bg-zinc-900 px-3 py-1.5 text-lg font-semibold text-orange-400">
-            <Zap className="size-5 fill-orange-400" aria-hidden />
-            x{Math.max(1, combo)}
-          </div>
-        </div>
-      </div>
-      <button
-        type="button"
-        className="relative min-h-52 flex-1 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950"
+    <div className="relative flex h-full min-h-0 flex-1 flex-col bg-black text-zinc-50">
+      {/* Full-bleed camera stage */}
+      <div
+        className="relative min-h-0 flex-1 overflow-hidden"
         onClick={() => {
           if (!paused && !stepBack) dispatch({ type: "PAUSE" })
         }}
-        aria-label={ui.live.pause}
+        onKeyDown={(e) => {
+          if ((e.key === "Enter" || e.key === " ") && !paused && !stepBack) {
+            e.preventDefault()
+            dispatch({ type: "PAUSE" })
+          }
+        }}
+        role="presentation"
       >
-        {/* Live selfie — mirrored for front camera; Fruit Ninja overlays sit on top */}
         <video
           ref={camera.videoRef}
           playsInline
@@ -198,24 +200,51 @@ export function LivePlay() {
           visual={visual}
           events={fxEvents}
           hitCount={hitCount}
+          combo={combo}
           elapsedMs={elapsed}
           durationMs={durationMs}
           frozen={visual.hard}
           showGhost={usingDemo}
         />
+
+        {/* Top HUD */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-3 bg-gradient-to-b from-black/70 to-transparent p-4 pt-[max(1rem,env(safe-area-inset-top))]">
+          <div>
+            <p className="text-xs font-medium tracking-wide text-orange-400">Rise · Fruit Ninja</p>
+            <p className="text-lg font-semibold text-zinc-50 sm:text-xl">{ui.live.prompt}</p>
+            <p className="mt-0.5 max-w-md text-sm text-zinc-300">{ui.live.how}</p>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            {usingDemo ? (
+              <span className="rounded-full border border-zinc-600 bg-zinc-950/80 px-2 py-0.5 text-xs text-zinc-300">
+                {ui.live.demo_badge}
+              </span>
+            ) : null}
+            <div className="flex items-center gap-2 rounded-full bg-zinc-950/80 px-3 py-1.5 text-lg font-semibold text-orange-400">
+              <Zap className="size-5 fill-orange-400" aria-hidden />
+              x{Math.max(1, combo)}
+            </div>
+          </div>
+        </div>
+
         {loadingCam ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/70 text-lg text-zinc-200">
+          <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/60 text-xl text-zinc-100">
             Opening camera…
           </div>
         ) : null}
         {camHint && usingDemo ? (
-          <div className="absolute left-3 top-12 max-w-[85%] rounded-md bg-zinc-950/80 px-2 py-1 text-left text-xs text-zinc-400">
+          <div className="absolute left-4 top-28 max-w-sm rounded-md bg-zinc-950/80 px-3 py-2 text-sm text-zinc-300">
             {camHint}
           </div>
         ) : null}
+
         {paused ? (
-          <div className="absolute inset-0 flex flex-col justify-center gap-3 bg-zinc-950/90 p-4">
-            <h2 className="text-2xl font-semibold leading-snug">{ui.paused.title}</h2>
+          <div
+            className="absolute inset-0 flex flex-col justify-center gap-3 bg-zinc-950/85 p-6 sm:mx-auto sm:max-w-md"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-2xl font-semibold leading-snug sm:text-3xl">{ui.paused.title}</h2>
             <Button type="button" className="h-14 min-h-14 w-full text-lg" onClick={() => dispatch({ type: "RESUME" })}>
               {ui.paused.keep_going}
             </Button>
@@ -229,17 +258,26 @@ export function LivePlay() {
             </Button>
           </div>
         ) : null}
+
+        {/* Soft step-back banner — keeps camera visible */}
         {stepBack ? (
-          <div className="absolute inset-x-0 bottom-0 bg-zinc-950/95 p-3">
-            <p className="mb-2 text-center text-xl font-medium">{ui.live.step_back}</p>
-            <Button type="button" className="h-14 w-full text-lg" onClick={() => dispatch({ type: "TRACKING_OK" })}>
-              {ui.frame.continue}
-            </Button>
+          <div
+            className="absolute inset-x-0 bottom-28 mx-auto max-w-lg px-4"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <div className="rounded-xl border border-amber-500/40 bg-zinc-950/80 p-4 backdrop-blur-sm">
+              <p className="mb-3 text-center text-xl font-medium text-amber-100">{ui.live.step_back}</p>
+              <Button type="button" className="h-14 w-full text-lg" onClick={() => dispatch({ type: "TRACKING_OK" })}>
+                {ui.frame.continue}
+              </Button>
+            </div>
           </div>
         ) : null}
-      </button>
+      </div>
 
-      <div className="flex h-3 gap-0.5 overflow-hidden rounded-full bg-zinc-900" aria-label="Hit timeline">
+      {/* Hit timeline */}
+      <div className="flex h-2.5 shrink-0 gap-0.5 bg-zinc-950" aria-label="Hit timeline">
         {hitLog.length === 0 ? (
           <div className="h-full w-full bg-zinc-800" />
         ) : (
@@ -252,11 +290,12 @@ export function LivePlay() {
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      {/* Always-visible Stop / Pause */}
+      <div className="grid shrink-0 grid-cols-2 gap-3 bg-zinc-950 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <Button
           type="button"
           variant="destructive"
-          className="h-24 min-h-[96px] text-2xl"
+          className="h-16 min-h-16 text-xl sm:h-20 sm:text-2xl"
           onClick={(e) => {
             e.stopPropagation()
             speak(ui.live.stop)
@@ -269,13 +308,13 @@ export function LivePlay() {
         <Button
           type="button"
           variant="outline"
-          className="h-24 min-h-[96px] border-zinc-700 bg-zinc-900 text-2xl text-zinc-50 hover:bg-zinc-800"
+          className="h-16 min-h-16 border-zinc-700 bg-zinc-900 text-xl text-zinc-50 hover:bg-zinc-800 sm:h-20 sm:text-2xl"
           onClick={(e) => {
             e.stopPropagation()
             dispatch({ type: "PAUSE" })
           }}
         >
-          <PauseIcon className="size-8" aria-hidden />
+          <PauseIcon className="size-7" aria-hidden />
           {ui.live.pause}
         </Button>
       </div>

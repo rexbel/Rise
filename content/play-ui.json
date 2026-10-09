@@ -2,7 +2,7 @@
   "$comment": "Locked Keep the Line chrome. No STEADI, stand counts, or clinical labels.",
   "howto": {
     "title": "Keep the Line",
-    "body": "Match the ghost. Keep your knee over your foot as you stand and sit. When the line holds, you score a hit. If knees drift or hands push off, you get a miss on that joint. Stop is always on the screen. Your coach talks when you finish, not during.",
+    "body": "Today’s move is chair sit-to-stand. The camera tracks your body. Fruit appears on your knees — hold good form to slice hits; knees in or hands pushing off turn fruit into bombs (misses). Stop is always on screen. Coach talks when you finish.",
     "begin": "Begin"
   },
   "ready": {
@@ -19,8 +19,9 @@
   },
   "countdown": ["Three", "Two", "One", "Go"],
   "live": {
-    "prompt": "Can you keep the line?",
-    "step_back": "We could not see your knee clearly. Step back.",
+    "prompt": "Slice the fruit — sit to stand",
+    "how": "Watermelon on knees = good form. Bombs = knees in or hands pushing off.",
+    "step_back": "Step back so we can see your knees — then keep playing.",
     "stop": "Stop",
     "pause": "Pause",
     "demo_badge": "Demo replay"
