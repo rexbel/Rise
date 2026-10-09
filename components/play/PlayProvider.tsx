@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { createPlaySession, reducePlaySession } from "@/lib/play/sessionMachine"
 import type { PlayAction, PlaySession } from "@/lib/play/types"
 import { subscribeCaption, subscribeSpeaking, unlockPlayback } from "@/lib/play/speak"
@@ -39,7 +39,9 @@ export function PlayProvider({
 }) {
   const [session, setSession] = useState(() => createPlaySession(riseId, demo))
   const sessionRef = useRef(session)
-  sessionRef.current = session
+  useLayoutEffect(() => {
+    sessionRef.current = session
+  }, [session])
   const [caption, setCaption] = useState<string | null>(null)
   const [speaking, setSpeaking] = useState(false)
   const [elapsedMs, setElapsedMs] = useState(0)

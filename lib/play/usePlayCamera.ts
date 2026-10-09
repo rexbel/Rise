@@ -5,7 +5,7 @@
  * Falls back to null frames if the camera or estimators fail (caller may use synthetic).
  */
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import type { PoseEstimator } from "@/lib/pose"
 import { FpsMonitor, selectTier } from "@/lib/pose/select"
 import { clientLog } from "@/lib/play/clientLog"
@@ -17,7 +17,9 @@ export type PlayCameraStatus = "idle" | "requesting" | "loading" | "live" | "err
 export function usePlayCamera(onFrame: (frame: PoseFrame) => void) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const onFrameRef = useRef(onFrame)
-  onFrameRef.current = onFrame
+  useLayoutEffect(() => {
+    onFrameRef.current = onFrame
+  }, [onFrame])
   const estRef = useRef<{ primary: PoseEstimator; fallback: PoseEstimator | null } | null>(null)
   const loopId = useRef(0)
   /** Bumped by every start/stop so a slower earlier start cannot take over (Strict Mode). */
