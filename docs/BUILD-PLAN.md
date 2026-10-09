@@ -616,6 +616,7 @@ Ideas cut from scope live here; nothing on this list enters the build before Dem
 - FHIR/EHR write-back of STEADI scores as Observations
 - Native app with on-device pose for offline homes
 - Gait analysis from a hallway walk; wound photo assessment
+- RehabNinja XP shop, multi-character dojo, and live acl-rehab-ai session sync on player home
 
 ## Sources
 

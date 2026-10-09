@@ -108,3 +108,21 @@
   min-height: 100%;
 }
 
+/* Player home: one-shot entrance (opacity only on the block, not a looping pulse). */
+@keyframes rn-home-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .rn-home-enter {
+    animation: rn-home-enter 0.35s ease-out both;
+  }
+}
+

@@ -2,7 +2,7 @@
 
 Branch feature work lives on `jeremiah/keep-the-line` (merge to `main` only when asked). Offline. Synthetic data.
 
-**Surfaces:** Lobby (`/` — Play / Try a demo) → profile picker (`/play`) → today’s move → frame check → fullscreen RehabNinja → questions → session report. Clinic strip is demo-only. Presenter bar is pitch-only (bottom-left, **H** to hide) — keep it outside the projector crop.
+**Surfaces:** Lobby (`/` — Play / Try a demo) → your board (`/play`, Ellen + knee cohort, peers display-only) → player home / pre-game → Begin → frame check → fullscreen RehabNinja → questions → session report. Clinic strip is demo-only. Presenter bar is pitch-only (bottom-left, **H** to hide) — keep it outside the projector crop.
 
 Assume the projector is muted: captions are the source of truth.
 
@@ -11,7 +11,7 @@ Voice Stop is off in `?demo=1`. Do not turn on recognition for the pitch.
 ## Setup
 
 1. `npm run dev`
-2. Pitch shortcut: `/play/rise-01?demo=1` (Ellen) or lobby **Try a demo**. Full journey: `/` → **Play** → pick patient.
+2. Pitch shortcut: `/play/rise-01?demo=1` (Ellen) or lobby **Try a demo**. Full journey: `/` → **Play** → **Continue as Ellen**.
 3. Live play is fullscreen. Clinic strip on the right (lg+). Presenter stays bottom-left, off-crop.
 
 ## Script

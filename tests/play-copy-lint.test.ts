@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import corrections from "@/content/form-corrections.json"
 import lines from "@/content/patient-lines.json"
+import playUi from "@/content/play-ui.json"
 
 const BANNED = /STEADI|valgus|score|below average|ACL graft/i
 
@@ -28,6 +29,12 @@ describe("play patient copy", () => {
     void emergency
     for (const text of stringsOf(rest)) {
       expect(text.replace("{clinic}", "Clinic")).not.toMatch(/\d/)
+    }
+  })
+
+  it("player home copy has no banned clinical terms", () => {
+    for (const text of stringsOf(playUi.home)) {
+      expect(text, text).not.toMatch(BANNED)
     }
   })
 })
