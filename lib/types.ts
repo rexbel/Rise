@@ -193,6 +193,59 @@ export const CosmosObservation = z.object({
 })
 export type CosmosObservation = z.infer<typeof CosmosObservation>
 
+/**
+ * Cosmos second look on a YOLO event (RehabNinja live play). YOLO detects on-device; Cosmos verifies from a
+ * short frame window. Care-team only: never patient-facing, never changes hits, bombs, or the recommendation.
+ */
+export const CosmosTrigger = z.enum(["valgus", "speed", "arms", "asymmetry", "tracking_lost"])
+export type CosmosTrigger = z.infer<typeof CosmosTrigger>
+
+export const CosmosSecondLook = z.object({
+  /** Does Cosmos see what YOLO flagged? */
+  verdict: z.enum(["confirms", "disagrees", "unclear"]),
+  observation: z.string().min(1).max(400),
+  compensations: z.array(z.string().max(120)).max(6),
+  steadiness: z.enum(["steady", "unsteady", "unclear"]),
+  /** Fall risk or other unsafe moment: the console asks a human to look. */
+  safetyConcern: z.boolean(),
+  uncertainty: z.string().max(200),
+})
+export type CosmosSecondLook = z.infer<typeof CosmosSecondLook>
+
+/** What the route returns: the look plus provenance. */
+export const CosmosSecondLookResult = CosmosSecondLook.extend({
+  model: z.string(),
+  latencyMs: z.number().int().nonnegative(),
+  /** True when the fallback template answered instead of Cosmos. */
+  demoData: z.boolean(),
+})
+export type CosmosSecondLookResult = z.infer<typeof CosmosSecondLookResult>
+
+const JPEG_DATA_URL = /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/
+/** ~200 KB of JPEG is ~270k base64 chars. */
+const MAX_FRAME_CHARS = 280_000
+
+/** Browser -> POST /api/cosmos/second-look. Frames are never stored or logged. */
+export const CosmosSecondLookRequest = z.object({
+  sessionId: z.string().min(1).max(80),
+  riseId: z.string().min(1).max(40),
+  exerciseId: z.string().min(1).max(40),
+  trigger: CosmosTrigger,
+  severity: z.enum(["soft", "hard"]).optional(),
+  /** ms into the set when YOLO fired. */
+  atMs: z.number().nonnegative(),
+  yolo: z.object({
+    hitCount: z.number().int().nonnegative(),
+    targetReps: z.number().int().nonnegative().optional(),
+    trackingOk: z.boolean(),
+    tier: z.string().max(40).nullable(),
+  }),
+  /** Oldest first, evenly spaced over the last ~2 s. */
+  frames: z.array(z.string().max(MAX_FRAME_CHARS).regex(JPEG_DATA_URL)).min(1).max(6),
+  frameSpanMs: z.number().int().nonnegative(),
+})
+export type CosmosSecondLookRequest = z.infer<typeof CosmosSecondLookRequest>
+
 /** Pointer to a stored session clip. Jeremiah owns this shape. */
 export const ClipRef = z.object({
   sessionId: z.string(),

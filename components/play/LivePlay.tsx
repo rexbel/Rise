@@ -17,6 +17,7 @@ import { speak } from "@/lib/play/speak"
 import { playTone } from "@/lib/play/tones"
 import { clientLog } from "@/lib/play/clientLog"
 import { usePlayCamera } from "@/lib/play/usePlayCamera"
+import { type SecondLookEvent, useCosmosSecondLook } from "@/lib/play/useCosmosSecondLook"
 import type { Keypoints17, PlayPhase, PoseFrame } from "@/lib/play/types"
 
 const idleVisual: LiveVisual = {
@@ -51,7 +52,7 @@ function startDemoBus(
 
 /** Full-viewport RehabNinja stage. */
 export function LivePlay() {
-  const { session, dispatch, setElapsedMs, elapsedMs, hitCount, hitLog, pushHitLog, resetHits } = usePlay()
+  const { session, dispatch, setElapsedMs, elapsedMs, hitCount, hitLog, pushHitLog, resetHits, addCosmosLook, resolveCosmosLook } = usePlay()
   const pack = rulePack(session.exerciseId)
   const ex = exerciseById(session.exerciseId)
   const [keypoints, setKeypoints] = useState<Keypoints17 | null>(null)
@@ -72,6 +73,8 @@ export function LivePlay() {
   }, [session.phase])
   const completedRef = useRef(false)
   const hitCountRef = useRef(0)
+  /** Cosmos second look on YOLO events; set once the camera hook below exists. */
+  const secondLookRef = useRef<(e: SecondLookEvent) => void>(() => {})
 
   const inSet = session.phase === "live" || session.phase === "stepBack" || session.phase === "paused"
   const [wasInSet, setWasInSet] = useState(inSet)
@@ -110,11 +113,22 @@ export function LivePlay() {
 
       if (!vis.trackingOk) {
         lostFor.current += 1
-        if (lostFor.current === TRACKING_LOST_FRAMES) dispatch({ type: "TRACKING_LOST" })
+        if (lostFor.current === TRACKING_LOST_FRAMES) {
+          dispatch({ type: "TRACKING_LOST" })
+          if (phaseRef.current === "live") {
+            secondLookRef.current({ trigger: "tracking_lost", severity: "hard", atMs: frame.t, hitCount: hitCountRef.current, trackingOk: false })
+          }
+        }
       } else {
         lostFor.current = 0
       }
-      if (finding) dispatch({ type: "FINDING", finding })
+      if (finding) {
+        dispatch({ type: "FINDING", finding })
+        // YOLO detects; Cosmos takes a second look at the last ~2 s (clinic strip only).
+        if (phaseRef.current === "live") {
+          secondLookRef.current({ trigger: finding.id, severity: finding.severity, atMs: frame.t, hitCount: hitCountRef.current, trackingOk: vis.trackingOk })
+        }
+      }
 
       if (phaseRef.current === "live") {
         const events = hitMissRef.current.push(vis, frame.keypoints, frame.t, session.exerciseId)
@@ -139,12 +153,28 @@ export function LivePlay() {
     [dispatch, setElapsedMs, pushHitLog, session.exerciseId, maybeComplete],
   )
 
-  const { videoRef: camVideoRef, start: camStart, stop: camStop, pause: camPause, resume: camResume, status: camStatus, error: camError } =
+  const { videoRef: camVideoRef, start: camStart, stop: camStop, pause: camPause, resume: camResume, status: camStatus, error: camError, tier: camTier } =
     usePlayCamera(onPoseFrame)
   const camApi = useRef({ start: camStart, stop: camStop, pause: camPause, resume: camResume, status: camStatus, error: camError })
   useLayoutEffect(() => {
     camApi.current = { start: camStart, stop: camStop, pause: camPause, resume: camResume, status: camStatus, error: camError }
   }, [camStart, camStop, camPause, camResume, camStatus, camError])
+
+  const triggerSecondLook = useCosmosSecondLook({
+    videoRef: camVideoRef,
+    cameraLive: camStatus === "live" && !usingDemo,
+    inSet,
+    demo: usingDemo,
+    riseId: session.riseId,
+    exerciseId: session.exerciseId,
+    targetReps: pack.progressMode === "reps" ? pack.targetReps : undefined,
+    tier: usingDemo ? "demo replay" : camTier,
+    onLook: addCosmosLook,
+    onResult: resolveCosmosLook,
+  })
+  useLayoutEffect(() => {
+    secondLookRef.current = triggerSecondLook
+  }, [triggerSecondLook])
 
   useEffect(() => {
     if (!inSet) return
