@@ -1,18 +1,19 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
-import { ConditionCard } from "@/components/play/ConditionCard"
 import { FrameGate } from "@/components/play/FrameGate"
+import { PlayerHome } from "@/components/play/PlayerHome"
 import { SessionReport } from "@/components/play/SessionReport"
 import { usePlay } from "@/components/play/PlayProvider"
 import { playBody, playDisplay } from "@/components/play/playTheme"
 import ui from "@/content/play-ui.json"
 import lines from "@/content/patient-lines.json"
-import { todaysProgram } from "@/lib/play/programs"
+import { playerHome } from "@/lib/play/playerHome"
+import type { ExerciseId } from "@/lib/play/programs"
 import { isLiveShell, nextQuestionId } from "@/lib/play/phaseView"
 import { questionKind, questionText } from "@/lib/play/questionCopy"
 import { speak } from "@/lib/play/speak"
@@ -21,7 +22,7 @@ import type { SeedPatient } from "@/lib/types"
 
 export function PhoneColumn({ patient }: { patient: SeedPatient }) {
   const { session, caption } = usePlay()
-  const firstName = patient.display_name.split(" ")[0]
+  const onHome = session.phase === "howto" || session.phase === "home"
 
   return (
     <div
@@ -29,12 +30,16 @@ export function PhoneColumn({ patient }: { patient: SeedPatient }) {
     >
       <header className="flex items-center justify-between gap-2 border-b border-zinc-800 px-4 py-3">
         <div>
-          <p className="text-xs font-semibold tracking-wide text-orange-400">{ui.brand}</p>
-          <p className={`${playDisplay.className} text-lg font-bold`}>{firstName}</p>
+          <p className="text-xl font-semibold tracking-wide text-orange-400">{ui.brand}</p>
+          {!onHome ? (
+            <p className={`${playDisplay.className} text-xl font-bold`}>
+              {patient.display_name.split(" ")[0]}
+            </p>
+          ) : null}
         </div>
         <div className="flex gap-1">
-          {session.demo ? (
-            <Badge className="border-0 bg-orange-500/20 text-orange-300">{ui.frame.demo_badge}</Badge>
+          {session.demo && !onHome ? (
+            <Badge className="border-0 bg-orange-500/20 text-base text-orange-300">{ui.frame.demo_badge}</Badge>
           ) : null}
         </div>
       </header>
@@ -53,45 +58,53 @@ export function PhoneColumn({ patient }: { patient: SeedPatient }) {
 function PhoneBody({ patient }: { patient: SeedPatient }) {
   const { session, dispatch, begin, voiceStopOn, setVoiceStopOn } = usePlay()
   const { phase } = session
-  const workouts = todaysProgram(patient)
+  const home = useMemo(() => playerHome(patient), [patient.rise_id])
+  const missionKey = home.missions.map((m) => m.id).join("|")
 
   useEffect(() => {
     if (phase !== "howto" && phase !== "home") return
-    const first = workouts[0]?.id
-    if (first && !workouts.some((w) => w.id === session.exerciseId)) {
+    const ids = missionKey.split("|").filter(Boolean) as ExerciseId[]
+    const first = ids[0]
+    if (first && !ids.includes(session.exerciseId as ExerciseId)) {
       dispatch({ type: "SELECT_EXERCISE", exerciseId: first })
     }
-  }, [phase, workouts, session.exerciseId, dispatch])
+  }, [phase, missionKey, session.exerciseId, dispatch])
 
   if (phase === "howto" || phase === "home") {
     return (
-      <div className="flex flex-1 flex-col justify-center gap-4 overflow-y-auto">
-        <ConditionCard
+      <div className="flex flex-1 flex-col justify-start gap-4 overflow-y-auto">
+        <PlayerHome
           patient={patient}
           selectedId={session.exerciseId}
           onSelect={(id) => dispatch({ type: "SELECT_EXERCISE", exerciseId: id })}
+          showDemoBadge
         />
-        <p className="text-sm text-zinc-500">{ui.program.pick_hint}</p>
+        {home.missions.length > 1 ? (
+          <p className="text-xl text-zinc-500">{ui.program.pick_hint}</p>
+        ) : null}
         <Button
           type="button"
-          className={`${playDisplay.className} h-16 min-h-16 w-full bg-orange-500 text-xl font-bold text-white hover:bg-orange-400`}
+          className={`${playDisplay.className} h-16 min-h-16 w-full bg-orange-500 text-xl font-bold text-white transition motion-safe:active:scale-[0.98] motion-reduce:transform-none hover:bg-orange-400`}
           onClick={begin}
         >
-          {ui.condition.begin}
+          {ui.home.begin}
         </Button>
         {!session.demo ? (
           <Button
             type="button"
             variant="outline"
-            className="h-14 min-h-14 w-full border-zinc-700 bg-transparent text-lg text-zinc-100"
+            className="h-14 min-h-14 w-full border-zinc-700 bg-transparent text-xl text-zinc-100"
             onClick={() => setVoiceStopOn(!voiceStopOn)}
           >
             Voice Stop {voiceStopOn ? "on" : "off"}
           </Button>
         ) : null}
-        <Button asChild variant="outline" className="h-12 border-zinc-700 bg-transparent text-zinc-300">
-          <Link href="/play">{ui.close.change_profile}</Link>
-        </Button>
+        <Link
+          href="/play"
+          className="py-2 text-center text-xl text-zinc-400 underline-offset-2 hover:text-zinc-200 hover:underline"
+        >
+          {ui.home.back_board}
+        </Link>
       </div>
     )
   }
