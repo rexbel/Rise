@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Python venv for the pose model export (scripts/export_pose_onnx.py).
+    ".venv/**",
   ]),
 ]);
 

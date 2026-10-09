@@ -4,4 +4,6 @@
 # Quick tunnels need no Cloudflare login; the URL changes every run, so copy it into PUBLIC_BASE_URL.
 set -euo pipefail
 PORT="${PORT:-3000}"
-exec cloudflared tunnel --url "http://localhost:${PORT}"
+# --config /dev/null: ignore ~/.cloudflared/config.yml. A named tunnel's ingress rules there
+# (ending in http_status:404) would otherwise answer every quick-tunnel request with a 404.
+exec cloudflared tunnel --config /dev/null --url "http://localhost:${PORT}"
