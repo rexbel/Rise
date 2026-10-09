@@ -1,14 +1,18 @@
 # Keep the Line — 90-second pitch
 
-Branch: `jeremiah/keep-the-line`. Offline. Synthetic data. Projector crop is the two-column play + clinic view only. Hide the presenter bar with **H** (or keep it off the capture region). Assume the projector is muted: captions are the source of truth.
+Branch: `jeremiah/keep-the-line` (do **not** merge to `main` until review). Offline. Synthetic data.
+
+**Surfaces:** Lobby → Choose profile (`/play`) → condition + howto → fullscreen Fruit Ninja → questions → session report. Clinic strip is demo-only. Presenter bar is pitch-only (bottom-left, **H** to hide) — keep it outside the projector crop.
+
+Assume the projector is muted: captions are the source of truth.
 
 Voice Stop is off in `?demo=1`. Do not turn on recognition for the pitch.
 
 ## Setup
 
 1. `npm run dev`
-2. Open `/play/rise-01?demo=1` (Ellen). Backup picker: `/play`.
-3. Crop the window to phone + clinic strip. Presenter controls stay off-camera.
+2. Pitch shortcut: `/play/rise-01?demo=1` (Ellen). Full journey: `/` → Choose profile → pick patient.
+3. Live play is fullscreen. Clinic strip on the right (lg+). Presenter stays bottom-left, off-crop.
 
 ## Script
 

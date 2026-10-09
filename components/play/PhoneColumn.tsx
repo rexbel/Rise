@@ -1,15 +1,16 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
+import { ConditionCard } from "@/components/play/ConditionCard"
 import { FrameSilhouette } from "@/components/play/FrameSilhouette"
+import { SessionReport } from "@/components/play/SessionReport"
 import { usePlay } from "@/components/play/PlayProvider"
 import ui from "@/content/play-ui.json"
 import lines from "@/content/patient-lines.json"
-import { formatPlayClose } from "@/lib/play/formatPatient"
 import { isLiveShell, nextQuestionId } from "@/lib/play/phaseView"
 import { questionKind, questionText } from "@/lib/play/questionCopy"
 import { speak } from "@/lib/play/speak"
@@ -52,13 +53,16 @@ function PhoneBody({ patient }: { patient: SeedPatient }) {
 
   if (phase === "howto" || phase === "home") {
     return (
-      <Screen title={ui.howto.title} body={ui.howto.body}>
+      <div className="flex flex-1 flex-col justify-center gap-4 overflow-y-auto">
+        <ConditionCard patient={patient} />
+        <h2 className="text-2xl font-semibold leading-snug text-zinc-50">{ui.howto.title}</h2>
+        <p className="text-xl text-zinc-400">{ui.howto.body}</p>
         <Button
           type="button"
           className="h-16 min-h-16 w-full bg-orange-500 text-xl text-white hover:bg-orange-400"
           onClick={begin}
         >
-          {ui.howto.begin}
+          {session.demo ? ui.howto.begin : ui.condition.begin}
         </Button>
         {!session.demo ? (
           <Button
@@ -70,7 +74,10 @@ function PhoneBody({ patient }: { patient: SeedPatient }) {
             Voice Stop {voiceStopOn ? "on" : "off"}
           </Button>
         ) : null}
-      </Screen>
+        <Button asChild variant="outline" className="h-12 border-zinc-700 bg-transparent text-zinc-300">
+          <Link href="/play">{ui.close.change_profile}</Link>
+        </Button>
+      </div>
     )
   }
   if (phase === "ready") {
@@ -132,7 +139,7 @@ function PhoneBody({ patient }: { patient: SeedPatient }) {
       </Screen>
     )
   }
-  if (phase === "close") return <CloseScreen patient={patient} />
+  if (phase === "close") return <SessionReport patient={patient} />
   return null
 }
 
@@ -201,50 +208,6 @@ function YesNo({ id }: { id: QuestionId }) {
         {ui.questions.no}
       </BigButton>
     </div>
-  )
-}
-
-function CloseScreen({ patient }: { patient: SeedPatient }) {
-  const { session, dispatch } = usePlay()
-  const spokenRef = useRef(false)
-  const out = formatPlayClose(session.finishedSet?.findings ?? session.findings, session.answers, {
-    trend: patient.patient_feedback.trend_vs_previous,
-    recommendation: patient.expected_triage.recommendation,
-    redFlag: false,
-    clinicName: "Riverside Ortho",
-  })
-  const firstLine = out.correction?.what ?? out.closingLines[0]
-
-  useEffect(() => {
-    if (session.phase !== "close") {
-      spokenRef.current = false
-      return
-    }
-    if (spokenRef.current || !firstLine) return
-    spokenRef.current = true
-    speak(firstLine)
-  }, [session.phase, firstLine])
-
-  return (
-    <Screen title={out.correction?.what ?? out.closingLines[0]}>
-      {out.correction ? (
-        <>
-          <p className="text-xl">{out.correction.why}</p>
-          <p className="text-xl">{out.correction.action}</p>
-        </>
-      ) : null}
-      {out.closingLines.map((line) => (
-        <p key={line} className="text-xl">
-          {line}
-        </p>
-      ))}
-      {session.demo ? (
-        <BigButton variant="outline" onClick={() => dispatch({ type: "BACK_TO_QUESTIONS" })}>
-          {ui.close.back_to_questions}
-        </BigButton>
-      ) : null}
-      <p className="text-lg text-muted-foreground">{ui.close.done}</p>
-    </Screen>
   )
 }
 

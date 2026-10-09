@@ -3,8 +3,9 @@
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import ui from "@/content/play-ui.json"
 
-/** Full-viewport Keep the Line entry — one CTA, not a three-button toolkit menu. */
+/** Full-viewport entry — profile first; Ellen pitch demo secondary. */
 export function GameLobby() {
   return (
     <main className="relative flex min-h-full flex-1 flex-col overflow-hidden bg-[#0a0a0c] text-zinc-50">
@@ -20,33 +21,35 @@ export function GameLobby() {
           <p className="text-sm font-medium tracking-wide text-orange-400">Rise · Keep the Line</p>
           <Badge className="border-0 bg-orange-500 text-white hover:bg-orange-500">Live play</Badge>
           <Badge variant="secondary" className="bg-zinc-800 text-zinc-300">
-            Synthetic data
+            {ui.synthetic}
           </Badge>
         </div>
 
         <div className="space-y-4">
           <h1 className="text-5xl font-semibold tracking-tight sm:text-6xl">Keep the Line</h1>
-          <p className="max-w-md text-xl leading-snug text-zinc-400">
-            Full-screen Fruit Ninja on your camera. Sit to stand with knees over feet — slice fruit for hits, avoid
-            bombs when form breaks.
-          </p>
+          <p className="max-w-md text-xl leading-snug text-zinc-400">{ui.lobby.tagline}</p>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-3">
           <Button
             asChild
             size="lg"
-            className="h-16 min-h-16 flex-1 bg-orange-500 text-xl text-white hover:bg-orange-400 sm:flex-none sm:px-10"
+            className="h-16 min-h-16 w-full bg-orange-500 text-xl text-white hover:bg-orange-400"
           >
-            <Link href="/play/rise-01?demo=1">Play Ellen demo</Link>
+            <Link href="/play">{ui.lobby.choose_profile}</Link>
           </Button>
-          <p className="text-sm text-zinc-500">Begin unlocks sound · captions always on</p>
+          <Button
+            asChild
+            size="lg"
+            variant="outline"
+            className="h-14 min-h-14 w-full border-zinc-700 bg-transparent text-lg text-zinc-100 hover:bg-zinc-900"
+          >
+            <Link href="/play/rise-01?demo=1">{ui.lobby.pitch_demo}</Link>
+          </Button>
+          <p className="text-sm text-zinc-500">Profile → condition → play → report · Begin unlocks sound</p>
         </div>
 
         <nav className="flex flex-wrap gap-x-5 gap-y-2 border-t border-zinc-800 pt-6 text-sm text-zinc-500">
-          <Link href="/play" className="hover:text-zinc-300">
-            All patients
-          </Link>
           <Link href="/clinic" className="hover:text-zinc-300">
             Clinic console
           </Link>

@@ -1,5 +1,10 @@
 "use client"
 
+/**
+ * Pitch-only operator tools. Never part of the patient crop —
+ * fixed corner, press H to hide. Demo sessions only.
+ */
+
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { usePlay } from "@/components/play/PlayProvider"
@@ -36,13 +41,18 @@ export function PresenterBar({ onRestart }: { onRestart: () => void }) {
   if (!session.demo || hidden) return null
 
   return (
-    <div className="fixed right-3 bottom-3 z-50 flex max-w-xs flex-col gap-2 rounded-md border bg-background/95 p-2 text-xs shadow-md print:hidden">
-      <p className="text-muted-foreground">Presenter · press H to hide · not in projector crop</p>
+    <div
+      className="fixed bottom-3 left-3 z-[60] flex max-w-[14rem] flex-col gap-1.5 rounded-md border border-zinc-700 bg-zinc-950/95 p-2 text-[10px] text-zinc-400 shadow-lg print:hidden"
+      data-presenter="pitch-only"
+      aria-label="Presenter controls — hide with H; keep outside projector crop"
+    >
+      <p className="leading-snug">Presenter (pitch only) · H hide · outside player crop</p>
       <div className="flex flex-wrap gap-1">
         <Button
           type="button"
           size="xs"
           variant="outline"
+          className="h-7 border-zinc-700 text-[10px]"
           onClick={() => {
             unlockPlayback()
             dispatch({ type: "PRESENTER_SKIP_TO_LIVE" })
@@ -54,6 +64,7 @@ export function PresenterBar({ onRestart }: { onRestart: () => void }) {
           type="button"
           size="xs"
           variant="outline"
+          className="h-7 border-zinc-700 text-[10px]"
           onClick={() => {
             const actions: PlayAction[] = []
             if (!isLiveShell(session.phase) && session.phase !== "paused") {
@@ -73,18 +84,24 @@ export function PresenterBar({ onRestart }: { onRestart: () => void }) {
           type="button"
           size="xs"
           variant="outline"
+          className="h-7 border-zinc-700 text-[10px]"
           onClick={() => dispatch({ type: "PRESENTER_JUMP_TO_QUESTIONS" })}
         >
           Jump to questions
         </Button>
-        <Button type="button" size="xs" variant="outline" onClick={() => dispatch({ type: "TRACKING_LOST" })}>
+        <Button
+          type="button"
+          size="xs"
+          variant="outline"
+          className="h-7 border-zinc-700 text-[10px]"
+          onClick={() => dispatch({ type: "TRACKING_LOST" })}
+        >
           Step back
         </Button>
-        <Button type="button" size="xs" variant="outline" onClick={onRestart}>
+        <Button type="button" size="xs" variant="outline" className="h-7 border-zinc-700 text-[10px]" onClick={onRestart}>
           Restart
         </Button>
       </div>
-      <p className="text-muted-foreground">Voice Stop off in demo</p>
     </div>
   )
 }
