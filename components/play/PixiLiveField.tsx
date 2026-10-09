@@ -5,7 +5,7 @@
  * Fruits on target joints; clean apex → slash; form break → bomb.
  */
 
-import { useEffect, useRef } from "react"
+import { useEffect, useLayoutEffect, useRef } from "react"
 import { Application, Container, Graphics, Text } from "pixi.js"
 import type { LiveVisual } from "@/lib/play/findings"
 import type { HitMissEvent } from "@/lib/play/hitMiss"
@@ -79,19 +79,21 @@ export function PixiLiveField({
     exerciseId,
     dimmed,
   })
-  stateRef.current = {
-    keypoints,
-    visual,
-    hitCount,
-    combo,
-    elapsedMs,
-    durationMs,
-    progress,
-    frozen,
-    showGhost,
-    exerciseId,
-    dimmed,
-  }
+  useLayoutEffect(() => {
+    stateRef.current = {
+      keypoints,
+      visual,
+      hitCount,
+      combo,
+      elapsedMs,
+      durationMs,
+      progress,
+      frozen,
+      showGhost,
+      exerciseId,
+      dimmed,
+    }
+  })
 
   useEffect(() => {
     if (!events.length) return
