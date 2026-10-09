@@ -21,6 +21,7 @@ After Demo Lock: defects and copy only. New ideas go to the plan's Post-hackatho
 - Main is protected by CI (typecheck, tests, lint, build). Merge only green PRs.
 - Merge to main at each checkpoint (12:15, 2:45, 3:45), then a 10-minute integration run on the phone and projector. Small PRs in between are fine if they touch only your own files.
 - `lib/types.ts` and `config/protocol.default.json` change only by PR; the other person rebases right away.
+- `.github/CODEOWNERS` maps each file to its owner, so PRs auto-request the right reviewer. Reviews are not required; a green CI run is.
 - Seams before the other side lands:
   - Phone → relay: Rex posts `RepEvent`s to `POST /api/sessions/[id]/events`; until that route merges, log in the browser console.
   - Phone → VAST: clip goes to `POST /api/sessions/[id]/clip`; until then Rex saves locally and Jeremiah tests ingest with the organizers' videos and the three fixture clips.
