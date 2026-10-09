@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useLayoutEffect, useRef } from "react"
-import { Application, Container, Graphics, Text } from "pixi.js"
+import { Application, Container, Graphics } from "pixi.js"
 import type { LiveVisual } from "@/lib/play/findings"
 import type { HitMissEvent } from "@/lib/play/hitMiss"
 import type { ExerciseId } from "@/lib/play/programs"
@@ -198,24 +198,24 @@ export function PixiLiveField({
             if (s.exerciseId === "single_leg_balance") {
               const ax = ((s.keypoints[15].x + s.keypoints[16].x) / 2) * w
               const ay = ((s.keypoints[15].y + s.keypoints[16].y) / 2) * h
-              const r = 48 * pulse
+              const r = 58 * pulse
               g.circle(ax, ay, r)
-              g.stroke({ width: 4, color: bent ? 0xea580c : 0xfafafa, alpha: 0.5 })
+              g.stroke({ width: 5, color: bent ? 0xea580c : 0xfafafa, alpha: 0.55 })
               g.circle(ax, ay, r * prog)
-              g.stroke({ width: 6, color: 0x22c55e, alpha: 0.9 })
-              drawFruit(g, ax, ay, bent ? "bomb" : "melon", 1.15 * pulse)
+              g.stroke({ width: 7, color: 0x22c55e, alpha: 0.95 })
+              drawFruit(g, ax, ay, bent ? "bomb" : "melon", 1.35 * pulse)
             } else {
-              const scale = (nearApex ? 1.25 : 1.1) * pulse
+              const scale = (nearApex ? 1.45 : 1.28) * pulse
               drawFruit(g, s.keypoints[13].x * w, s.keypoints[13].y * h + bob, bent ? "bomb" : "melon", scale)
               drawFruit(g, s.keypoints[14].x * w, s.keypoints[14].y * h - bob * 0.6, bent ? "bomb" : "apple", scale)
               if (s.visual.armsOut) {
-                drawFruit(g, s.keypoints[9].x * w, s.keypoints[9].y * h, "bomb", 1)
-                drawFruit(g, s.keypoints[10].x * w, s.keypoints[10].y * h, "bomb", 1)
+                drawFruit(g, s.keypoints[9].x * w, s.keypoints[9].y * h, "bomb", 1.2)
+                drawFruit(g, s.keypoints[10].x * w, s.keypoints[10].y * h, "bomb", 1.2)
               }
             }
           } else if (!s.keypoints) {
-            drawFruit(g, w * 0.42, h * 0.62 + bob, "melon", 0.9)
-            drawFruit(g, w * 0.58, h * 0.62 - bob * 0.5, "apple", 0.9)
+            drawFruit(g, w * 0.42, h * 0.62 + bob, "melon", 1.15)
+            drawFruit(g, w * 0.58, h * 0.62 - bob * 0.5, "apple", 1.15)
           }
 
           for (const f of fxRef.current) {
@@ -227,10 +227,10 @@ export function PixiLiveField({
               drawHalf(fxLayer, px, py, f.angle, age, 1, 0x16a34a)
               drawHalf(fxLayer, px, py, f.angle, age, -1, 0x15803d)
             } else {
-              const r = 22 + age * 50
+              const r = 28 + age * 64
               fxLayer.circle(px, py, r)
-              fxLayer.stroke({ width: 5, color: 0xea580c, alpha: 1 - age })
-              fxLayer.circle(px, py, 12 + age * 10)
+              fxLayer.stroke({ width: 7, color: 0xea580c, alpha: 1 - age })
+              fxLayer.circle(px, py, 16 + age * 14)
               fxLayer.fill({ color: 0x1c1917, alpha: 0.9 - age * 0.5 })
             }
           }
@@ -267,15 +267,15 @@ export function PixiLiveField({
 }
 
 function drawFruit(g: Graphics, x: number, y: number, kind: "melon" | "apple" | "bomb", scale: number) {
-  const r = 34 * scale
+  const r = 42 * scale
   if (kind === "bomb") {
     g.circle(x, y, r * 0.95)
     g.fill({ color: 0x1c1917, alpha: 0.95 })
     g.circle(x, y, r * 0.95)
-    g.stroke({ width: 4, color: 0xf97316, alpha: 1 })
+    g.stroke({ width: 5, color: 0xf97316, alpha: 1 })
     g.moveTo(x, y - r * 0.9)
     g.lineTo(x + r * 0.28, y - r * 1.4)
-    g.stroke({ width: 4, color: 0xfbbf24, alpha: 1 })
+    g.stroke({ width: 5, color: 0xfbbf24, alpha: 1 })
     return
   }
   if (kind === "melon") {
@@ -300,24 +300,24 @@ function drawFruit(g: Graphics, x: number, y: number, kind: "melon" | "apple" | 
 }
 
 function drawSlash(g: Graphics, x: number, y: number, angle: number, age: number) {
-  const len = 55 + age * 110
+  const len = 70 + age * 140
   const c = Math.cos(angle)
   const s = Math.sin(angle)
   g.moveTo(x - c * len, y - s * len)
   g.lineTo(x + c * len, y + s * len)
-  g.stroke({ width: 7, color: 0xfafafa, alpha: 1 - age })
+  g.stroke({ width: 10, color: 0xfafafa, alpha: 1 - age })
   g.moveTo(x - c * len * 0.7, y - s * len * 0.7)
   g.lineTo(x + c * len * 0.7, y + s * len * 0.7)
-  g.stroke({ width: 3, color: 0x86efac, alpha: 0.85 - age })
+  g.stroke({ width: 4, color: 0x86efac, alpha: 0.9 - age })
 }
 
 function drawHalf(g: Graphics, x: number, y: number, angle: number, age: number, side: 1 | -1, color: number) {
   const nx = -Math.sin(angle) * side
   const ny = Math.cos(angle) * side
-  const dist = age * 70
+  const dist = age * 90
   const hx = x + nx * dist
-  const hy = y + ny * dist - age * 24
-  g.ellipse(hx, hy, 28, 16)
+  const hy = y + ny * dist - age * 28
+  g.ellipse(hx, hy, 36, 20)
   g.fill({ color, alpha: 1 - age * 0.85 })
 }
 

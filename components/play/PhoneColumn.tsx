@@ -6,9 +6,10 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import { ConditionCard } from "@/components/play/ConditionCard"
-import { FrameSilhouette } from "@/components/play/FrameSilhouette"
+import { FrameGate } from "@/components/play/FrameGate"
 import { SessionReport } from "@/components/play/SessionReport"
 import { usePlay } from "@/components/play/PlayProvider"
+import { playBody, playDisplay } from "@/components/play/playTheme"
 import ui from "@/content/play-ui.json"
 import lines from "@/content/patient-lines.json"
 import { todaysProgram } from "@/lib/play/programs"
@@ -23,14 +24,15 @@ export function PhoneColumn({ patient }: { patient: SeedPatient }) {
   const firstName = patient.display_name.split(" ")[0]
 
   return (
-    <div className="mx-auto flex h-full min-h-[640px] w-full max-w-[420px] flex-col border border-zinc-800 bg-zinc-950 text-zinc-50 shadow-sm">
+    <div
+      className={`mx-auto flex h-full min-h-[640px] w-full max-w-[420px] flex-col border border-zinc-800 bg-zinc-950 text-zinc-50 shadow-sm ${playBody.className}`}
+    >
       <header className="flex items-center justify-between gap-2 border-b border-zinc-800 px-4 py-3">
         <div>
-          <p className="text-xs font-medium tracking-wide text-orange-400">{ui.brand}</p>
-          <p className="text-base font-medium">{firstName}</p>
+          <p className="text-xs font-semibold tracking-wide text-orange-400">{ui.brand}</p>
+          <p className={`${playDisplay.className} text-lg font-bold`}>{firstName}</p>
         </div>
         <div className="flex gap-1">
-          <Badge className="border-0 bg-zinc-800 text-zinc-300">{ui.synthetic}</Badge>
           {session.demo ? (
             <Badge className="border-0 bg-orange-500/20 text-orange-300">{ui.frame.demo_badge}</Badge>
           ) : null}
@@ -70,14 +72,12 @@ function PhoneBody({ patient }: { patient: SeedPatient }) {
           onSelect={(id) => dispatch({ type: "SELECT_EXERCISE", exerciseId: id })}
         />
         <p className="text-sm text-zinc-500">{ui.program.pick_hint}</p>
-        <h2 className="text-2xl font-semibold leading-snug text-zinc-50">{ui.howto.title}</h2>
-        <p className="text-xl text-zinc-400">{ui.howto.body}</p>
         <Button
           type="button"
-          className="h-16 min-h-16 w-full bg-orange-500 text-xl text-white hover:bg-orange-400"
+          className={`${playDisplay.className} h-16 min-h-16 w-full bg-orange-500 text-xl font-bold text-white hover:bg-orange-400`}
           onClick={begin}
         >
-          {session.demo ? ui.howto.begin : ui.condition.begin}
+          {ui.condition.begin}
         </Button>
         {!session.demo ? (
           <Button
@@ -107,17 +107,7 @@ function PhoneBody({ patient }: { patient: SeedPatient }) {
   }
   if (phase === "frame") {
     return (
-      <Screen title={ui.frame.title} body={ui.frame.body}>
-        <FrameSilhouette />
-        <BigButton
-          onClick={() => {
-            speak(ui.frame.continue)
-            dispatch({ type: "FRAME_OK" })
-          }}
-        >
-          {ui.frame.continue}
-        </BigButton>
-      </Screen>
+      <FrameGate demo={session.demo} onOk={() => dispatch({ type: "FRAME_OK" })} />
     )
   }
   if (phase === "countdown") return <Countdown />
@@ -179,14 +169,16 @@ function Countdown() {
   }, [dispatch])
 
   return (
-    <div className="flex flex-1 items-center justify-center">
-      <p className="text-6xl font-semibold">{ui.countdown[i]}</p>
+    <div className="flex flex-1 flex-col items-center justify-center gap-3 bg-gradient-to-b from-orange-500/10 to-transparent">
+      <p className={`${playDisplay.className} text-7xl font-extrabold text-orange-400`} aria-live="assertive">
+        {ui.countdown[i]}
+      </p>
     </div>
   )
 }
 
 function Questions() {
-  const { session, dispatch } = usePlay()
+  const { session } = usePlay()
   const id = nextQuestionId(session.answers) ?? "calf"
   const text = questionText(id)
   const kind = questionKind(id)
@@ -228,7 +220,7 @@ function YesNo({ id }: { id: QuestionId }) {
 function Screen({ title, body, children }: { title: string; body?: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-1 flex-col justify-center gap-4">
-      <h2 className="text-2xl font-semibold leading-snug text-zinc-50">{title}</h2>
+      <h2 className={`${playDisplay.className} text-2xl font-bold leading-snug text-zinc-50`}>{title}</h2>
       {body ? <p className="text-xl text-zinc-400">{body}</p> : null}
       {children}
     </div>

@@ -30,6 +30,11 @@
   --status-confirm: oklch(0.666 0.179 58.318);
   --status-callback: oklch(0.546 0.245 262.881);
   --status-ok: oklch(0.527 0.154 150.069);
+
+  /* RehabNinja journey tokens */
+  --rn-cream: #fef1e1;
+  --rn-ink: #18181b;
+  --rn-orange: #f97316;
 }
 
 .dark {

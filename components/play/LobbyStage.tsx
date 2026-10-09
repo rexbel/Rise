@@ -45,8 +45,12 @@ export function LobbyStage({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const topReserveRef = useRef(topReserve)
   const bottomReserveRef = useRef(bottomReserve)
-  topReserveRef.current = topReserve
-  bottomReserveRef.current = bottomReserve
+  const pausedRef = useRef(false)
+
+  useEffect(() => {
+    topReserveRef.current = topReserve
+    bottomReserveRef.current = bottomReserve
+  }, [topReserve, bottomReserve])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -62,6 +66,18 @@ export function LobbyStage({
       const usable = Math.max(VIEW, h - top - bottom)
       return top + Math.max(0, (usable - VIEW) / 2)
     }
+
+    function syncPause() {
+      const reduce =
+        typeof window !== "undefined" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      pausedRef.current = document.hidden || reduce
+    }
+    syncPause()
+    const onVis = () => syncPause()
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)")
+    document.addEventListener("visibilitychange", onVis)
+    mq.addEventListener("change", onVis)
 
     let raf = 0
     let running = true
@@ -373,6 +389,12 @@ export function LobbyStage({
 
     function animate(ts: number) {
       if (!running) return
+      if (pausedRef.current) {
+        lastTs = undefined
+        draw()
+        raf = requestAnimationFrame(animate)
+        return
+      }
       if (!lastTs) {
         lastTs = ts
         raf = requestAnimationFrame(animate)
@@ -487,6 +509,8 @@ export function LobbyStage({
       running = false
       cancelAnimationFrame(raf)
       window.removeEventListener("resize", resize)
+      document.removeEventListener("visibilitychange", onVis)
+      mq.removeEventListener("change", onVis)
     }
   }, [])
 

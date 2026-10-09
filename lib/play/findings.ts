@@ -21,9 +21,11 @@ const I = {
 
 export const DEBOUNCE_SOFT = 6
 export const DEBOUNCE_HARD = 10
-export const MIN_JOINT = 0.45
-export const KNEE_BEND_SOFT = 0.035
-export const KNEE_BEND_HARD = 0.09
+/** Slightly softer for front-camera MediaPipe. */
+export const MIN_JOINT = 0.35
+/** Frontal: knee collapse vs hip span (ratio), not absolute x drift. */
+export const KNEE_BEND_SOFT = 0.22
+export const KNEE_BEND_HARD = 0.42
 export const ARMS_DELTA = 0.22
 
 export type LiveVisual = {
@@ -56,7 +58,10 @@ function scoreOk(kp: Keypoints17): boolean {
 export function measure(kp: Keypoints17, dtMs: number, prevHipY: number | null) {
   const hipY = (kp[I.lHip].y + kp[I.rHip].y) / 2
   const midHip = (kp[I.lHip].x + kp[I.rHip].x) / 2
-  const kneeInward = Math.max(0, kp[I.lKnee].x - midHip, midHip - kp[I.rKnee].x)
+  const hipWidth = Math.max(0.04, Math.abs(kp[I.rHip].x - kp[I.lHip].x))
+  const kneeWidth = Math.abs(kp[I.rKnee].x - kp[I.lKnee].x)
+  // 0 = knees as wide as hips; higher = collapse (frontal-friendly)
+  const kneeInward = Math.max(0, (hipWidth - kneeWidth) / hipWidth)
   const shoulderY = (kp[I.lShoulder].y + kp[I.rShoulder].y) / 2
   const wristY = (kp[I.lWrist].y + kp[I.rWrist].y) / 2
   const wristsOk = jointOk(kp, I.lWrist) && jointOk(kp, I.rWrist)
@@ -64,10 +69,13 @@ export function measure(kp: Keypoints17, dtMs: number, prevHipY: number | null) 
   const dy = prevHipY == null ? 0 : Math.abs(hipY - prevHipY)
   const speed = dtMs > 0 ? dy / (dtMs / 1000) : 0
   const fast = speed > 0.55
-  const asymmetry = Math.abs(kp[I.lHip].y - kp[I.rHip].y) > 0.04
+  const asymmetry = Math.abs(kp[I.lHip].y - kp[I.rHip].y) > 0.05
   // hipY smaller = higher in frame = more standing
   const standAmount = Math.max(0, Math.min(1, (0.72 - hipY) / 0.28))
-  const ankleMid = jointOk(kp, I.lAnkle) && jointOk(kp, I.rAnkle) ? (kp[I.lAnkle].x + kp[I.rAnkle].x) / 2 : midHip
+  const ankleMid =
+    jointOk(kp, I.lAnkle) && jointOk(kp, I.rAnkle)
+      ? (kp[I.lAnkle].x + kp[I.rAnkle].x) / 2
+      : midHip
   const sway = Math.abs(midHip - ankleMid)
   return {
     kneeInward,
