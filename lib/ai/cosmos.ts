@@ -13,7 +13,7 @@ import {
 } from "@/lib/types"
 
 const TIMEOUT_MS = 8000
-const DEFAULT_MODEL = "nvidia/Cosmos-Reason2-8B"
+const DEFAULT_MODEL = "nvidia/cosmos3-nano-reasoner"
 
 export interface CosmosConfig {
   baseUrl: string

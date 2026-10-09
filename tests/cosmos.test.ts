@@ -23,7 +23,7 @@ const look = {
   safetyConcern: false,
   uncertainty: "none",
 }
-const cfg = { baseUrl: "https://cosmos.test/v1", apiKey: "k", model: "nvidia/Cosmos-Reason2-8B" }
+const cfg = { baseUrl: "https://cosmos.test/v1", apiKey: "k", model: "nvidia/cosmos3-nano-reasoner" }
 const reply = (content: string, status = 200) =>
   new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status, headers: { "content-type": "application/json" } })
 
