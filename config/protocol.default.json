@@ -1,0 +1,94 @@
+{
+  "$comment": "Rise defaults, labeled as defaults in the UI, never as clinical standards. Clinics override at the clinic level; clinicians per patient. Every override is logged with a reason code. See plan §6a.",
+  "version": "2026-10-09",
+  "test": {
+    "id": "steadi-30s-chair-stand",
+    "name": "CDC STEADI 30-Second Chair Stand",
+    "source": "https://www.cdc.gov/steadi/media/pdfs/STEADI-Assessment-30Sec-508.pdf",
+    "duration_s": 30,
+    "count_partial_if_over_halfway": true,
+    "arms_used_scores_zero": true
+  },
+  "addons": {
+    "balance_tandem": {
+      "name": "CDC STEADI 4-Stage Balance (tandem)",
+      "source": "https://www.cdc.gov/steadi/media/pdfs/STEADI-Assessment-4Stage-508.pdf",
+      "fall_risk_if_hold_under_s": 10,
+      "enabled_by_default": false
+    }
+  },
+  "episode": {
+    "length_days": 30,
+    "reactivation_default_cadence_days": 7,
+    "day2_contact": { "type": "nurse_phone_call", "required": true }
+  },
+  "cadence": {
+    "days_0_14_every": 2,
+    "days_15_30_every": 3,
+    "extend_after_stable_count": 2,
+    "extend_step_days": 1,
+    "harder_divides_interval_by": 2,
+    "min_interval_days": 1,
+    "after_escalation": "next day after clinician clearance",
+    "after_callback_within_days": 2,
+    "stopped_early_not_safety": "no change",
+    "anchor_before_in_person_visit": true,
+    "missed_reminder_after_h": 24,
+    "missed_in_a_row_creates_task": 2
+  },
+  "thresholds": {
+    "decline_pct_vs_last": 25,
+    "orthostatic_pauses_min": 2,
+    "orthostatic_pause_s": 3,
+    "stop_no_stand_s": 8,
+    "stop_resume_window_s": 60,
+    "route_surgeon_if_pod_lte": 30
+  },
+  "pose": {
+    "yolo_keep_min_fps": 15,
+    "yolo_swap_below_fps": 12,
+    "yolo_swap_after_s": 2,
+    "benchmark_s": 3,
+    "tiers": ["yolo-onnx", "mediapipe", "remote-yolo", "seeded"],
+    "upload_keypoints_hz": 5
+  },
+  "symptom_questions": [
+    { "id": "pain_0_10", "type": "slider", "text": "How much pain do you have right now, from 0 to 10?" },
+    { "id": "dizzy", "type": "yes_no", "text": "Did you feel dizzy or lightheaded?" },
+    { "id": "short_of_breath_or_chest_pain", "type": "yes_no", "red_flag": true, "text": "Are you short of breath, or do you have chest pain?" },
+    { "id": "calf_pain_or_swelling", "type": "yes_no", "text": "Do you have new pain or swelling in your calf?" }
+  ],
+  "note_red_flag_phrases": ["chest pain", "can't breathe", "cant breathe", "short of breath", "fell", "fall", "bleeding", "fainted", "passed out"],
+  "override_reasons": [
+    { "code": "patient_preference", "label": "Patient preference or burden" },
+    { "code": "closer_monitoring", "label": "Clinical condition calls for closer monitoring" },
+    { "code": "less_monitoring", "label": "Clinical condition calls for less monitoring" },
+    { "code": "procedure_protocol", "label": "Surgeon- or procedure-specific protocol" },
+    { "code": "align_visits", "label": "Aligning with PT sessions or in-person visits" },
+    { "code": "access_issue", "label": "Device, connectivity, or access issue" },
+    { "code": "caregiver", "label": "Caregiver or helper availability" },
+    { "code": "other", "label": "Other", "requires_free_text": true }
+  ],
+  "billing_profiles": {
+    "default_for_team": {
+      "ortho_surgical_practice": "rtm_via_pt",
+      "primary_care": "tcm_plus_rtm",
+      "outpatient_pt": "rtm",
+      "team_hospital": "team_episode"
+    },
+    "profiles": {
+      "rtm_via_pt": { "label": "Ortho practice: RTM billed by PT", "codes": ["98975", "98985", "98977", "98979", "98980", "98981"], "note": "Surgeon can't bill TCM/RPM/RTM during the 90-day global period" },
+      "tcm_plus_rtm": { "label": "Primary care: TCM + RTM", "codes": ["99495", "99496", "98975", "98985", "98977", "98979", "98980", "98981"] },
+      "rtm": { "label": "Outpatient PT: RTM", "codes": ["98975", "98985", "98977", "98979", "98980", "98981"] },
+      "team_episode": { "label": "TEAM hospital: episode metrics", "codes": [] },
+      "custom": { "label": "Custom", "codes": [] }
+    },
+    "rtm_device_days_band": { "98985": [2, 15], "98977": [16, 30] },
+    "rtm_management_minutes": { "98979": 10, "98980": 20 },
+    "disclaimer": "Rise counts data days, minutes, and calls. Billing decisions belong to the practice."
+  },
+  "handoff": {
+    "fhir": { "version": "R4", "base_url_env": "FHIR_BASE_URL", "auth": "smart-backend-services", "demo_sink": "/api/fhir-sink" },
+    "secure_link": { "expires_days": 30 }
+  }
+}

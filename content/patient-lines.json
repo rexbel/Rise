@@ -1,0 +1,19 @@
+{
+  "$comment": "Fixed, reviewable patient-facing lines (plan §5). The patient never sees a score, count, or norm. Closing screen = trend + next_step + closure, or emergency alone. Written to SAMHSA's six trauma-informed principles.",
+  "trend": {
+    "better": "You were able to do more today than last time. Your effort is showing.",
+    "same": "Today looked a lot like last time. Holding steady is a normal part of recovery.",
+    "harder": "Today seemed harder than last time. That happens during recovery, and it helps your care team to know.",
+    "first": "This was your first check-in, so today gives your care team a starting point.",
+    "finished_early": "You did what felt right for you today, and that's okay."
+  },
+  "next_step": {
+    "continue_plan": "Keep going with the plan you and your care team made.",
+    "nurse_callback": "A nurse from {clinic} will call you today to check in. You can tell them anything you noticed.",
+    "escalate_urgent": "Your care team would like to talk with you today. Please keep your phone nearby.",
+    "finished_early": "Someone from your care team will reach out to see how you're doing."
+  },
+  "closure": "Thank you for taking the time to do this. You're all done for today, and you can close this page whenever you're ready.",
+  "emergency": "Because you told us you're short of breath or have chest pain, please call 911 now. If someone is with you, ask them to stay with you.",
+  "note_prompt": "Is there anything you'd like your nurse to know? You can skip this."
+}

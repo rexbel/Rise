@@ -1,0 +1,803 @@
+{
+  "generated_for": "Rise demo seed (synthetic, not for clinical use)",
+  "protocol_source": "https://www.cdc.gov/steadi/media/pdfs/STEADI-Assessment-30Sec-508.pdf",
+  "patients": [
+    {
+      "rise_id": "rise-01",
+      "display_name": "Ellen Marsh",
+      "demo_role": "hero",
+      "synthetic": true,
+      "source": {
+        "dataset": "Synthetic Hospital v1.3",
+        "patient_id": 2842,
+        "repo": "https://github.com/sparkcpark/synthetic_hospital",
+        "license": "MIT",
+        "chart_note": "Source chart: ED visit for sudden shortness of breath and confusion on post-op day 4 after right TKA."
+      },
+      "demographics": {
+        "age": 65,
+        "sex": "F",
+        "race_ethnicity": "Non-Hispanic White",
+        "insurance": "Medicare"
+      },
+      "chronic_conditions": [
+        "Hypertension",
+        "Severe osteoarthritis (bilateral lower extremity involvement)",
+        "Hyperlipidemia",
+        "Chronic atrial fibrillation",
+        "Age-related macular degeneration (dry/non-exudative)",
+        "Calcium pyrophosphate deposition disease (CPPD)",
+        "History of recurrent venous thromboembolism"
+      ],
+      "surgical_history": [
+        "Right total knee arthroplasty (post-operative week 1 at presentation)",
+        "Hysterectomy (age 52)"
+      ],
+      "home_medications": [
+        "Warfarin 5 mg daily (dose adjusted per INR)",
+        "Metoprolol tartrate 50 mg twice daily",
+        "Lisinopril 10 mg daily",
+        "Atorvastatin 20 mg daily",
+        "Acetaminophen 500 mg every 6 hours as needed for pain"
+      ],
+      "allergies": [
+        "NKDA"
+      ],
+      "episode": {
+        "procedure": "Right total knee arthroplasty",
+        "operated_side": "right",
+        "post_op_day_today": 3,
+        "risk_flags": [
+          "Anticoagulated (warfarin)",
+          "History of recurrent VTE",
+          "Chronic atrial fibrillation"
+        ]
+      },
+      "protocol": {
+        "name": "CDC STEADI 30-Second Chair Stand",
+        "steadi_age_band": "65-69",
+        "steadi_below_average_if_under": 11,
+        "addons": []
+      },
+      "checkins": [
+        {
+          "label": "Pre-op clinic",
+          "post_op_day": -14,
+          "raw_stands": 9,
+          "arms_used": false,
+          "steadi_score": 9
+        },
+        {
+          "label": "Discharge PT",
+          "post_op_day": 2,
+          "raw_stands": 5,
+          "arms_used": false,
+          "steadi_score": 5
+        }
+      ],
+      "scripted_today": {
+        "raw": 3,
+        "arms": true,
+        "arms_from_rep": 2,
+        "asymmetry_pct": 19,
+        "favoring": "left",
+        "symptoms": {
+          "pain_0_10": 6,
+          "dizzy": false,
+          "short_of_breath_or_chest_pain": true,
+          "calf_pain_or_swelling": false,
+          "new_incontinence": false
+        },
+        "steadi_score": 0
+      },
+      "expected_triage": {
+        "recommendation": "escalate_urgent",
+        "route": "surgeon_on_call",
+        "patient_message": "emergency_instructions",
+        "why": "Red-flag symptom (shortness of breath) in an anticoagulated patient with recurrent VTE, plus 40% drop in stands and new arm use."
+      },
+      "monitoring_episode": {
+        "type": "post_discharge",
+        "start_pod": 2,
+        "length_days": 30,
+        "cadence_days": null,
+        "set_by": "Rise default",
+        "day_in_episode": 1,
+        "ends_after_day": 30,
+        "on_end": "Summary to the treating clinician; clinic can reactivate"
+      },
+      "cadence": {
+        "next_checkin_in_days": 1,
+        "phase": "Episode days 0-14, day 1",
+        "reason": "Recheck the day after the clinician clears the patient"
+      },
+      "patient_feedback": {
+        "trend_vs_previous": "harder",
+        "compared_to": "Discharge PT",
+        "next_step": "emergency_instructions"
+      }
+    },
+    {
+      "rise_id": "rise-02",
+      "display_name": "Judith Kerr",
+      "demo_role": "escalate",
+      "synthetic": true,
+      "source": {
+        "dataset": "Synthetic Hospital v1.3",
+        "patient_id": 2866,
+        "repo": "https://github.com/sparkcpark/synthetic_hospital",
+        "license": "MIT",
+        "chart_note": "Source chart: ED visit for 2-day left calf pain and swelling."
+      },
+      "demographics": {
+        "age": 67,
+        "sex": "F",
+        "race_ethnicity": "Non-Hispanic White",
+        "insurance": "Medicare with supplemental Plan G"
+      },
+      "chronic_conditions": [
+        "Chronic atrial fibrillation",
+        "Hypertension",
+        "Hyperlipidemia",
+        "Osteoarthritis"
+      ],
+      "surgical_history": [
+        "Total knee arthroplasty (left) 7 days prior to first encounter",
+        "Hysterectomy for uterine fibroids (1998)",
+        "Appendectomy (1975)"
+      ],
+      "home_medications": [
+        "Warfarin 5 mg daily (held perioperatively)",
+        "Metoprolol succinate 100 mg daily",
+        "Lisinopril 10 mg daily",
+        "Rosuvastatin 20 mg daily",
+        "Acetaminophen 650 mg every 6 hours as needed for pain"
+      ],
+      "allergies": [
+        "NKDA"
+      ],
+      "episode": {
+        "procedure": "Left total knee arthroplasty",
+        "operated_side": "left",
+        "post_op_day_today": 7,
+        "risk_flags": [
+          "Warfarin held perioperatively",
+          "Chronic atrial fibrillation"
+        ]
+      },
+      "protocol": {
+        "name": "CDC STEADI 30-Second Chair Stand",
+        "steadi_age_band": "65-69",
+        "steadi_below_average_if_under": 11,
+        "addons": []
+      },
+      "checkins": [
+        {
+          "label": "Discharge PT",
+          "post_op_day": 2,
+          "raw_stands": 4,
+          "arms_used": false,
+          "steadi_score": 4
+        },
+        {
+          "label": "Home check-in",
+          "post_op_day": 5,
+          "raw_stands": 6,
+          "arms_used": false,
+          "steadi_score": 6
+        }
+      ],
+      "scripted_today": {
+        "raw": 6,
+        "arms": false,
+        "asymmetry_pct": 22,
+        "favoring": "right",
+        "symptoms": {
+          "pain_0_10": 5,
+          "dizzy": false,
+          "short_of_breath_or_chest_pain": false,
+          "calf_pain_or_swelling": true,
+          "new_incontinence": false
+        },
+        "steadi_score": 6
+      },
+      "expected_triage": {
+        "recommendation": "escalate_urgent",
+        "route": "surgeon_on_call",
+        "patient_message": "same_day_call",
+        "why": "New calf pain/swelling on the operated side with 22% weight shift off the left leg while anticoagulation is held."
+      },
+      "monitoring_episode": {
+        "type": "post_discharge",
+        "start_pod": 2,
+        "length_days": 30,
+        "cadence_days": null,
+        "set_by": "Rise default",
+        "day_in_episode": 5,
+        "ends_after_day": 30,
+        "on_end": "Summary to the treating clinician; clinic can reactivate"
+      },
+      "cadence": {
+        "next_checkin_in_days": 1,
+        "phase": "Episode days 0-14, day 5",
+        "reason": "Recheck the day after the clinician clears the patient"
+      },
+      "patient_feedback": {
+        "trend_vs_previous": "same",
+        "compared_to": "Home check-in",
+        "next_step": "same_day_call"
+      }
+    },
+    {
+      "rise_id": "rise-03",
+      "display_name": "Walter Brandt",
+      "demo_role": "callback",
+      "synthetic": true,
+      "source": {
+        "dataset": "Synthetic Hospital v1.3",
+        "patient_id": 2218,
+        "repo": "https://github.com/sparkcpark/synthetic_hospital",
+        "license": "MIT",
+        "chart_note": "Source chart: recurrent lightheadedness on standing; urinary retention after TKA."
+      },
+      "demographics": {
+        "age": 70,
+        "sex": "M",
+        "race_ethnicity": "Non-Hispanic White",
+        "insurance": "Medicare"
+      },
+      "chronic_conditions": [
+        "Type 2 Diabetes Mellitus",
+        "Hypertension",
+        "Benign Prostatic Hyperplasia"
+      ],
+      "surgical_history": [
+        "Right total knee arthroplasty"
+      ],
+      "home_medications": [
+        "Metformin 1000 mg PO BID",
+        "Lisinopril 10 mg PO daily",
+        "Tamsulosin 0.4 mg PO daily",
+        "Atorvastatin 20 mg PO daily"
+      ],
+      "allergies": [
+        "No known drug allergies"
+      ],
+      "episode": {
+        "procedure": "Right total knee arthroplasty",
+        "operated_side": "right",
+        "post_op_day_today": 10,
+        "risk_flags": [
+          "Orthostatic lightheadedness (history)",
+          "Tamsulosin (alpha-blocker)"
+        ]
+      },
+      "protocol": {
+        "name": "CDC STEADI 30-Second Chair Stand",
+        "steadi_age_band": "70-74",
+        "steadi_below_average_if_under": 12,
+        "addons": []
+      },
+      "checkins": [
+        {
+          "label": "Discharge PT",
+          "post_op_day": 2,
+          "raw_stands": 6,
+          "arms_used": false,
+          "steadi_score": 6
+        },
+        {
+          "label": "Home check-in",
+          "post_op_day": 6,
+          "raw_stands": 8,
+          "arms_used": false,
+          "steadi_score": 8
+        }
+      ],
+      "scripted_today": {
+        "raw": 8,
+        "arms": false,
+        "asymmetry_pct": 8,
+        "favoring": null,
+        "pauses_over_3s_after_standing": 3,
+        "symptoms": {
+          "pain_0_10": 3,
+          "dizzy": true,
+          "short_of_breath_or_chest_pain": false,
+          "calf_pain_or_swelling": false,
+          "new_incontinence": false
+        },
+        "steadi_score": 8
+      },
+      "expected_triage": {
+        "recommendation": "nurse_callback",
+        "route": "care_coordinator",
+        "patient_message": "callback_today",
+        "why": "Stand count stable, but three post-stand pauses with sway and reported dizziness; suggests orthostatic BP check (STEADI)."
+      },
+      "monitoring_episode": {
+        "type": "post_discharge",
+        "start_pod": 2,
+        "length_days": 30,
+        "cadence_days": null,
+        "set_by": "Rise default",
+        "day_in_episode": 8,
+        "ends_after_day": 30,
+        "on_end": "Summary to the treating clinician; clinic can reactivate"
+      },
+      "cadence": {
+        "next_checkin_in_days": 2,
+        "phase": "Episode days 0-14, day 8",
+        "reason": "Recheck within 2 days of the nurse callback"
+      },
+      "patient_feedback": {
+        "trend_vs_previous": "same",
+        "compared_to": "Home check-in",
+        "next_step": "callback_today"
+      }
+    },
+    {
+      "rise_id": "rise-04",
+      "display_name": "Gary Lindqvist",
+      "demo_role": "on_track",
+      "synthetic": true,
+      "source": {
+        "dataset": "Synthetic Hospital v1.3",
+        "patient_id": 2247,
+        "repo": "https://github.com/sparkcpark/synthetic_hospital",
+        "license": "MIT",
+        "chart_note": "Source chart: routine orthopedic follow-up after hospital discharge for THA."
+      },
+      "demographics": {
+        "age": 67,
+        "sex": "M",
+        "race_ethnicity": "Non-Hispanic White",
+        "insurance": "Medicare"
+      },
+      "chronic_conditions": [
+        "Hypertension",
+        "Atrial Fibrillation",
+        "Obesity",
+        "Seasonal Allergic Rhinitis"
+      ],
+      "surgical_history": [
+        "Total hip arthroplasty"
+      ],
+      "home_medications": [
+        "Hydrochlorothiazide 25 mg daily",
+        "Rivaroxaban 20 mg daily with food"
+      ],
+      "allergies": [
+        "Seasonal allergens"
+      ],
+      "episode": {
+        "procedure": "Total hip arthroplasty",
+        "operated_side": "unspecified",
+        "post_op_day_today": 14,
+        "risk_flags": [
+          "Anticoagulated (rivaroxaban)",
+          "Obesity"
+        ]
+      },
+      "protocol": {
+        "name": "CDC STEADI 30-Second Chair Stand",
+        "steadi_age_band": "65-69",
+        "steadi_below_average_if_under": 12,
+        "addons": []
+      },
+      "checkins": [
+        {
+          "label": "Discharge PT",
+          "post_op_day": 2,
+          "raw_stands": 5,
+          "arms_used": false,
+          "steadi_score": 5
+        },
+        {
+          "label": "Home check-in",
+          "post_op_day": 7,
+          "raw_stands": 7,
+          "arms_used": false,
+          "steadi_score": 7
+        },
+        {
+          "label": "Home check-in",
+          "post_op_day": 10,
+          "raw_stands": 9,
+          "arms_used": false,
+          "steadi_score": 9
+        }
+      ],
+      "scripted_today": {
+        "raw": 10,
+        "arms": false,
+        "asymmetry_pct": 6,
+        "favoring": null,
+        "symptoms": {
+          "pain_0_10": 2,
+          "dizzy": false,
+          "short_of_breath_or_chest_pain": false,
+          "calf_pain_or_swelling": false,
+          "new_incontinence": false
+        },
+        "steadi_score": 10
+      },
+      "expected_triage": {
+        "recommendation": "continue_plan",
+        "route": null,
+        "patient_message": "encouragement",
+        "why": "Steady gains 5 to 10 stands with no arm use or symptoms; still below STEADI norm, as expected two weeks post-op."
+      },
+      "monitoring_episode": {
+        "type": "post_discharge",
+        "start_pod": 2,
+        "length_days": 30,
+        "cadence_days": null,
+        "set_by": "Rise default",
+        "day_in_episode": 12,
+        "ends_after_day": 30,
+        "on_end": "Summary to the treating clinician; clinic can reactivate"
+      },
+      "cadence": {
+        "next_checkin_in_days": 2,
+        "phase": "Episode days 0-14, day 12",
+        "reason": "Episode default"
+      },
+      "patient_feedback": {
+        "trend_vs_previous": "better",
+        "compared_to": "Home check-in",
+        "next_step": "encouragement"
+      }
+    },
+    {
+      "rise_id": "rise-05",
+      "display_name": "Diane Coulter",
+      "demo_role": "callback",
+      "synthetic": true,
+      "source": {
+        "dataset": "Synthetic Hospital v1.3",
+        "patient_id": 2856,
+        "repo": "https://github.com/sparkcpark/synthetic_hospital",
+        "license": "MIT",
+        "chart_note": "Source chart: progressive numbness in hands and feet with difficulty maintaining balance."
+      },
+      "demographics": {
+        "age": 62,
+        "sex": "F",
+        "race_ethnicity": "Non-Hispanic White",
+        "insurance": "Medicare (ESRD eligibility)"
+      },
+      "chronic_conditions": [
+        "Type 2 diabetes mellitus with polyneuropathy and diabetic nephropathy",
+        "Metastatic breast cancer (invasive ductal carcinoma) with osseous metastases",
+        "Chronic kidney disease stage 4 with secondary hyperparathyroidism",
+        "Hyperlipidemia",
+        "Osteoarthritis, left knee, status post total knee arthroplasty",
+        "Umbilical hernia",
+        "Vitamin B12 deficiency"
+      ],
+      "surgical_history": [
+        "Left total knee arthroplasty (3 months prior)",
+        "Right breast lumpectomy with sentinel lymph node biopsy and radiation therapy (10 years prior)",
+        "Tunneled central venous catheter placement for chemotherapy and bisphosphonate infusions"
+      ],
+      "home_medications": [
+        "Metformin 1000 mg PO twice daily",
+        "Insulin glargine 20 units subcutaneous at bedtime",
+        "Insulin lispro sliding scale subcutaneous with meals",
+        "Sevelamer carbonate 800 mg PO three times daily with meals",
+        "Calcitriol 0.25 mcg PO daily",
+        "Pioglitazone 30 mg PO daily",
+        "Anastrozole 1 mg PO daily",
+        "Atorvastatin 40 mg PO daily",
+        "Cyanocobalamin 1000 mcg PO daily",
+        "Acetaminophen 650 mg PO every 6 hours as needed for pain"
+      ],
+      "allergies": [
+        "No known drug allergies"
+      ],
+      "episode": {
+        "procedure": "Left total knee arthroplasty",
+        "operated_side": "left",
+        "post_op_day_today": 90,
+        "risk_flags": [
+          "Diabetic polyneuropathy",
+          "CKD stage 4",
+          "Osseous metastases"
+        ]
+      },
+      "protocol": {
+        "name": "CDC STEADI 30-Second Chair Stand",
+        "steadi_age_band": "60-64",
+        "steadi_below_average_if_under": 12,
+        "addons": [
+          "CDC STEADI 4-Stage Balance (tandem)"
+        ]
+      },
+      "checkins": [
+        {
+          "label": "Post-discharge episode close",
+          "post_op_day": 30,
+          "raw_stands": 9,
+          "arms_used": false,
+          "steadi_score": 9
+        },
+        {
+          "label": "Reactivated: first check-in",
+          "post_op_day": 86,
+          "raw_stands": 11,
+          "arms_used": false,
+          "steadi_score": 11
+        }
+      ],
+      "scripted_today": {
+        "raw": 11,
+        "arms": false,
+        "asymmetry_pct": 7,
+        "favoring": null,
+        "balance_tandem_hold_s": 4,
+        "symptoms": {
+          "pain_0_10": 2,
+          "dizzy": false,
+          "short_of_breath_or_chest_pain": false,
+          "calf_pain_or_swelling": false,
+          "new_incontinence": false
+        },
+        "steadi_score": 11
+      },
+      "expected_triage": {
+        "recommendation": "nurse_callback",
+        "route": "physical_therapy",
+        "patient_message": "callback_today",
+        "why": "Chair-stand count improving 9 to 11, but tandem stance held 4 s (< 10 s STEADI cutoff): fall risk from neuropathy. PT balance referral."
+      },
+      "monitoring_episode": {
+        "type": "reactivated",
+        "start_pod": 84,
+        "length_days": 30,
+        "cadence_days": 7,
+        "set_by": "Surgeon at 3-month visit (balance complaint)",
+        "day_in_episode": 6,
+        "ends_after_day": 30,
+        "on_end": "Summary to the treating clinician; clinic can reactivate"
+      },
+      "cadence": {
+        "next_checkin_in_days": 2,
+        "phase": "Clinician cadence, episode day 6",
+        "reason": "Recheck within 2 days of the nurse callback"
+      },
+      "patient_feedback": {
+        "trend_vs_previous": "same",
+        "compared_to": "Reactivated: first check-in",
+        "next_step": "callback_today"
+      }
+    },
+    {
+      "rise_id": "rise-06",
+      "display_name": "Ruth Abernathy",
+      "demo_role": "on_track",
+      "synthetic": true,
+      "source": {
+        "dataset": "Synthetic Hospital v1.3",
+        "patient_id": 2857,
+        "repo": "https://github.com/sparkcpark/synthetic_hospital",
+        "license": "MIT",
+        "chart_note": "Source chart: inpatient orthopedic admission after mechanical fall at home tripping over a rug."
+      },
+      "demographics": {
+        "age": 72,
+        "sex": "F",
+        "race_ethnicity": "Non-Hispanic White",
+        "insurance": "Medicare"
+      },
+      "chronic_conditions": [
+        "Osteoporosis",
+        "Chronic obstructive pulmonary disease (COPD)",
+        "Postmenopausal status"
+      ],
+      "surgical_history": [
+        "Spontaneous vaginal delivery x3"
+      ],
+      "home_medications": [
+        "Multivitamin One tablet daily"
+      ],
+      "allergies": [
+        "NKDA"
+      ],
+      "episode": {
+        "procedure": "Hip fracture repair (displaced left femoral neck)",
+        "operated_side": "left",
+        "post_op_day_today": 21,
+        "risk_flags": [
+          "Osteoporosis",
+          "COPD",
+          "Fall at home (index injury)"
+        ]
+      },
+      "protocol": {
+        "name": "CDC STEADI 30-Second Chair Stand",
+        "steadi_age_band": "70-74",
+        "steadi_below_average_if_under": 10,
+        "addons": []
+      },
+      "checkins": [
+        {
+          "label": "Discharge PT",
+          "post_op_day": 5,
+          "raw_stands": 4,
+          "arms_used": true,
+          "steadi_score": 0
+        },
+        {
+          "label": "Home check-in",
+          "post_op_day": 14,
+          "raw_stands": 5,
+          "arms_used": true,
+          "steadi_score": 0
+        }
+      ],
+      "scripted_today": {
+        "raw": 6,
+        "arms": true,
+        "arms_from_rep": 1,
+        "asymmetry_pct": 12,
+        "favoring": "right",
+        "symptoms": {
+          "pain_0_10": 3,
+          "dizzy": false,
+          "short_of_breath_or_chest_pain": false,
+          "calf_pain_or_swelling": false,
+          "new_incontinence": false
+        },
+        "steadi_score": 0
+      },
+      "expected_triage": {
+        "recommendation": "continue_plan",
+        "route": "physical_therapy",
+        "patient_message": "encouragement",
+        "why": "STEADI score is 0 (arms used every stand), but arm-assisted count is rising 4 to 6 with no symptoms; continue PT, recheck in 1 week."
+      },
+      "monitoring_episode": {
+        "type": "post_discharge",
+        "start_pod": 5,
+        "length_days": 30,
+        "cadence_days": null,
+        "set_by": "Rise default",
+        "day_in_episode": 16,
+        "ends_after_day": 30,
+        "on_end": "Summary to the treating clinician; clinic can reactivate"
+      },
+      "cadence": {
+        "next_checkin_in_days": 4,
+        "phase": "Episode days 15-30, day 16",
+        "reason": "Stable or improving twice: interval extended one step"
+      },
+      "patient_feedback": {
+        "trend_vs_previous": "better",
+        "compared_to": "Home check-in",
+        "next_step": "encouragement"
+      }
+    },
+    {
+      "rise_id": "rise-07",
+      "display_name": "Harold Pruitt",
+      "demo_role": "escalate",
+      "synthetic": true,
+      "source": {
+        "dataset": "Synthetic Hospital v1.3",
+        "patient_id": 2226,
+        "repo": "https://github.com/sparkcpark/synthetic_hospital",
+        "license": "MIT",
+        "chart_note": "Source chart: neurology visit for progressive difficulty walking with falls and urinary incontinence."
+      },
+      "demographics": {
+        "age": 72,
+        "sex": "M",
+        "race_ethnicity": "Non-Hispanic White",
+        "insurance": "Medicare"
+      },
+      "chronic_conditions": [
+        "Hypertension",
+        "Type 2 diabetes mellitus",
+        "Hyperlipidemia",
+        "Chronic kidney disease (Stage 3)",
+        "Severe aortic stenosis",
+        "Chronic constipation",
+        "History of colonic polyps"
+      ],
+      "surgical_history": [
+        "Mechanical mitral valve replacement (10 years prior)",
+        "Right total hip arthroplasty (4 months prior)",
+        "Colonoscopy with polypectomy (2 years prior)"
+      ],
+      "home_medications": [
+        "Warfarin 5 mg daily (adjusted per INR goal 2.5-3.5 for mechanical valve)",
+        "Lisinopril 20 mg daily",
+        "Metformin 1000 mg twice daily",
+        "Atorvastatin 40 mg daily",
+        "Amlodipine 5 mg daily",
+        "Aspirin 81 mg daily"
+      ],
+      "allergies": [
+        "NKDA"
+      ],
+      "episode": {
+        "procedure": "Right total hip arthroplasty",
+        "operated_side": "right",
+        "post_op_day_today": 120,
+        "risk_flags": [
+          "Mechanical mitral valve on warfarin",
+          "Severe aortic stenosis",
+          "CKD stage 3"
+        ]
+      },
+      "protocol": {
+        "name": "CDC STEADI 30-Second Chair Stand",
+        "steadi_age_band": "70-74",
+        "steadi_below_average_if_under": 12,
+        "addons": []
+      },
+      "checkins": [
+        {
+          "label": "Post-discharge episode close",
+          "post_op_day": 30,
+          "raw_stands": 9,
+          "arms_used": false,
+          "steadi_score": 9
+        },
+        {
+          "label": "Reactivated: first check-in",
+          "post_op_day": 113,
+          "raw_stands": 8,
+          "arms_used": false,
+          "steadi_score": 8
+        }
+      ],
+      "scripted_today": {
+        "raw": 6,
+        "arms": false,
+        "asymmetry_pct": 9,
+        "favoring": null,
+        "gait_observations": [
+          "Short strides",
+          "Shuffling",
+          "En bloc turning"
+        ],
+        "symptoms": {
+          "pain_0_10": 1,
+          "dizzy": false,
+          "short_of_breath_or_chest_pain": false,
+          "calf_pain_or_swelling": false,
+          "new_incontinence": true
+        },
+        "steadi_score": 6
+      },
+      "expected_triage": {
+        "recommendation": "escalate_urgent",
+        "route": "primary_care",
+        "patient_message": "callback_today",
+        "why": "Decline 9 to 6 over two months with shuffling and new incontinence, unrelated to the hip: route to primary care, not the surgeon."
+      },
+      "monitoring_episode": {
+        "type": "reactivated",
+        "start_pod": 112,
+        "length_days": 30,
+        "cadence_days": 7,
+        "set_by": "Primary care (walking difficulty, falls)",
+        "day_in_episode": 8,
+        "ends_after_day": 30,
+        "on_end": "Summary to the treating clinician; clinic can reactivate"
+      },
+      "cadence": {
+        "next_checkin_in_days": 1,
+        "phase": "Clinician cadence, episode day 8",
+        "reason": "Recheck the day after the clinician clears the patient"
+      },
+      "patient_feedback": {
+        "trend_vs_previous": "harder",
+        "compared_to": "Reactivated: first check-in",
+        "next_step": "callback_today"
+      }
+    }
+  ]
+}

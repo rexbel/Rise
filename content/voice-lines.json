@@ -1,0 +1,213 @@
+{
+  "$comment": "Rendered to public/voice/<id>.mp3 by `npm run voice` (ElevenLabs). Instruction lines follow the CDC STEADI 30-Second Chair Stand wording. The demo clinic's name is not baked into audio; next_nurse_callback says 'your care team'.",
+  "lines": [
+    {
+      "id": "welcome",
+      "text": "Hi, I'm your Rise coach. This check-in takes about two minutes, and you can stop at any time."
+    },
+    {
+      "id": "setup_chair",
+      "text": "Please use a sturdy chair without armrests, pushed back against a wall."
+    },
+    {
+      "id": "setup_helper",
+      "text": "Make sure someone is nearby while you do this."
+    },
+    {
+      "id": "setup_phone",
+      "text": "Prop your phone on the floor, a few steps away, so I can see you from head to feet."
+    },
+    {
+      "id": "framing_ok",
+      "text": "Great, I can see all of you."
+    },
+    {
+      "id": "framing_back",
+      "text": "Please step back a little so I can see your whole body."
+    },
+    {
+      "id": "instr_1",
+      "text": "Sit in the middle of the chair."
+    },
+    {
+      "id": "instr_2",
+      "text": "Place your hands on the opposite shoulder, crossed at the wrists."
+    },
+    {
+      "id": "instr_3",
+      "text": "Keep your feet flat on the floor."
+    },
+    {
+      "id": "instr_4",
+      "text": "Keep your back straight, and keep your arms against your chest."
+    },
+    {
+      "id": "instr_5",
+      "text": "When I say go, rise to a full standing position, then sit back down. Keep going for thirty seconds."
+    },
+    {
+      "id": "countdown",
+      "text": "Three. Two. One. Go."
+    },
+    {
+      "id": "arms_reminder",
+      "text": "Keep your arms crossed if you can."
+    },
+    {
+      "id": "halfway",
+      "text": "Halfway there."
+    },
+    {
+      "id": "time_up",
+      "text": "Time's up. You can rest now."
+    },
+    {
+      "id": "paused",
+      "text": "It's okay to pause. Would you like to keep going, or finish here?"
+    },
+    {
+      "id": "q_pain_0_10",
+      "text": "How much pain do you have right now, from 0 to 10?"
+    },
+    {
+      "id": "q_dizzy",
+      "text": "Did you feel dizzy or lightheaded?"
+    },
+    {
+      "id": "q_short_of_breath_or_chest_pain",
+      "text": "Are you short of breath, or do you have chest pain?"
+    },
+    {
+      "id": "q_calf_pain_or_swelling",
+      "text": "Do you have new pain or swelling in your calf?"
+    },
+    {
+      "id": "note_prompt",
+      "text": "Is there anything you'd like your nurse to know? You can skip this."
+    },
+    {
+      "id": "trend_better",
+      "text": "You were able to do more today than last time. Your effort is showing."
+    },
+    {
+      "id": "trend_same",
+      "text": "Today looked a lot like last time. Holding steady is a normal part of recovery."
+    },
+    {
+      "id": "trend_harder",
+      "text": "Today seemed harder than last time. That happens during recovery, and it helps your care team to know."
+    },
+    {
+      "id": "trend_first",
+      "text": "This was your first check-in, so today gives your care team a starting point."
+    },
+    {
+      "id": "trend_finished_early",
+      "text": "You did what felt right for you today, and that's okay."
+    },
+    {
+      "id": "next_continue_plan",
+      "text": "Keep going with the plan you and your care team made."
+    },
+    {
+      "id": "next_nurse_callback",
+      "text": "A nurse from your care team will call you today to check in. You can tell them anything you noticed."
+    },
+    {
+      "id": "next_escalate_urgent",
+      "text": "Your care team would like to talk with you today. Please keep your phone nearby."
+    },
+    {
+      "id": "next_finished_early",
+      "text": "Someone from your care team will reach out to see how you're doing."
+    },
+    {
+      "id": "closure",
+      "text": "Thank you for taking the time to do this. You're all done for today, and you can close this page whenever you're ready."
+    },
+    {
+      "id": "emergency",
+      "text": "Because you told us you're short of breath or have chest pain, please call 911 now. If someone is with you, ask them to stay with you."
+    },
+    {
+      "id": "count_1",
+      "text": "One."
+    },
+    {
+      "id": "count_2",
+      "text": "Two."
+    },
+    {
+      "id": "count_3",
+      "text": "Three."
+    },
+    {
+      "id": "count_4",
+      "text": "Four."
+    },
+    {
+      "id": "count_5",
+      "text": "Five."
+    },
+    {
+      "id": "count_6",
+      "text": "Six."
+    },
+    {
+      "id": "count_7",
+      "text": "Seven."
+    },
+    {
+      "id": "count_8",
+      "text": "Eight."
+    },
+    {
+      "id": "count_9",
+      "text": "Nine."
+    },
+    {
+      "id": "count_10",
+      "text": "Ten."
+    },
+    {
+      "id": "count_11",
+      "text": "Eleven."
+    },
+    {
+      "id": "count_12",
+      "text": "Twelve."
+    },
+    {
+      "id": "count_13",
+      "text": "Thirteen."
+    },
+    {
+      "id": "count_14",
+      "text": "Fourteen."
+    },
+    {
+      "id": "count_15",
+      "text": "Fifteen."
+    },
+    {
+      "id": "count_16",
+      "text": "Sixteen."
+    },
+    {
+      "id": "count_17",
+      "text": "Seventeen."
+    },
+    {
+      "id": "count_18",
+      "text": "Eighteen."
+    },
+    {
+      "id": "count_19",
+      "text": "Nineteen."
+    },
+    {
+      "id": "count_20",
+      "text": "Twenty."
+    }
+  ]
+}

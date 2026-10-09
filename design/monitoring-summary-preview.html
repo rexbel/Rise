@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rise Monitoring Summary</title>
+<style>
+:root{
+  --bg:#f6f7f9; --card:#ffffff; --ink:#14181f; --muted:#5b6472; --line:#e3e6eb;
+  --accent:#2f6fde; --ok:#1f8a4c; --okbg:#e7f5ec; --warn:#a15c00; --warnbg:#fdf1e1;
+  --info:#2f6fde; --infobg:#e9f0fc; --off:#c9ced6; --chip:#eef1f5;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1217; --card:#171b22; --ink:#e8ebf0; --muted:#9aa3b1; --line:#2a303a;
+    --accent:#7aa6ff; --ok:#5cc98a; --okbg:#173325; --warn:#f0a54a; --warnbg:#3a2a14;
+    --info:#7aa6ff; --infobg:#1c2944; --off:#3a414d; --chip:#222833;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:24px 16px 40px}
+.top{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between;margin-bottom:16px}
+h1{font-size:22px;margin:0}
+.sub{color:var(--muted);font-size:14px}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--chip);border-radius:999px;padding:3px 10px;font-size:12.5px;color:var(--muted);white-space:nowrap}
+.chip b{color:var(--ink);font-weight:600}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.grid{display:grid;gap:12px}
+.g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width:860px){.g4{grid-template-columns:repeat(2,minmax(0,1fr))}.g2{grid-template-columns:1fr}}
+@media (max-width:480px){.g4{grid-template-columns:1fr}}
+.label{font-size:12.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+.big{font-size:28px;font-weight:650;line-height:1.1}
+.big small{font-size:14px;color:var(--muted);font-weight:500}
+.status{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border-radius:6px;padding:2px 8px;margin-top:8px}
+.s-ok{background:var(--okbg);color:var(--ok)} .s-warn{background:var(--warnbg);color:var(--warn)} .s-info{background:var(--infobg);color:var(--info)}
+.bar{position:relative;height:8px;border-radius:4px;background:var(--chip);margin-top:10px}
+.bar .fill{position:absolute;left:0;top:0;bottom:0;border-radius:4px;background:var(--accent)}
+.bar .band{position:absolute;top:-3px;bottom:-3px;border:1.5px dashed var(--muted);border-radius:5px}
+.note{font-size:12.5px;color:var(--muted);margin-top:6px}
+.tl{margin-top:4px;overflow-x:auto}
+.tl svg{display:block;min-width:640px;width:100%;height:auto}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px;color:var(--muted);margin-top:8px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:-1px;margin-right:5px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+td.code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;white-space:nowrap}
+.foot{font-size:12.5px;color:var(--muted);margin-top:14px}
+button{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:6px 12px;cursor:pointer}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.sec{margin-top:12px}
+h2{font-size:15px;margin:0 0 10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <div class="sub">Rise · Clinic console · Patient › Monitoring</div>
+      <h1>Ruth Abernathy — 30-day monitoring summary</h1>
+      <div class="sub">72 F · Left femoral neck fracture repair · Discharged Sep 21 · Episode day 16 of 30</div>
+    </div>
+    <div class="row">
+      <span class="chip">Billing profile: <b>Ortho practice · RTM via PT</b></span>
+      <span class="chip">Cadence: <b>Rise default</b></span>
+      <span class="chip">Episode: <b>30 days</b></span>
+      <button type="button" aria-label="Edit protocol settings">Edit protocol</button>
+      <span class="chip">Synthetic data</span>
+    </div>
+  </div>
+
+  <div class="grid g4">
+    <div class="card">
+      <div class="label">Monitoring data days</div>
+      <div class="big">8 <small>of 30</small></div>
+      <div class="bar" aria-hidden="true">
+        <div class="band" style="left:6.67%;width:43.33%"></div>
+        <div class="fill" style="width:26.67%"></div>
+      </div>
+      <div class="note">Dashed band = 2–15 days. Projected 11 by day 30.</div>
+      <div class="status s-ok">✓ In 98985 range</div>
+    </div>
+    <div class="card">
+      <div class="label">PT management time</div>
+      <div class="big">14 <small>min</small></div>
+      <div class="bar" aria-hidden="true"><div class="fill" style="width:70%"></div></div>
+      <div class="note">10 min threshold met · 6 min to the 20 min threshold</div>
+      <div class="status s-ok">✓ 98979 threshold met</div>
+    </div>
+    <div class="card">
+      <div class="label">Two-way contacts</div>
+      <div class="big">2 <small>calls</small></div>
+      <div class="note">Day 2 nurse call (6 min) · Day 9 callback (4 min)</div>
+      <div class="status s-ok">✓ Monthly interactive contact met</div>
+    </div>
+    <div class="card">
+      <div class="label">In-person care</div>
+      <div class="big">1 <small>of 2 visits</small></div>
+      <div class="note">PA wound check day 13 ✓ · Surgeon visit week 6 (Nov 2)</div>
+      <div class="status s-info">ⓘ Rise is an adjunct, not a replacement</div>
+    </div>
+  </div>
+
+  <div class="card sec">
+    <h2>30-day episode</h2>
+    <div class="tl" role="img" aria-label="Timeline of the 30-day episode: nurse call day 2; check-ins on days 2, 4, 6, 8, 10, 12, 14 and 16 completed; in-person visit day 13; scheduled check-ins days 20, 24 and 28; episode ends day 30.">
+      <svg viewBox="0 0 960 120" xmlns="http://www.w3.org/2000/svg" font-family="inherit">
+        <line x1="30" y1="60" x2="930" y2="60" stroke="var(--line)" stroke-width="2"/>
+        <rect x="30" y="54" width="480" height="12" rx="6" fill="var(--infobg)"/>
+        <g font-size="11" fill="var(--muted)" text-anchor="middle">
+          <text x="30" y="96">Day 0</text><text x="240" y="96">7</text><text x="450" y="96">14</text>
+          <text x="660" y="96">21</text><text x="930" y="96">30</text>
+        </g>
+        <!-- completed check-ins every 2 days to day 16 -->
+        <g fill="var(--accent)">
+          <circle cx="90" cy="60" r="7"/><circle cx="150" cy="60" r="7"/><circle cx="210" cy="60" r="7"/>
+          <circle cx="270" cy="60" r="7"/><circle cx="330" cy="60" r="7"/><circle cx="390" cy="60" r="7"/>
+          <circle cx="450" cy="60" r="7"/><circle cx="510" cy="60" r="7"/>
+        </g>
+        <!-- scheduled -->
+        <g fill="var(--card)" stroke="var(--accent)" stroke-width="2">
+          <circle cx="630" cy="60" r="6"/><circle cx="750" cy="60" r="6"/><circle cx="870" cy="60" r="6"/>
+        </g>
+        <!-- nurse calls -->
+        <g fill="var(--ok)"><rect x="84" y="20" width="12" height="12" rx="2"/><rect x="294" y="20" width="12" height="12" rx="2"/></g>
+        <g font-size="11" fill="var(--muted)"><text x="102" y="30">Nurse call</text><text x="312" y="30">Callback</text></g>
+        <!-- in-person -->
+        <path d="M420 32 l10 -14 l10 14 z" fill="var(--warn)"/>
+        <text x="444" y="30" font-size="11" fill="var(--muted)">PA visit</text>
+        <!-- today -->
+        <line x1="510" y1="40" x2="510" y2="80" stroke="var(--ink)" stroke-width="1.5" stroke-dasharray="3 3"/>
+        <text x="510" y="114" font-size="11" text-anchor="middle" fill="var(--ink)">Today</text>
+        <text x="930" y="40" font-size="11" text-anchor="end" fill="var(--muted)">Episode ends · summary to surgeon</text>
+        <text x="40" y="114" font-size="11" fill="var(--muted)">Every 2 days to day 14 · every 3 days after · extended to 4 after two improving check-ins</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--accent)"></span>Check-in completed</span>
+      <span><span class="dot" style="border:2px solid var(--accent);background:var(--card)"></span>Scheduled</span>
+      <span><span class="dot" style="background:var(--ok);border-radius:2px"></span>Nurse call (two-way)</span>
+      <span><span class="dot" style="background:var(--warn);border-radius:0;clip-path:polygon(50% 0,100% 100%,0 100%)"></span>In-person visit</span>
+    </div>
+  </div>
+
+  <div class="grid g2 sec">
+    <div class="card">
+      <h2>Code eligibility (counts only)</h2>
+      <table>
+        <thead><tr><th>Code</th><th>Requirement</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td class="code">98975</td><td>Setup and patient education</td><td>✓ Done day 2</td></tr>
+          <tr><td class="code">98985</td><td>Device supply, 2–15 data days / 30</td><td>✓ 8 days</td></tr>
+          <tr><td class="code">98977</td><td>Device supply, 16–30 data days</td><td>— Not targeted</td></tr>
+          <tr><td class="code">98979</td><td>First 10 min + 1 real-time contact</td><td>✓ 14 min, 2 calls</td></tr>
+          <tr><td class="code">98980</td><td>First 20 min + 1 contact</td><td>◷ 6 min to go</td></tr>
+          <tr><td class="code">99495/6</td><td>TCM</td><td>— Not in this profile: surgeon is in the 90-day global; PCP may bill</td></tr>
+        </tbody>
+      </table>
+      <div class="note">Billed by the physical therapist under the PT plan of care; the surgeon can't bill RTM during the global period. One device code and one base management code per period. Compliance confirms before claims.</div>
+    </div>
+    <div class="card">
+      <h2>Clinical trend (care team only)</h2>
+      <table>
+        <thead><tr><th>Check-in</th><th>Raw stands</th><th>STEADI</th><th>Patient saw</th></tr></thead>
+        <tbody>
+          <tr><td>Discharge PT</td><td>4 (arms)</td><td>0</td><td>—</td></tr>
+          <tr><td>Day 8</td><td>5 (arms)</td><td>0</td><td>“Easier”</td></tr>
+          <tr><td>Day 16 · today</td><td>6 (arms)</td><td>0</td><td>“Easier”</td></tr>
+        </tbody>
+      </table>
+      <div class="note">Rule: continue plan with PT. Next check-in day 20 (interval extended after two improving check-ins).</div>
+      <div class="row" style="margin-top:10px">
+        <span class="chip">Override: <b>none</b></span>
+        <span class="chip">TEAM episode: <b>day 16 of 30</b></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">Preview · illustrative numbers for a synthetic patient (Synthetic Hospital #2857). Rise counts data days, minutes and contacts; billing decisions belong to the practice.</div>
+</div>
+</body>
+</html>

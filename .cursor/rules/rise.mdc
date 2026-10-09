@@ -1,0 +1,5 @@
+---
+description: Rise project rules
+alwaysApply: true
+---
+Follow the "Rise project rules" section of AGENTS.md. Key points: deterministic rules decide escalations; models never write patient-facing text; the patient phone never shows scores; every external call has a timeout + seeded fallback + "Demo data" badge; defaults live in config/protocol.default.json; run `npm run check` before committing.
