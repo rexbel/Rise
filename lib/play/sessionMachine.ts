@@ -1,8 +1,9 @@
 /**
- * Pure Keep the Line reducer. No timers, I/O, or React.
+ * Pure RehabNinja reducer. No timers, I/O, or React.
  * finishedSet is written once and never cleared.
  */
 
+import type { ExerciseId } from "@/lib/play/programs"
 import type {
   Finding,
   PlayAction,
@@ -15,7 +16,7 @@ import type {
 
 const QUESTION_IDS = ["pain", "dizzy", "breath_chest", "calf"] as const
 
-export function createPlaySession(riseId: string, demo = false): PlaySession {
+export function createPlaySession(riseId: string, demo = false, exerciseId: ExerciseId = "sit_to_stand"): PlaySession {
   return {
     riseId,
     demo,
@@ -24,11 +25,18 @@ export function createPlaySession(riseId: string, demo = false): PlaySession {
     findings: [],
     finishedSet: null,
     answers: {},
+    exerciseId,
   }
 }
 
 export function reducePlaySession(state: PlaySession, action: PlayAction): PlaySession {
   switch (action.type) {
+    case "SELECT_EXERCISE":
+      if (state.finishedSet) return state
+      if (state.phase === "howto" || state.phase === "home" || state.phase === "ready") {
+        return { ...state, exerciseId: action.exerciseId }
+      }
+      return state
     case "BEGIN":
       if (state.phase === "home" || state.phase === "howto") {
         return { ...state, phase: state.demo ? "countdown" : "ready" }
@@ -110,6 +118,7 @@ function endSet(state: PlaySession, durationMs: number, endedBy: "script" | "fin
     findings: state.findings,
     durationMs,
     endedBy,
+    exerciseId: state.exerciseId,
   }
   return {
     ...state,

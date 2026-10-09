@@ -6,10 +6,13 @@
 import corrections from "@/content/form-corrections.json"
 import lines from "@/content/patient-lines.json"
 import { closingLines, type ClosingInput } from "@/lib/feedback"
+import type { ExerciseId } from "@/lib/play/programs"
 import { hasRedFlag } from "@/lib/play/sessionMachine"
 import type { Finding, FindingId, PatientFeedback, QuestionAnswers } from "@/lib/play/types"
 
 const SOFT_ORDER: FindingId[] = ["valgus", "arms", "asymmetry", "speed"]
+
+type CorrectionRow = { what: string; why: string; action: string }
 
 export function pickFinding(findings: Finding[], suppress: FindingId[] = []): Finding | null {
   const usable = findings.filter((f) => !suppress.includes(f.id))
@@ -24,9 +27,14 @@ export function pickFinding(findings: Finding[], suppress: FindingId[] = []): Fi
   return null
 }
 
-export function formatCorrection(finding: Finding | null): PatientFeedback | null {
+export function formatCorrection(
+  finding: Finding | null,
+  exerciseId: ExerciseId = "sit_to_stand",
+): PatientFeedback | null {
   if (!finding) return null
-  const row = corrections[finding.id]
+  const byEx = (corrections as { byExercise?: Record<string, Partial<Record<FindingId, CorrectionRow>>> })
+    .byExercise?.[exerciseId]?.[finding.id]
+  const row = (byEx ?? corrections[finding.id]) as CorrectionRow
   return { what: row.what, why: row.why, action: row.action }
 }
 
@@ -35,6 +43,7 @@ export function formatPlayClose(
   answers: QuestionAnswers,
   closing: ClosingInput,
   suppress: FindingId[] = [],
+  exerciseId: ExerciseId = "sit_to_stand",
 ): { emergency: boolean; correction: PatientFeedback | null; closingLines: string[] } {
   if (hasRedFlag(answers) || closing.redFlag) {
     return {
@@ -46,7 +55,7 @@ export function formatPlayClose(
   const finding = pickFinding(findings, suppress)
   return {
     emergency: false,
-    correction: formatCorrection(finding),
+    correction: formatCorrection(finding, exerciseId),
     closingLines: closingLines({ ...closing, redFlag: false }),
   }
 }

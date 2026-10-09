@@ -1,27 +1,35 @@
 {
-  "$comment": "Locked Keep the Line chrome. No STEADI, stand counts, or clinical labels.",
+  "$comment": "Locked RehabNinja chrome. No STEADI, stand counts, or clinical labels.",
+  "brand": "Rise · RehabNinja",
   "lobby": {
     "choose_profile": "Choose your profile",
     "pitch_demo": "Pitch demo (Ellen)",
-    "tagline": "Full-screen Fruit Ninja on your camera. Sit to stand with knees over feet — slice fruit for hits, avoid bombs when form breaks."
+    "tagline": "RehabNinja — timeline assigns today’s move, then you slice fruit on camera when form holds. Bombs when knees drift or hands push off."
   },
   "picker": {
     "title": "Who is playing?",
-    "body": "Pick a synthetic patient. You’ll see their condition, then today’s Fruit Ninja sit-to-stand.",
+    "body": "Pick a synthetic patient. You’ll see today’s assigned RehabNinja workouts, then play.",
     "cta": "Continue"
   },
   "condition": {
     "eyebrow": "Today’s program",
     "procedure_label": "Procedure",
     "pod_label": "Day after surgery",
+    "workouts_label": "Assigned workouts",
+    "playable_badge": "Playable in RehabNinja",
     "game_label": "Today’s game",
-    "game_name": "Keep the Line · Fruit Ninja",
-    "game_why": "Chair sit-to-stand. Camera tracks your body; fruit on your knees scores form. Not a score chart — hits and misses only.",
+    "game_name": "RehabNinja",
+    "game_why": "Camera tracks your body. Clean reps slice fruit. Form breaks become bombs. Hits and misses only — not a clinical score chart.",
     "begin": "Start session"
+  },
+  "program": {
+    "pick_hint": "Pick today’s assigned move, then Begin.",
+    "sets_reps": "{sets} × {reps}",
+    "hold": "Hold {sec}s"
   },
   "howto": {
     "title": "How to play",
-    "body": "Fruit on knees = good form. Bombs = knees drifting in or hands pushing off. Slice hits when you keep the line. Stop is always on screen.",
+    "body": "Fruit on your joints = good form. Bombs = knees drifting in or hands pushing off. Clean stand or squat apex slices a hit. Stop is always on screen.",
     "begin": "Begin"
   },
   "ready": {
@@ -38,12 +46,20 @@
   },
   "countdown": ["Three", "Two", "One", "Go"],
   "live": {
-    "prompt": "Slice the fruit — sit to stand",
-    "how": "Watermelon on knees = good form. Bombs = knees in or hands pushing off.",
+    "prompt": "RehabNinja",
+    "how": "Clean reps slice fruit. Bombs = knees in or hands pushing off.",
+    "coach": {
+      "sit_to_stand": "Stand up — fruit slices when knees stay over your feet.",
+      "mini_squat": "Squat and rise — slice when you come up with knees out.",
+      "single_leg_balance": "Hold steady — fruit fills when you stay balanced."
+    },
+    "tracking_soft": "We need a clearer view — step back a little.",
     "step_back": "Step back so we can see your knees — then keep playing.",
     "stop": "Stop",
     "pause": "Pause",
-    "demo_badge": "Demo replay"
+    "demo_badge": "Demo replay",
+    "reps_label": "Reps",
+    "hold_label": "Hold"
   },
   "paused": {
     "title": "It is okay to pause.",
@@ -69,6 +85,7 @@
   },
   "close": {
     "title": "Your session",
+    "workout_label": "Workout",
     "hits_label": "Hits",
     "timeline_label": "Hit timeline",
     "care_team": "Your care team can review this session on the clinic board.",

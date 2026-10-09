@@ -1,5 +1,5 @@
 {
-  "$comment": "Locked patient form lines for Keep the Line. No numbers, no clinical labels. Models never write these.",
+  "$comment": "Locked patient form lines for RehabNinja. No numbers, no clinical labels. Models never write these. Optional byExercise overrides.",
   "valgus": {
     "what": "Your knee drifted inward",
     "why": "When the knee moves inward, it puts extra stress on the joint. This often happens when you get tired or rise too fast.",
@@ -19,5 +19,32 @@
     "what": "You put more weight on one side",
     "why": "Favoring one side is common after surgery. Even weight helps both sides share the work.",
     "action": "Try to press down evenly through both feet as you stand."
+  },
+  "byExercise": {
+    "mini_squat": {
+      "valgus": {
+        "what": "Your knees caved in on the squat",
+        "why": "In a mini squat, knees drifting inward loads the joint more than a shallow, controlled bend.",
+        "action": "Keep knees tracking over your feet as you lower and rise."
+      },
+      "speed": {
+        "what": "The squat was too quick",
+        "why": "Rushing the squat makes it harder to keep control.",
+        "action": "Two counts down, two counts up — shallow and steady."
+      }
+    },
+    "single_leg_balance": {
+      "valgus": {
+        "what": "Your standing knee wobbled inward",
+        "why": "On one leg, a soft inward knee makes balance harder and loads the joint.",
+        "action": "Soften the knee slightly and keep it stacked over your foot."
+      },
+      "asymmetry": {
+        "what": "You swayed a lot while balancing",
+        "why": "Big side-to-side sway means the hold was unsteady.",
+        "action": "Use light support if needed and find a quiet still point."
+      }
+    },
+    "sit_to_stand": {}
   }
 }

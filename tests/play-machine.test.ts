@@ -53,6 +53,17 @@ describe("sessionMachine", () => {
     ])
     expect(s.finishedSet?.durationMs).toBe(12_000)
     expect(s.finishedSet?.findings).toHaveLength(1)
+    expect(s.finishedSet?.exerciseId).toBe("sit_to_stand")
+  })
+
+  it("SELECT_EXERCISE before begin sticks on finishedSet", () => {
+    const s = run("rise-01", [
+      { type: "SELECT_EXERCISE", exerciseId: "mini_squat" },
+      ...toLive,
+      { type: "SET_COMPLETE", durationMs: 8_000 },
+    ])
+    expect(s.exerciseId).toBe("mini_squat")
+    expect(s.finishedSet?.exerciseId).toBe("mini_squat")
   })
 
   it("tracking loss resumes to live without a finishedSet", () => {

@@ -1,0 +1,62 @@
+{
+  "$comment": "Rise defaults for RehabNinja — not clinical standards. Inspired by acl-rehab exercise lists; rewritten for TKA/THA/hip-fracture POD bands. Models never author these.",
+  "exercises": [
+    {
+      "id": "sit_to_stand",
+      "name": "Chair sit-to-stand",
+      "sets": 1,
+      "reps": 6,
+      "tempo": "Steady",
+      "notes": "Rise from the chair without pushing off with your hands if you can. Knees over feet.",
+      "ninjaHint": "Fruit slices at the top of each clean stand.",
+      "targetJoints": ["leftKnee", "rightKnee"],
+      "endRule": "reps",
+      "maxDurationMs": 90000
+    },
+    {
+      "id": "mini_squat",
+      "name": "Mini squat",
+      "sets": 2,
+      "reps": 8,
+      "tempo": "2 sec down, 2 sec up",
+      "notes": "Shallow squat only. Keep knees tracking over your feet.",
+      "ninjaHint": "Fruit slices when you rise from a clean mini squat.",
+      "targetJoints": ["leftKnee", "rightKnee"],
+      "endRule": "reps",
+      "maxDurationMs": 120000
+    },
+    {
+      "id": "single_leg_balance",
+      "name": "Single-leg balance",
+      "sets": 1,
+      "reps": 1,
+      "holdSec": 20,
+      "tempo": "Hold",
+      "notes": "Stand on one leg with support nearby. Stay steady — stop if unsafe.",
+      "ninjaHint": "Fruit fills while you hold still; bombs if you sway hard.",
+      "targetJoints": ["leftAnkle", "rightAnkle"],
+      "endRule": "hold",
+      "maxDurationMs": 60000
+    }
+  ],
+  "tracks": {
+    "tka": {
+      "0_3": ["sit_to_stand"],
+      "4_7": ["sit_to_stand", "mini_squat"],
+      "8_14": ["sit_to_stand", "mini_squat", "single_leg_balance"],
+      "15_30": ["mini_squat", "single_leg_balance", "sit_to_stand"]
+    },
+    "tha": {
+      "0_3": ["sit_to_stand"],
+      "4_7": ["sit_to_stand", "mini_squat"],
+      "8_14": ["sit_to_stand", "mini_squat"],
+      "15_30": ["sit_to_stand", "mini_squat", "single_leg_balance"]
+    },
+    "hip_fracture": {
+      "0_3": ["sit_to_stand"],
+      "4_7": ["sit_to_stand"],
+      "8_14": ["sit_to_stand", "mini_squat"],
+      "15_30": ["sit_to_stand", "mini_squat", "single_leg_balance"]
+    }
+  }
+}

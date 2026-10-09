@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest"
 import type { LiveVisual } from "@/lib/play/findings"
 import {
+  APEX_MIN,
   createHitMissTracker,
   HIT_COOLDOWN_MS,
-  HIT_STREAK,
+  HIT_STREAK_BACKUP,
   toLineQuality,
 } from "@/lib/play/hitMiss"
 import { buildSkeleton } from "@/lib/play/syntheticPose"
@@ -18,6 +19,8 @@ function visual(partial: Partial<LiveVisual>): LiveVisual {
     standing: true,
     hard: false,
     asymmetry: false,
+    standAmount: 0.7,
+    sway: 0,
     ...partial,
   }
 }
@@ -39,28 +42,33 @@ describe("toLineQuality", () => {
 })
 
 describe("createHitMissTracker", () => {
-  it("fires a hit after HIT_STREAK held frames", () => {
+  it("fires a hit on clean stand apex", () => {
     const t = createHitMissTracker()
-    let hit = null as ReturnType<typeof t.push>[number] | null
-    for (let i = 0; i < HIT_STREAK; i++) {
-      const ev = t.push(visual({}), cleanKp, i * 70)
-      if (ev[0]?.kind === "hit") hit = ev[0]
-    }
-    expect(hit?.kind).toBe("hit")
-    expect(hit?.joint).toBe("midKnees")
+    t.push(visual({ standAmount: 0.3 }), cleanKp, 0, "sit_to_stand")
+    const ev = t.push(visual({ standAmount: APEX_MIN + 0.05 }), cleanKp, 100, "sit_to_stand")
+    expect(ev.some((e) => e.kind === "hit")).toBe(true)
     expect(t.snapshot().hitCount).toBe(1)
   })
 
-  it("respects hit cooldown", () => {
+  it("respects hit cooldown after apex", () => {
     const t = createHitMissTracker()
-    for (let i = 0; i < HIT_STREAK; i++) t.push(visual({}), cleanKp, i * 70)
+    t.push(visual({ standAmount: 0.2 }), cleanKp, 0, "sit_to_stand")
+    t.push(visual({ standAmount: 0.7 }), cleanKp, 80, "sit_to_stand")
     expect(t.snapshot().hitCount).toBe(1)
-    for (let i = 0; i < HIT_STREAK; i++) t.push(visual({}), cleanKp, 500 + i * 70)
+    t.push(visual({ standAmount: 0.2 }), cleanKp, 200, "sit_to_stand")
+    t.push(visual({ standAmount: 0.7 }), cleanKp, 300, "sit_to_stand")
     expect(t.snapshot().hitCount).toBe(1)
-    for (let i = 0; i < HIT_STREAK; i++) {
-      t.push(visual({}), cleanKp, HIT_COOLDOWN_MS + 800 + i * 70)
-    }
+    t.push(visual({ standAmount: 0.2 }), cleanKp, HIT_COOLDOWN_MS + 400, "sit_to_stand")
+    t.push(visual({ standAmount: 0.7 }), cleanKp, HIT_COOLDOWN_MS + 500, "sit_to_stand")
     expect(t.snapshot().hitCount).toBe(2)
+  })
+
+  it("backup streak still can hit if apex never crosses", () => {
+    const t = createHitMissTracker()
+    for (let i = 0; i < HIT_STREAK_BACKUP; i++) {
+      t.push(visual({ standAmount: 0.8 }), cleanKp, i * 80, "sit_to_stand")
+    }
+    expect(t.snapshot().hitCount).toBeGreaterThanOrEqual(1)
   })
 
   it("fires miss on arms at a wrist joint", () => {
@@ -79,14 +87,10 @@ describe("createHitMissTracker", () => {
     expect(second).toHaveLength(0)
   })
 
-  it("resets streak on miss then can hit again after cooldown", () => {
+  it("balance emits hold hits over time", () => {
     const t = createHitMissTracker()
-    for (let i = 0; i < 4; i++) t.push(visual({}), cleanKp, i * 70)
-    t.push(visual({ armsOut: true }), armsKp, 400)
-    expect(t.snapshot().goodStreak).toBe(0)
-    for (let i = 0; i < HIT_STREAK; i++) {
-      t.push(visual({}), cleanKp, HIT_COOLDOWN_MS + 500 + i * 70)
-    }
-    expect(t.snapshot().hitCount).toBe(1)
+    t.push(visual({ standAmount: 0.9, sway: 0 }), cleanKp, 0, "single_leg_balance")
+    const ev = t.push(visual({ standAmount: 0.9, sway: 0 }), cleanKp, 2600, "single_leg_balance")
+    expect(ev.some((e) => e.kind === "hit")).toBe(true)
   })
 })
