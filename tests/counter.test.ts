@@ -3,6 +3,7 @@ import raw from "../seed/patients.json"
 import { SeedFile } from "../lib/types"
 import { StandCounter, type CounterEvent } from "../lib/pose/counter"
 import { poseAt, synthSession, type SynthScript } from "../lib/pose/synth"
+import { FpsMonitor } from "../lib/pose/select"
 
 const seed = SeedFile.parse(raw)
 
@@ -88,5 +89,26 @@ describe("stand counter", () => {
     expect(summary.rawStands).toBe(6)
     expect(summary.reps.every((r) => r.armsUsed)).toBe(true)
     expect(events.filter((e) => e.type === "arm_use")).toHaveLength(6)
+  })
+})
+
+
+describe("fps monitor (mid-test swap)", () => {
+  const feed = (m: FpsMonitor, fps: number, fromMs: number, toMs: number) => {
+    let tripAt: number | null = null
+    for (let t = fromMs; t < toMs; t += 1000 / fps) if (m.frame(t) && tripAt === null) tripAt = t
+    return tripAt
+  }
+  it("stays on YOLO at 16 fps", () => {
+    expect(feed(new FpsMonitor(12, 2), 16, 0, 10_000)).toBeNull()
+  })
+  it("trips after 2 s under 12 fps, once", () => {
+    const m = new FpsMonitor(12, 2)
+    feed(m, 16, 0, 3000)
+    const at = feed(m, 9, 3000, 9000)
+    expect(at).not.toBeNull()
+    expect(at!).toBeGreaterThanOrEqual(5000)
+    expect(at!).toBeLessThan(6500)
+    expect(feed(m, 5, 9000, 12_000)).toBeNull()
   })
 })
