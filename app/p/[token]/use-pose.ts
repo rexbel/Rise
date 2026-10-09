@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { PoseEstimator } from "@/lib/pose"
 import { FpsMonitor, selectTier } from "@/lib/pose/select"
-import { seededFrames } from "@/lib/pose/seeded"
+import { loadFixture, seededFrames } from "@/lib/pose/seeded"
 import type { Keypoints17, PoseTier, SeedPatient } from "@/lib/types"
 
 /** COCO skeleton edges for the overlay. */
@@ -157,7 +157,7 @@ export function usePose() {
   /** Seeded tier: replay this patient's frames on the given clock. */
   const startSeeded = useCallback(
     (patient: SeedPatient, clock: () => number) => {
-      startGen.current++
+      const my = ++startGen.current
       stopAll()
       seeded.current = { frames: seededFrames(patient), clock }
       setTier("seeded")
@@ -165,6 +165,10 @@ export function usePose() {
       setStatus("")
       setReady(true)
       loop()
+      // Swap in the recorded fixture when this patient has one (it loads well before Go).
+      void loadFixture(patient.rise_id).then((fx) => {
+        if (fx && my === startGen.current && seeded.current) seeded.current = { frames: seededFrames(patient, fx), clock }
+      })
     },
     [loop, stopAll],
   )

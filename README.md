@@ -17,7 +17,7 @@ After a knee or hip replacement or hip fracture repair, the day-7 phone call hea
 CDC STEADI 30-Second Chair Stand on the patient's phone → on-device pose tracking (YOLO, MediaPipe fallback) counts stands and checks arm use → deterministic rules + NVIDIA Cosmos observation + W&B agent note → triage card on the clinic console → a human approves every escalation. Every session clip lands in VAST, so the console can search all check-ins in plain language ("every time a patient pushed off the chair"). Monitoring runs in 30-day episodes alongside in-person care, never instead of it.
 
 ## Demo
-- Demo link: _TBD (Cloudflare tunnel URL on the day)_
+- Demo link: https://rise.nextrex.health (served from the demo laptop through a Cloudflare tunnel; up only while it runs)
 - Screenshots / GIF: _TBD_
 
 ## Architecture
@@ -36,8 +36,9 @@ Next.js 16 (App Router) · TypeScript · Tailwind v4 · shadcn/ui · Zod · onnx
 ```bash
 npm install
 cp .env.example .env.local   # optional; the seeded demo runs without keys
-npm run dev                   # http://localhost:3000
-npm run tunnel                # HTTPS URL for the phone (needs cloudflared)
+npm run dev -- -p 3400        # http://localhost:3400 (the tunnels default to :3400)
+npm run tunnel:named          # https://rise.nextrex.health -> :3400 (named tunnel "rise")
+npm run tunnel                # throwaway HTTPS URL instead (PORT=3400; needs cloudflared)
 npm run check                 # typecheck + tests (rules oracle on all 7 seed patients)
 ```
 Add shadcn components with `npx shadcn@latest add <name>` (components.json is configured).
