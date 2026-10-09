@@ -13,7 +13,7 @@ export type ClosingInput = {
 }
 
 export function closingLines({ trend, recommendation, redFlag, clinicName }: ClosingInput): string[] {
-  if (redFlag) return [lines.emergency]
+  if (redFlag) return [lines.emergency.line]
   const next =
     recommendation === "human_confirm" ? lines.next_step.finished_early : lines.next_step[recommendation]
   return [lines.trend[trend], next.replace("{clinic}", clinicName), lines.closure]

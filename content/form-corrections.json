@@ -1,0 +1,23 @@
+{
+  "$comment": "Locked patient form lines for Keep the Line. No numbers, no clinical labels. Models never write these.",
+  "valgus": {
+    "what": "Your knee drifted inward",
+    "why": "When the knee moves inward, it puts extra stress on the joint. This often happens when you get tired or rise too fast.",
+    "action": "Focus on keeping your knee over your foot, especially as you get tired."
+  },
+  "speed": {
+    "what": "The movement was too fast",
+    "why": "Moving quickly makes it harder to control your knee. Control matters more than speed right now.",
+    "action": "Slow down. Take a breath between sitting and standing."
+  },
+  "arms": {
+    "what": "You used your arms to help you stand",
+    "why": "Pushing off with your hands is common early on. Your care team still wants to see how the legs are doing.",
+    "action": "Keep your arms crossed if you can. Stop if it does not feel safe."
+  },
+  "asymmetry": {
+    "what": "You put more weight on one side",
+    "why": "Favoring one side is common after surgery. Even weight helps both sides share the work.",
+    "action": "Try to press down evenly through both feet as you stand."
+  }
+}
