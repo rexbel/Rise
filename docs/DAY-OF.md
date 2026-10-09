@@ -6,7 +6,7 @@ Two builders, two branches. **Rex** (`rex/pose`): YOLO pose, the patient phone, 
 
 | Time | Rex (`rex/pose`) | Jeremiah (`jeremiah/vast`) | Together / gate |
 | --- | --- | --- | --- |
-| Oct 9 evening | Pose ONNX export + phone fps benchmark; three fixture clips; ElevenLabs mp3s; Twilio verified | Read VAST, Cosmos, W&B docs; clone, `npm run check` | Repo pushed; CI green |
+| Morning preflight ([PREFLIGHT.md](PREFLIGHT.md)) | Pose ONNX export + phone fps benchmark (done); three fixture clips; ElevenLabs mp3s; Twilio verified | Read VAST, Cosmos, W&B docs; clone, `npm run check` | Repo pushed; CI green |
 | 9:00 | Ask about W&B inference and pre-built code | Ask about VAST and Cosmos endpoints and the shared videos | Keynote |
 | 9:30–10:00 | Tunnel up; `/p/rise-01` opens on the phone | Organizers' videos downloaded; VAST credentials working | Contracts PR to main (`SessionResult`, `RepEvent`, `TriageCard`, `ClipRef`, `SearchHit` in `lib/types.ts`), then branch |
 | 10:00–12:15 | YOLO, MediaPipe, tier switch, counter, fixtures; then P1–P3 | VAST ingest with organizers' videos and fixture clips; session store + SSE; console C1–C2 on seed | **Checkpoint 1 — Static Demo 12:15:** merge both; backup decision (Option C on the phone only) |
