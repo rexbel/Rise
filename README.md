@@ -38,6 +38,7 @@ npm install
 cp .env.example .env.local   # optional; the seeded demo runs without keys
 npm run dev -- -p 3400        # http://localhost:3400 (the tunnels default to :3400)
 npm run tunnel:named          # https://rise.nextrex.health -> :3400 (named tunnel "rise")
+bash scripts/install-tunnel-service.sh  # same tunnel as a login service (survives restarts)
 npm run tunnel                # throwaway HTTPS URL instead (PORT=3400; needs cloudflared)
 npm run check                 # typecheck + tests (rules oracle on all 7 seed patients)
 ```
