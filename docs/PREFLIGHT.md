@@ -8,9 +8,9 @@ Everything here is environment setup or seed data. Confirm at the 9:00 keynote w
 - [ ] `npm install && npm run check && npm run dev` on the demo laptop; open http://localhost:3000/clinic
 - [ ] **Tunnel:** `brew install cloudflared`, then `npm run tunnel`; open the `https://*.trycloudflare.com` URL on the phone over cellular (Wi-Fi off) and load `/p/rise-01`
 - [ ] **Camera over HTTPS:** on the phone, confirm the browser asks for camera permission on a tunnel URL (test page day-of; just confirm the tunnel loads tonight)
-- [ ] **Pose model:** `pip install ultralytics onnx onnxslim && python scripts/export_pose_onnx.py` → `public/models/pose.onnx` (try `POSE_MODEL=yolo26n-pose.pt` too)
-- [ ] **Phone benchmark:** record fps for YOLO (WebGPU, WASM) and MediaPipe on Rex's phone. YOLO is kept only at ≥ 15 fps
-  - Oct 9, `/dev/pose` via tunnel: MediaPipe 56.1 fps, 15 ms median, 163 ms load. YOLO not yet measured (`pose.onnx` export pending).
+- [x] **Pose model:** `pip install ultralytics onnx onnxslim && python scripts/export_pose_onnx.py` → `public/models/pose.onnx` (try `POSE_MODEL=yolo26n-pose.pt` too). Intel Mac: PyTorch stops at 2.2.2, so pin `torch==2.2.2 torchvision==0.17.2 numpy==1.26.4 onnx==1.17.0 opencv-python==4.10.0.84 ml-dtypes==0.4.1` or pip backtracks for 30+ min
+- [x] **Phone benchmark:** record fps for YOLO (WebGPU, WASM) and MediaPipe on Rex's phone. YOLO is kept only at ≥ 15 fps
+  - Oct 9, `/dev/pose` via tunnel: YOLO WebGPU 16.6 fps / 59 ms / 814 ms load (keep, thin margin); YOLO WASM 14.8 / 65 / 238 (drop); MediaPipe 56.1 / 15 / 163. Next: 30 s sustained YOLO WebGPU run; if it sags toward 12 fps, export at 256 px.
 - [ ] **Voice:** set `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID`, run `npm run voice` → 52 mp3s in `public/voice/`; listen to `instr_1`–`instr_5`, `paused`, `emergency`
 - [ ] **Twilio:** number active; trial accounts can only text verified numbers, so verify Rex's phone; send one test SMS
 - [ ] **Fallback clips:** with the phone propped side-on at floor level (whole body in frame, armless chair against a wall), record three 30 s videos of yourself: `rise-01-arms` (push off with hands from rep 2, 3 slow stands), `rise-02-asym` (6 stands, shift weight onto your right leg), `rise-06-arms` (arms every rep, 6 stands). AirDrop them to the laptop; tomorrow the fixture recorder turns them into keypoint fixtures (see `fixtures/README.md`)
