@@ -18,14 +18,17 @@ export type PoseScript = {
   trackingLossAtMs?: [number, number]
 }
 
+/** Align with programs.json sit_to_stand target (1×6) unless overridden. */
+const DEFAULT_RISES = 6
+
 const SCRIPTS: Record<string, PoseScript> = {
-  "rise-01": { riseId: "rise-01", rises: 3, armsFromRep: 2 },
+  "rise-01": { riseId: "rise-01", rises: 6, armsFromRep: 3 },
   "rise-04": { riseId: "rise-04", rises: 10 },
   "rise-02": { riseId: "rise-02", rises: 6, leftUnload: true },
 }
 
 export function poseScript(riseId: string): PoseScript {
-  return SCRIPTS[riseId] ?? { riseId, rises: 3 }
+  return SCRIPTS[riseId] ?? { riseId, rises: DEFAULT_RISES }
 }
 
 export function scriptDurationMs(riseId: string): number {
@@ -117,7 +120,7 @@ export function buildSkeleton(opts: {
   const leftShift = (opts.leftUnload ? 0.05 : 0) + (opts.hipShift ?? 0)
   const hipLx = 0.44 + leftShift
   const hipRx = 0.56 + (opts.hipShift ?? 0)
-  const hipLy = hipY + (opts.leftUnload ? 0.04 : 0)
+  const hipLy = hipY + (opts.leftUnload ? 0.06 : 0)
   const hipRy = hipY
   const kneeIn = opts.leftUnload ? 0.06 : 0
   const wristY = opts.armsOut ? lerp(0.7, 0.55, s) : lerp(0.4, 0.28, s)

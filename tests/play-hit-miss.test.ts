@@ -34,7 +34,7 @@ describe("toLineQuality", () => {
   })
   it("bent when arms or knees", () => {
     expect(toLineQuality(visual({ armsOut: true }))).toBe("bent")
-    expect(toLineQuality(visual({ kneeInward: 0.05 }))).toBe("bent")
+    expect(toLineQuality(visual({ kneeInward: 0.25 }))).toBe("bent")
   })
   it("lost when tracking fails", () => {
     expect(toLineQuality(visual({ trackingOk: false }))).toBe("lost")
@@ -63,12 +63,28 @@ describe("createHitMissTracker", () => {
     expect(t.snapshot().hitCount).toBe(2)
   })
 
-  it("backup streak still can hit if apex never crosses", () => {
+  it("does not backup-hit while holding a stand", () => {
     const t = createHitMissTracker()
+    for (let i = 0; i < HIT_STREAK_BACKUP + 4; i++) {
+      t.push(visual({ standAmount: 0.85 }), cleanKp, i * 80, "sit_to_stand")
+    }
+    expect(t.snapshot().hitCount).toBe(0)
+  })
+
+  it("backup streak can hit after a sit if apex never crosses", () => {
+    const t = createHitMissTracker()
+    t.push(visual({ standAmount: 0.2 }), cleanKp, 0, "sit_to_stand")
     for (let i = 0; i < HIT_STREAK_BACKUP; i++) {
-      t.push(visual({ standAmount: 0.8 }), cleanKp, i * 80, "sit_to_stand")
+      t.push(visual({ standAmount: 0.45 }), cleanKp, HIT_COOLDOWN_MS * 2 + i * 80, "sit_to_stand")
     }
     expect(t.snapshot().hitCount).toBeGreaterThanOrEqual(1)
+  })
+
+  it("mini squat hits on rise from deep", () => {
+    const t = createHitMissTracker()
+    t.push(visual({ standAmount: 0.3 }), cleanKp, 0, "mini_squat")
+    const ev = t.push(visual({ standAmount: 0.78 }), cleanKp, 120, "mini_squat")
+    expect(ev.some((e) => e.kind === "hit")).toBe(true)
   })
 
   it("fires miss on arms at a wrist joint", () => {

@@ -2,35 +2,40 @@
   "$comment": "Locked RehabNinja chrome. No STEADI, stand counts, or clinical labels.",
   "brand": "Rise · RehabNinja",
   "lobby": {
+    "play": "Play",
     "choose_profile": "Choose your profile",
-    "pitch_demo": "Pitch demo (Ellen)",
-    "tagline": "RehabNinja — timeline assigns today’s move, then you slice fruit on camera when form holds. Bombs when knees drift or hands push off."
+    "pitch_demo": "Try a demo",
+    "tagline": "Stand in front of your camera. Good moves slice fruit."
   },
   "picker": {
     "title": "Who is playing?",
-    "body": "Pick a synthetic patient. You’ll see today’s assigned RehabNinja workouts, then play.",
+    "body": "Pick a player. You’ll see today’s move, then play.",
     "cta": "Continue"
   },
   "condition": {
-    "eyebrow": "Today’s program",
+    "eyebrow": "Today’s move",
     "procedure_label": "Procedure",
     "pod_label": "Day after surgery",
-    "workouts_label": "Assigned workouts",
-    "playable_badge": "Playable in RehabNinja",
+    "workouts_label": "Pick a move",
+    "playable_badge": "Play",
     "game_label": "Today’s game",
     "game_name": "RehabNinja",
-    "game_why": "Camera tracks your body. Clean reps slice fruit. Form breaks become bombs. Hits and misses only — not a clinical score chart.",
-    "begin": "Start session"
+    "game_why": "Fruit on your joints = good form. Bombs when knees drift or hands push off.",
+    "begin": "Begin"
   },
   "program": {
-    "pick_hint": "Pick today’s assigned move, then Begin.",
+    "pick_hint": "Tap a move, then Begin.",
     "sets_reps": "{sets} × {reps}",
     "hold": "Hold {sec}s"
   },
   "howto": {
-    "title": "How to play",
-    "body": "Fruit on your joints = good form. Bombs = knees drifting in or hands pushing off. Clean stand or squat apex slices a hit. Stop is always on screen.",
+    "title": "Today’s move",
+    "body": "Fruit on your joints = good form. Bombs when knees drift. Stop is always on screen.",
     "begin": "Begin"
+  },
+  "loading": {
+    "camera": "Get ready — stand in frame",
+    "tip": "We’ll open the camera next."
   },
   "ready": {
     "title": "Before you start",

@@ -16,6 +16,11 @@ export const MISS_COOLDOWN_MS = 500
 export const HOLD_HIT_EVERY_MS = 2500
 export const APEX_RISE = 0.12
 export const APEX_MIN = 0.55
+/** Mini squat needs a deeper dip before a stand counts as a hit. */
+export const SQUAT_DEEP = 0.42
+export const SQUAT_APEX_MIN = 0.72
+/** Must visit sit/squat before backup streak can fire. */
+export const SIT_FOR_BACKUP = 0.38
 
 export type HitMissKind = "hit" | "miss"
 
@@ -118,6 +123,7 @@ export function createHitMissTracker(): HitMissTracker {
   let holdCleanMs = 0
   let prevStand = 0.3
   let rising = false
+  let sawSit = false
   let prevT: number | null = null
 
   function reset() {
@@ -129,6 +135,7 @@ export function createHitMissTracker(): HitMissTracker {
     holdCleanMs = 0
     prevStand = 0.3
     rising = false
+    sawSit = false
     prevT = null
   }
 
@@ -195,16 +202,36 @@ export function createHitMissTracker(): HitMissTracker {
     // Apex: rising through standAmount threshold with quality held
     const s = visual.standAmount
     const delta = s - prevStand
-    if (delta > 0.02) rising = true
-    if (rising && prevStand < APEX_MIN && s >= APEX_MIN && delta >= 0) {
-      emitHit(tMs, keypoints, exerciseId, events)
+    const apexMin = exerciseId === "mini_squat" ? SQUAT_APEX_MIN : APEX_MIN
+    const deepNeed = exerciseId === "mini_squat" ? SQUAT_DEEP : SIT_FOR_BACKUP
+    if (s <= deepNeed) {
+      sawSit = true
       rising = false
     }
-    if (s < 0.4) rising = false
-    // Backup streak if apex never fires (slow movers)
-    goodStreak += 1
-    if (goodStreak >= HIT_STREAK_BACKUP && tMs - lastHitAt >= HIT_COOLDOWN_MS * 2) {
+    if (delta > 0.02) rising = true
+    if (
+      sawSit &&
+      rising &&
+      prevStand < apexMin &&
+      s >= apexMin &&
+      delta >= 0
+    ) {
       emitHit(tMs, keypoints, exerciseId, events)
+      rising = false
+      sawSit = false
+    }
+    // Backup streak only after a sit/squat — never while holding a stand
+    if (sawSit && s < apexMin) {
+      goodStreak += 1
+      if (
+        goodStreak >= HIT_STREAK_BACKUP &&
+        tMs - lastHitAt >= HIT_COOLDOWN_MS * 2
+      ) {
+        emitHit(tMs, keypoints, exerciseId, events)
+        sawSit = false
+      }
+    } else {
+      goodStreak = 0
     }
     if (delta < -APEX_RISE) rising = false
     prevStand = s

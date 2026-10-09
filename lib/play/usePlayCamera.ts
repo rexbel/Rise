@@ -14,6 +14,8 @@ import type { PoseFrame } from "@/lib/play/types"
 
 export type PlayCameraStatus = "idle" | "requesting" | "loading" | "live" | "error"
 
+const STALE_MS = 400
+
 export function usePlayCamera(onFrame: (frame: PoseFrame) => void) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const onFrameRef = useRef(onFrame)
@@ -134,27 +136,55 @@ export function usePlayCamera(onFrame: (frame: PoseFrame) => void) {
         const monitor = new FpsMonitor()
         let fpsShown = 0
         let estimateErrors = 0
+        let lastOkAt = performance.now()
+        let busy = false
+
         const tick = async () => {
           if (id !== loopId.current || !estRef.current || !videoRef.current) return
-          try {
-            const kp = await estRef.current.primary.estimate(videoRef.current)
-            const now = performance.now()
-            if (monitor.frame(now) && estRef.current.primary.tier === "yolo-onnx" && estRef.current.fallback) {
-              estRef.current.primary.dispose()
-              estRef.current = { primary: estRef.current.fallback, fallback: null }
-              setTier("mediapipe")
-              clientLog("warn", "swapped to mediapipe (low fps)", { fps: monitor.fps })
-            }
-            if (monitor.fps !== fpsShown) setFps((fpsShown = monitor.fps))
-            const mirrorX = facingRef.current === "user"
-            onFrameRef.current({ t: gameMs(), keypoints: toPlayKeypoints(kp, mirrorX) })
-          } catch (e) {
-            estimateErrors += 1
-            if (estimateErrors <= 3 || estimateErrors % 30 === 0) {
-              clientLog("error", "pose estimate failed", { n: estimateErrors, err: String(e) })
-            }
+          if (busy) {
+            requestAnimationFrame(() => void tick())
+            return
           }
-          requestAnimationFrame(() => void tick())
+          busy = true
+          try {
+            if (!pausedRef.current) {
+              try {
+                const kp = await estRef.current.primary.estimate(videoRef.current)
+                const now = performance.now()
+                lastOkAt = now
+                estimateErrors = 0
+                if (
+                  monitor.frame(now) &&
+                  estRef.current.primary.tier === "yolo-onnx" &&
+                  estRef.current.fallback
+                ) {
+                  estRef.current.primary.dispose()
+                  estRef.current = { primary: estRef.current.fallback, fallback: null }
+                  setTier("mediapipe")
+                  clientLog("warn", "swapped to mediapipe (low fps)", { fps: monitor.fps })
+                }
+                if (monitor.fps !== fpsShown) setFps((fpsShown = monitor.fps))
+                const mirrorX = facingRef.current === "user"
+                onFrameRef.current({ t: gameMs(), keypoints: toPlayKeypoints(kp, mirrorX) })
+              } catch (e) {
+                estimateErrors += 1
+                if (estimateErrors <= 3 || estimateErrors % 30 === 0) {
+                  clientLog("error", "pose estimate failed", {
+                    n: estimateErrors,
+                    err: String(e),
+                  })
+                }
+                // Lost tracking — do not freeze last-good overlay
+                onFrameRef.current({ t: gameMs(), keypoints: null })
+              }
+              if (performance.now() - lastOkAt > STALE_MS) {
+                onFrameRef.current({ t: gameMs(), keypoints: null })
+              }
+            }
+          } finally {
+            busy = false
+            if (id === loopId.current) requestAnimationFrame(() => void tick())
+          }
         }
         void tick()
         return "live"

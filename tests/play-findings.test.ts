@@ -15,9 +15,9 @@ function runScript(riseId: string) {
 }
 
 describe("syntheticPose peaks", () => {
-  it("Ellen is 3 rises", () => {
-    expect(poseScript("rise-01").rises).toBe(3)
-    expect(countStandPeaks("rise-01")).toBe(3)
+  it("Ellen is 6 rises (matches sit_to_stand target)", () => {
+    expect(poseScript("rise-01").rises).toBe(6)
+    expect(countStandPeaks("rise-01")).toBe(6)
   })
 
   it("Gary is 10 clean rises", () => {

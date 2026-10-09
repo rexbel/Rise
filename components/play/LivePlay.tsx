@@ -4,7 +4,9 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { Pause as PauseIcon, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PixiLiveField } from "@/components/play/PixiLiveField"
+import { FrameSilhouette } from "@/components/play/FrameSilhouette"
 import { usePlay } from "@/components/play/PlayProvider"
+import { playBody, playDisplay } from "@/components/play/playTheme"
 import ui from "@/content/play-ui.json"
 import { rulePack } from "@/lib/play/exerciseRules"
 import { createFindingTracker, type LiveVisual } from "@/lib/play/findings"
@@ -33,6 +35,20 @@ const idleVisual: LiveVisual = {
 /** Soft tracking: step-back only after sustained loss (~2s at 15fps). */
 const TRACKING_LOST_FRAMES = 30
 
+function startDemoBus(
+  riseId: string,
+  exerciseId: Parameters<typeof createSyntheticBus>[2],
+  onPoseFrame: (f: PoseFrame) => void,
+  onComplete: () => void,
+  phaseRef: React.MutableRefObject<PlayPhase>,
+): SyntheticBus {
+  const bus = createSyntheticBus(riseId, onComplete, exerciseId)
+  bus.subscribe(onPoseFrame)
+  bus.start()
+  if (phaseRef.current === "paused" || phaseRef.current === "stepBack") bus.pause()
+  return bus
+}
+
 /** Full-viewport RehabNinja stage. */
 export function LivePlay() {
   const { session, dispatch, setElapsedMs, elapsedMs, hitCount, hitLog, pushHitLog, resetHits } = usePlay()
@@ -58,7 +74,6 @@ export function LivePlay() {
   const hitCountRef = useRef(0)
 
   const inSet = session.phase === "live" || session.phase === "stepBack" || session.phase === "paused"
-  // Fresh visual state at the start of every set (adjusting state on a prop change, not in an effect).
   const [wasInSet, setWasInSet] = useState(inSet)
   if (inSet !== wasInSet) {
     setWasInSet(inSet)
@@ -97,9 +112,6 @@ export function LivePlay() {
         lostFor.current += 1
         if (lostFor.current === TRACKING_LOST_FRAMES) dispatch({ type: "TRACKING_LOST" })
       } else {
-        if (lostFor.current > 0 && phaseRef.current === "stepBack") {
-          dispatch({ type: "TRACKING_OK" })
-        }
         lostFor.current = 0
       }
       if (finding) dispatch({ type: "FINDING", finding })
@@ -127,7 +139,6 @@ export function LivePlay() {
     [dispatch, setElapsedMs, pushHitLog, session.exerciseId, maybeComplete],
   )
 
-  // Destructured: the hook's object holds a ref, which must not be read during render.
   const { videoRef: camVideoRef, start: camStart, stop: camStop, pause: camPause, resume: camResume, status: camStatus, error: camError } =
     usePlayCamera(onPoseFrame)
   const camApi = useRef({ start: camStart, stop: camStop, pause: camPause, resume: camResume, status: camStatus, error: camError })
@@ -149,29 +160,29 @@ export function LivePlay() {
     void (async () => {
       clientLog("info", "live set starting camera", { riseId: session.riseId, exerciseId: session.exerciseId })
       const result = await camApi.current.start("user")
-      if (cancelled || result === "cancelled") return
+      if (cancelled) return
       if (result === "live") {
         setUsingDemo(false)
         setCamHint(null)
         clientLog("info", "live camera path active")
         return
       }
-      clientLog("warn", "falling back to demo replay", camApi.current.error)
+      // cancelled (Strict Mode) or error → synthetic so live is never blank
+      clientLog("warn", "falling back to demo replay", { result, err: camApi.current.error })
       setUsingDemo(true)
       setCamHint(camApi.current.error ?? ui.live.demo_badge)
-      const bus = createSyntheticBus(
+      busRef.current?.stop()
+      busRef.current = startDemoBus(
         session.riseId,
+        session.exerciseId,
+        onPoseFrame,
         () => {
           if (phaseRef.current === "live" || phaseRef.current === "stepBack") {
             dispatch({ type: "SET_COMPLETE", durationMs: pack.maxDurationMs })
           }
         },
-        session.exerciseId,
+        phaseRef,
       )
-      bus.subscribe(onPoseFrame)
-      bus.start()
-      busRef.current = bus
-      if (phaseRef.current === "paused" || phaseRef.current === "stepBack") bus.pause()
     })()
 
     return () => {
@@ -203,7 +214,6 @@ export function LivePlay() {
 
   const stepBack = session.phase === "stepBack"
   const paused = session.phase === "paused"
-  // The demo bus reports its clock through onPoseFrame, so elapsedMs covers both paths.
   const elapsed = elapsedMs
   const loadingCam = camStatus === "requesting" || camStatus === "loading"
   const progress =
@@ -213,20 +223,8 @@ export function LivePlay() {
   const softTracking = !visual.trackingOk && !stepBack && !paused
 
   return (
-    <div className="relative flex h-full min-h-0 flex-1 flex-col bg-black text-zinc-50">
-      <div
-        className="relative min-h-0 flex-1 overflow-hidden"
-        onClick={() => {
-          if (!paused && !stepBack) dispatch({ type: "PAUSE" })
-        }}
-        onKeyDown={(e) => {
-          if ((e.key === "Enter" || e.key === " ") && !paused && !stepBack) {
-            e.preventDefault()
-            dispatch({ type: "PAUSE" })
-          }
-        }}
-        role="presentation"
-      >
+    <div className={`relative flex h-full min-h-0 flex-1 flex-col bg-black text-zinc-50 ${playBody.className}`}>
+      <div className="relative min-h-0 flex-1 overflow-hidden">
         <video
           ref={camVideoRef}
           playsInline
@@ -251,24 +249,22 @@ export function LivePlay() {
           dimmed={softTracking}
         />
 
-        <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-3 bg-gradient-to-b from-black/70 to-transparent p-4 pt-[max(1rem,env(safe-area-inset-top))]">
+        <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-3 bg-gradient-to-b from-black/75 to-transparent p-4 pt-[max(1rem,env(safe-area-inset-top))]">
           <div>
-            <p className="text-xs font-medium tracking-wide text-orange-400">{ui.brand}</p>
-            <p className="text-lg font-semibold text-zinc-50 sm:text-xl">{ex.name}</p>
-            <p className="mt-0.5 max-w-md text-sm text-zinc-300">{ex.ninjaHint}</p>
+            <p className={`${playDisplay.className} text-lg font-bold text-zinc-50 sm:text-xl`}>{ex.name}</p>
             {showCoach ? (
-              <p className="mt-2 max-w-md text-base font-medium text-amber-100" aria-live="polite">
+              <p className="mt-1 max-w-md text-base font-medium text-amber-100" aria-live="polite">
                 {coachLine(session.exerciseId, ui.live)}
               </p>
             ) : null}
           </div>
           <div className="flex flex-col items-end gap-2">
             {usingDemo ? (
-              <span className="rounded-full border border-zinc-600 bg-zinc-950/80 px-2 py-0.5 text-xs text-zinc-300">
+              <span className="rounded-full border border-orange-500/40 bg-zinc-950/80 px-2 py-0.5 text-xs text-orange-200">
                 {ui.live.demo_badge}
               </span>
             ) : null}
-            <div className="rounded-full bg-zinc-950/80 px-3 py-1.5 text-sm font-semibold text-zinc-100">
+            <div className={`${playDisplay.className} rounded-full bg-zinc-950/80 px-3 py-1.5 text-base font-bold text-zinc-100`}>
               {pack.progressMode === "hold"
                 ? `${ui.live.hold_label} ${Math.min(pack.holdSec, Math.floor(holdMs / 1000))}s / ${pack.holdSec}s`
                 : `${ui.live.reps_label} ${hitCount} / ${pack.targetReps}`}
@@ -288,24 +284,24 @@ export function LivePlay() {
           </div>
         ) : null}
 
-        {loadingCam ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/60 text-xl text-zinc-100">
-            Opening camera…
+        {loadingCam && !usingDemo ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-zinc-950/70 px-6 text-center">
+            <div className="size-12 animate-pulse rounded-full border-4 border-orange-500/40 border-t-orange-500" />
+            <p className={`${playDisplay.className} text-2xl font-bold text-zinc-50`}>{ui.loading.camera}</p>
+            <p className="text-base text-zinc-300">{ui.loading.tip}</p>
           </div>
         ) : null}
         {camHint && usingDemo ? (
-          <div className="absolute left-4 top-28 max-w-sm rounded-md bg-zinc-950/80 px-3 py-2 text-sm text-zinc-300">
+          <div className="absolute left-4 top-28 max-w-sm rounded-md border border-orange-500/30 bg-zinc-950/80 px-3 py-2 text-sm text-orange-100">
             {camHint}
           </div>
         ) : null}
 
         {paused ? (
-          <div
-            className="absolute inset-0 flex flex-col justify-center gap-3 bg-zinc-950/85 p-6 sm:mx-auto sm:max-w-md"
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-2xl font-semibold leading-snug sm:text-3xl">{ui.paused.title}</h2>
+          <div className="absolute inset-0 flex flex-col justify-center gap-3 bg-zinc-950/85 p-6 sm:mx-auto sm:max-w-md">
+            <h2 className={`${playDisplay.className} text-2xl font-bold leading-snug sm:text-3xl`}>
+              {ui.paused.title}
+            </h2>
             <Button type="button" className="h-14 min-h-14 w-full text-lg" onClick={() => dispatch({ type: "RESUME" })}>
               {ui.paused.keep_going}
             </Button>
@@ -321,17 +317,25 @@ export function LivePlay() {
         ) : null}
 
         {stepBack ? (
-          <div
-            className="absolute inset-x-0 bottom-28 mx-auto max-w-lg px-4"
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-          >
-            <div className="rounded-xl border border-amber-500/40 bg-zinc-950/80 p-4 backdrop-blur-sm">
-              <p className="mb-3 text-center text-xl font-medium text-amber-100">{ui.live.step_back}</p>
-              <Button type="button" className="h-14 w-full text-lg" onClick={() => dispatch({ type: "TRACKING_OK" })}>
-                {ui.frame.continue}
-              </Button>
-            </div>
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-zinc-950/90 px-6">
+            <FrameSilhouette />
+            <p className={`${playDisplay.className} max-w-md text-center text-2xl font-bold text-amber-100`}>
+              {ui.live.step_back}
+            </p>
+            <p className="text-center text-base text-zinc-400">
+              {visual.trackingOk ? "Looking good — continue when ready." : "We need to see your hips and knees."}
+            </p>
+            <Button
+              type="button"
+              className="h-14 min-h-14 w-full max-w-sm text-lg"
+              disabled={!visual.trackingOk}
+              onClick={() => {
+                if (!visual.trackingOk) return
+                dispatch({ type: "TRACKING_OK" })
+              }}
+            >
+              {ui.frame.continue}
+            </Button>
           </div>
         ) : null}
       </div>
@@ -354,8 +358,7 @@ export function LivePlay() {
           type="button"
           variant="destructive"
           className="h-16 min-h-16 text-xl sm:h-20 sm:text-2xl"
-          onClick={(e) => {
-            e.stopPropagation()
+          onClick={() => {
             speak(ui.live.stop)
             playTone("stop")
             dispatch({ type: "STOP" })
@@ -367,10 +370,7 @@ export function LivePlay() {
           type="button"
           variant="outline"
           className="h-16 min-h-16 border-zinc-700 bg-zinc-900 text-xl text-zinc-50 hover:bg-zinc-800 sm:h-20 sm:text-2xl"
-          onClick={(e) => {
-            e.stopPropagation()
-            dispatch({ type: "PAUSE" })
-          }}
+          onClick={() => dispatch({ type: "PAUSE" })}
         >
           <PauseIcon className="size-7" aria-hidden />
           {ui.live.pause}

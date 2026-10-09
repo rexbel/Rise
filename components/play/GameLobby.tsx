@@ -1,62 +1,86 @@
 "use client"
 
 import Link from "next/link"
-import { Badge } from "@/components/ui/badge"
+import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
+import { LobbyStage } from "@/components/play/LobbyStage"
+import { playBody, playDisplay } from "@/components/play/playTheme"
 import ui from "@/content/play-ui.json"
 
-/** Full-viewport entry — profile first; Ellen pitch demo secondary. */
-export function GameLobby() {
+function NinjaMark({ className }: { className?: string }) {
   return (
-    <main className="relative flex min-h-full flex-1 flex-col overflow-hidden bg-[#0a0a0c] text-zinc-50">
-      <div className="pointer-events-none absolute inset-0" aria-hidden>
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_#1c1917_0%,_#0a0a0c_65%)]" />
-        <div className="lobby-rails absolute inset-x-[18%] top-[12%] bottom-[18%] border-x-2 border-zinc-100/25" />
-        <div className="lobby-pulse absolute left-1/2 top-[22%] size-40 -translate-x-1/2 rounded-full border border-emerald-400/30" />
-        <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/80 to-transparent" />
-      </div>
+    <svg className={className} viewBox="0 0 40 40" fill="none" aria-hidden>
+      <circle cx="20" cy="20" r="20" fill="#0a0a0c" />
+      <rect x="8" y="14" width="24" height="5" rx="1" fill="#f97316" />
+      <path d="M8 14 L3 10 L6 18 Z" fill="#f97316" />
+      <path d="M8 16 L4 22 L10 18 Z" fill="#f97316" />
+      <circle cx="26" cy="22" r="2.5" fill="white" />
+    </svg>
+  )
+}
 
-      <div className="relative z-10 mx-auto flex w-full max-w-lg flex-1 flex-col justify-center gap-8 px-6 py-16">
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-sm font-medium tracking-wide text-orange-400">{ui.brand}</p>
-          <Badge className="border-0 bg-orange-500 text-white hover:bg-orange-500">Live play</Badge>
-          <Badge variant="secondary" className="bg-zinc-800 text-zinc-300">
-            {ui.synthetic}
-          </Badge>
+/** Centered sky chrome; continuous ninja stage below. */
+export function GameLobby() {
+  const chromeRef = useRef<HTMLDivElement>(null)
+  const [topReserve, setTopReserve] = useState(280)
+
+  useEffect(() => {
+    const el = chromeRef.current
+    if (!el) return
+    const measure = () => setTopReserve(Math.ceil(el.getBoundingClientRect().height) + 24)
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  return (
+    <main
+      className={`relative min-h-full flex-1 overflow-hidden bg-[#FEF1E1] text-zinc-900 ${playBody.className}`}
+    >
+      <LobbyStage topReserve={topReserve} bottomReserve={0} />
+
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center px-5 pt-8 sm:pt-10">
+        <div
+          ref={chromeRef}
+          className="pointer-events-auto flex w-full max-w-sm flex-col items-center gap-4 text-center"
+        >
+          <div className="flex flex-col items-center gap-3">
+            <NinjaMark className="size-14 drop-shadow-sm sm:size-16" />
+            <h1
+              className={`${playDisplay.className} text-4xl font-extrabold tracking-tight text-zinc-900 sm:text-5xl`}
+            >
+              RehabNinja
+            </h1>
+            <p className="max-w-xs text-base font-semibold leading-snug text-zinc-700 sm:text-lg">
+              {ui.lobby.tagline}
+            </p>
+          </div>
+
+          <div className="flex w-full flex-col gap-2.5">
+            <Button
+              asChild
+              size="lg"
+              className={`${playDisplay.className} h-14 min-h-14 w-full bg-orange-500 text-lg font-bold text-white shadow-md hover:bg-orange-400`}
+            >
+              <Link href="/play">{ui.lobby.play}</Link>
+            </Button>
+            <Button
+              asChild
+              size="lg"
+              variant="outline"
+              className={`${playBody.className} h-12 min-h-12 w-full border-zinc-800/35 bg-white/90 text-base font-semibold text-zinc-900 hover:bg-white`}
+            >
+              <Link href="/play/rise-01?demo=1">{ui.lobby.pitch_demo}</Link>
+            </Button>
+          </div>
+
+          <nav className="pt-1 text-xs text-zinc-500">
+            <Link href="/clinic" className="underline-offset-2 hover:text-zinc-800 hover:underline">
+              Clinic
+            </Link>
+          </nav>
         </div>
-
-        <div className="space-y-4">
-          <h1 className="text-5xl font-semibold tracking-tight sm:text-6xl">RehabNinja</h1>
-          <p className="max-w-md text-xl leading-snug text-zinc-400">{ui.lobby.tagline}</p>
-        </div>
-
-        <div className="flex flex-col gap-3">
-          <Button
-            asChild
-            size="lg"
-            className="h-16 min-h-16 w-full bg-orange-500 text-xl text-white hover:bg-orange-400"
-          >
-            <Link href="/play">{ui.lobby.choose_profile}</Link>
-          </Button>
-          <Button
-            asChild
-            size="lg"
-            variant="outline"
-            className="h-14 min-h-14 w-full border-zinc-700 bg-transparent text-lg text-zinc-100 hover:bg-zinc-900"
-          >
-            <Link href="/play/rise-01?demo=1">{ui.lobby.pitch_demo}</Link>
-          </Button>
-          <p className="text-sm text-zinc-500">Profile → condition → play → report · Begin unlocks sound</p>
-        </div>
-
-        <nav className="flex flex-wrap gap-x-5 gap-y-2 border-t border-zinc-800 pt-6 text-sm text-zinc-500">
-          <Link href="/clinic" className="hover:text-zinc-300">
-            Clinic console
-          </Link>
-          <Link href="/p/rise-01" className="hover:text-zinc-300">
-            STEADI phone (Ellen)
-          </Link>
-        </nav>
       </div>
     </main>
   )

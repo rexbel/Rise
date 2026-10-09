@@ -1,10 +1,11 @@
 "use client"
 
 import ui from "@/content/play-ui.json"
+import { playDisplay } from "@/components/play/playTheme"
 import { todaysProgram, type ProgramExercise } from "@/lib/play/programs"
 import type { SeedPatient } from "@/lib/types"
 
-/** Journey step 2 — condition + today’s assigned RehabNinja workouts. */
+/** Today’s move picker — game modes, not clinic chart. */
 export function ConditionCard({
   patient,
   selectedId,
@@ -18,19 +19,12 @@ export function ConditionCard({
   const workouts = todaysProgram(patient)
 
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/80 p-4 text-left">
-      <p className="text-xs font-medium tracking-wide text-orange-400">{ui.condition.eyebrow}</p>
-      <p className="mt-1 text-xl font-semibold text-zinc-50">{first}</p>
-      <dl className="mt-3 space-y-2 text-base text-zinc-300">
-        <div>
-          <dt className="text-xs text-zinc-500">{ui.condition.procedure_label}</dt>
-          <dd>{patient.episode.procedure}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-zinc-500">{ui.condition.pod_label}</dt>
-          <dd>Day {patient.episode.post_op_day_today}</dd>
-        </div>
-      </dl>
+    <div className="rounded-2xl border border-zinc-700 bg-zinc-900/80 p-4 text-left">
+      <p className="text-xs font-semibold tracking-wide text-orange-400">{ui.condition.eyebrow}</p>
+      <p className={`${playDisplay.className} mt-1 text-2xl font-bold text-zinc-50`}>{first}</p>
+      <p className="mt-1 text-sm text-zinc-500">
+        {patient.episode.procedure} · day {patient.episode.post_op_day_today}
+      </p>
       <p className="mt-4 text-xs tracking-wide text-zinc-500">{ui.condition.workouts_label}</p>
       <ul className="mt-2 flex flex-col gap-2">
         {workouts.map((w) => {
@@ -45,26 +39,27 @@ export function ConditionCard({
                 type="button"
                 disabled={!onSelect}
                 onClick={() => onSelect?.(w.id)}
-                className={`w-full rounded-lg border px-3 py-3 text-left transition-colors ${
+                className={`w-full rounded-xl border px-4 py-4 text-left transition-colors ${
                   selected
-                    ? "border-orange-500 bg-orange-500/10"
+                    ? "border-orange-500 bg-orange-500/15"
                     : "border-zinc-700 bg-zinc-950/60 hover:border-zinc-500"
                 } ${onSelect ? "cursor-pointer" : "cursor-default"}`}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <span className="font-medium text-zinc-50">{w.name}</span>
-                  <span className="shrink-0 rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-orange-300">
+                  <span className={`${playDisplay.className} text-lg font-bold text-zinc-50`}>
+                    {w.name}
+                  </span>
+                  <span className="shrink-0 rounded-full bg-orange-500 px-2.5 py-0.5 text-[11px] font-semibold text-white">
                     {ui.condition.playable_badge}
                   </span>
                 </div>
                 <p className="mt-1 text-sm text-zinc-400">{repsLabel}</p>
-                <p className="mt-1 text-sm text-zinc-500">{w.notes}</p>
               </button>
             </li>
           )
         })}
       </ul>
-      <p className="mt-3 text-sm text-zinc-500">{ui.condition.game_why}</p>
+      <p className="mt-3 text-base text-zinc-400">{ui.condition.game_why}</p>
     </div>
   )
 }
