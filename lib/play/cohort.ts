@@ -68,8 +68,8 @@ export function familyLabel(family: ProcedureFamily): string {
   }
 }
 
-/** Week chip: Sunday start → next Sunday, always includes today. */
-export function boardWeekLabel(now: Date = new Date()): string {
+/** Week chip: Sunday start → next Sunday. Pass `now` explicitly — never default `new Date()` (breaks Next prerender). */
+export function boardWeekLabel(now: Date): string {
   const start = new Date(now)
   start.setHours(0, 0, 0, 0)
   start.setDate(start.getDate() - start.getDay())
@@ -112,7 +112,6 @@ export function cohortBoard(youId: string = DEFAULT_YOU_ID): {
   yourRank: number
   yourScore: number
   top: BoardEntry
-  weekLabel: string
 } {
   const you = patients.find((p) => p.rise_id === youId) ?? patients[0]!
   const family = procedureFamily(you)
@@ -139,6 +138,5 @@ export function cohortBoard(youId: string = DEFAULT_YOU_ID): {
     yourRank: yours.rank,
     yourScore: yours.member.score,
     top: entries[0]!,
-    weekLabel: boardWeekLabel(),
   }
 }

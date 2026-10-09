@@ -26,9 +26,17 @@ export function PhoneColumn({ patient }: { patient: SeedPatient }) {
 
   return (
     <div
-      className={`mx-auto flex h-full min-h-[640px] w-full max-w-[420px] flex-col border border-zinc-800 bg-zinc-950 text-zinc-50 shadow-sm ${playBody.className}`}
+      className={`mx-auto flex h-full min-h-[640px] w-full flex-col text-zinc-50 ${playBody.className} ${
+        onHome
+          ? "max-w-6xl border-0 bg-transparent shadow-none"
+          : "max-w-xl border border-zinc-800 bg-zinc-950 shadow-sm sm:max-w-2xl sm:rounded-2xl"
+      }`}
     >
-      <header className="flex items-center justify-between gap-2 border-b border-zinc-800 px-4 py-3">
+      <header
+        className={`flex items-center justify-between gap-2 ${
+          onHome ? "px-1 py-2 sm:px-0 sm:pb-4" : "border-b border-zinc-800 px-4 py-3 sm:px-6"
+        }`}
+      >
         <div>
           <p className="text-xl font-semibold tracking-wide text-orange-400">{ui.brand}</p>
           {!onHome ? (
@@ -39,15 +47,20 @@ export function PhoneColumn({ patient }: { patient: SeedPatient }) {
         </div>
         <div className="flex gap-1">
           {session.demo && !onHome ? (
-            <Badge className="border-0 bg-orange-500/20 text-base text-orange-300">{ui.frame.demo_badge}</Badge>
+            <Badge className="border-0 bg-orange-500/20 text-xl text-orange-300">{ui.frame.demo_badge}</Badge>
           ) : null}
         </div>
       </header>
-      <div className="flex min-h-0 flex-1 flex-col p-4">
+      <div className={`flex min-h-0 flex-1 flex-col ${onHome ? "px-1 pb-6 sm:px-0" : "p-4 sm:p-6"}`}>
         <PhoneBody patient={patient} />
       </div>
       {caption ? (
-        <p className="border-t border-zinc-800 px-4 py-3 text-xl leading-snug text-zinc-100" aria-live="polite">
+        <p
+          className={`border-t border-zinc-800 px-4 py-3 text-xl leading-snug text-zinc-100 sm:px-6 ${
+            onHome ? "mt-2 rounded-2xl border border-zinc-800 bg-zinc-950/80" : ""
+          }`}
+          aria-live="polite"
+        >
           {caption}
         </p>
       ) : null}
@@ -72,39 +85,43 @@ function PhoneBody({ patient }: { patient: SeedPatient }) {
 
   if (phase === "howto" || phase === "home") {
     return (
-      <div className="flex flex-1 flex-col justify-start gap-4 overflow-y-auto">
+      <div className="flex flex-1 flex-col justify-start overflow-y-auto">
         <PlayerHome
           patient={patient}
           selectedId={session.exerciseId}
           onSelect={(id) => dispatch({ type: "SELECT_EXERCISE", exerciseId: id })}
           showDemoBadge
+          actions={
+            <>
+              {home.missions.length > 1 ? (
+                <p className="text-xl text-zinc-500">{ui.program.pick_hint}</p>
+              ) : null}
+              <Button
+                type="button"
+                className={`${playDisplay.className} h-16 min-h-16 w-full bg-orange-500 text-xl font-bold text-white transition motion-safe:active:scale-[0.98] motion-reduce:transform-none hover:bg-orange-400 lg:max-w-md`}
+                onClick={begin}
+              >
+                {ui.home.begin}
+              </Button>
+              {!session.demo ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-14 min-h-14 w-full border-zinc-700 bg-transparent text-xl text-zinc-100 lg:max-w-md"
+                  onClick={() => setVoiceStopOn(!voiceStopOn)}
+                >
+                  Voice Stop {voiceStopOn ? "on" : "off"}
+                </Button>
+              ) : null}
+              <Link
+                href="/play"
+                className="py-1 text-xl text-zinc-400 underline-offset-2 hover:text-zinc-200 hover:underline lg:max-w-md"
+              >
+                {ui.home.back_board}
+              </Link>
+            </>
+          }
         />
-        {home.missions.length > 1 ? (
-          <p className="text-xl text-zinc-500">{ui.program.pick_hint}</p>
-        ) : null}
-        <Button
-          type="button"
-          className={`${playDisplay.className} h-16 min-h-16 w-full bg-orange-500 text-xl font-bold text-white transition motion-safe:active:scale-[0.98] motion-reduce:transform-none hover:bg-orange-400`}
-          onClick={begin}
-        >
-          {ui.home.begin}
-        </Button>
-        {!session.demo ? (
-          <Button
-            type="button"
-            variant="outline"
-            className="h-14 min-h-14 w-full border-zinc-700 bg-transparent text-xl text-zinc-100"
-            onClick={() => setVoiceStopOn(!voiceStopOn)}
-          >
-            Voice Stop {voiceStopOn ? "on" : "off"}
-          </Button>
-        ) : null}
-        <Link
-          href="/play"
-          className="py-2 text-center text-xl text-zinc-400 underline-offset-2 hover:text-zinc-200 hover:underline"
-        >
-          {ui.home.back_board}
-        </Link>
       </div>
     )
   }
