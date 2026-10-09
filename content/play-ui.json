@@ -2,9 +2,12 @@
   "$comment": "Locked RehabNinja chrome. No STEADI, stand counts, or clinical labels.",
   "brand": "Rise · RehabNinja",
   "lobby": {
+    "play": "Play",
     "choose_profile": "Choose your profile",
-    "pitch_demo": "Pitch demo (Ellen)",
-    "tagline": "RehabNinja — timeline assigns today’s move, then you slice fruit on camera when form holds. Bombs when knees drift or hands push off."
+    "pitch_demo": "Try a demo",
+    "tagline": "Stand in front of your camera. Good moves slice fruit.",
+    "tip": "",
+    "journey": ""
   },
   "picker": {
     "title": "Who is playing?",
