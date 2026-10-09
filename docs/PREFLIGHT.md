@@ -10,7 +10,7 @@ Everything here is environment setup or seed data. Confirm at the 9:00 keynote w
 - [ ] **Phone benchmark:** record fps for YOLO (WebGPU, WASM) and MediaPipe on Rex's phone. YOLO is kept only at ≥ 15 fps
 - [ ] **Voice:** set `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID`, run `npm run voice` → 52 mp3s in `public/voice/`; listen to `instr_1`–`instr_5`, `paused`, `emergency`
 - [ ] **Twilio:** number active; trial accounts can only text verified numbers, so verify Rex's phone; send one test SMS
-- [ ] **Fallback recordings:** record your own chair stand three ways (normal, arms from rep 2, slow + asymmetric) for rise-01, rise-02, rise-06
+- [ ] **Fallback clips:** with the phone propped side-on at floor level (whole body in frame, armless chair against a wall), record three 30 s videos of yourself: `rise-01-arms` (push off with hands from rep 2, 3 slow stands), `rise-02-asym` (6 stands, shift weight onto your right leg), `rise-06-arms` (arms every rep, 6 stands). AirDrop them to the laptop; tomorrow the fixture recorder turns them into keypoint fixtures (see `fixtures/README.md`)
 - [ ] **Stage kit:** phone stand or tripod, armless chair, charger, HDMI/USB-C adapter
 - [ ] **Accounts ready:** W&B API key, ElevenLabs, Twilio, Cloudflare; Cosmos/VAST endpoints come from organizers
 - [ ] Charge everything; download the backup video tools you'll use for the screen recording

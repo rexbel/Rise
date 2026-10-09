@@ -17,4 +17,4 @@ export interface PoseEstimator {
 //   yolo-onnx.ts   onnxruntime-web (WebGPU -> WASM), public/models/pose.onnx (scripts/export_pose_onnx.py)
 //   mediapipe.ts   @mediapipe/tasks-vision PoseLandmarker, map 33 -> 17 COCO points
 //   remote.ts      WebSocket frames to services/rise-pose through the tunnel
-//   seeded.ts      replay seed keypoints (fixtures/), shows "Demo data" badge
+//   seeded.ts      replay a recorded fixture (fixtures/<riseId>-<variant>.json) through the same counter; "Demo data" badge

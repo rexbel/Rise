@@ -30,7 +30,15 @@ Build the pose layer for the patient phone:
    hysteresis and a calibration step, arm-use detection, half-way-at-30s rule, stop after 8 s with no stand,
    knee-angle asymmetry). Pure functions over keypoints, with vitest tests on synthetic keypoint sequences.
 5. A bare test page at app/dev/pose/page.tsx: camera, skeleton overlay on canvas, fps, tier, rep count, arms flag.
-Exit: on my phone via the tunnel, the counter counts 5 real stands correctly and flags arms when I push off.
+6. Fixture recorder on the same page (format in fixtures/README.md):
+   - Source: live camera OR an uploaded video file (the clips recorded the night before).
+   - "Record fixture" captures every pose frame for 30 s: { t_ms, keypoints (17 x [x,y,conf]) } plus
+     metadata { riseId, variant, tier, fps, recordedAt }, and downloads it as fixtures/<riseId>-<variant>.json.
+   - lib/pose/seeded.ts replays a fixture through the SAME counter at its recorded timestamps, so the
+     fallback produces the same reps, arm flags and pauses as the live run. Show the "Demo data" badge.
+   - Add a vitest test per committed fixture: counter output matches the fixture's expected block.
+Exit: on my phone via the tunnel, the counter counts 5 real stands correctly and flags arms when I push off;
+the three fixtures replay through the seeded tier with the same counts as live.
 ```
 
 ## 2. Static slice: both surfaces on seed data (11:00–12:15)
