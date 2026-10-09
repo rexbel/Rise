@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Template: scripts/install-tunnel-service.sh fills __CLOUDFLARED__, __HOME__ and __PORT__. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>health.nextrex.rise.tunnel</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__CLOUDFLARED__</string>
+    <string>tunnel</string>
+    <string>--no-autoupdate</string>
+    <!-- Ignore ~/.cloudflared/config.yml: it belongs to Anchor's tunnel. -->
+    <string>--config</string>
+    <string>/dev/null</string>
+    <string>run</string>
+    <string>--url</string>
+    <string>http://localhost:__PORT__</string>
+    <string>rise</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/rise/tunnel.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/rise/tunnel.log</string>
+</dict>
+</plist>

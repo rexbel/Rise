@@ -1,5 +1,7 @@
 /**
- * Browser speech for locked strings only. Captions are the source of truth if audio is muted.
+ * Speech for locked strings only. Captions are the source of truth if audio is muted.
+ * Plays the pre-rendered ElevenLabs line from public/voice/play (manifest written by `npm run voice`)
+ * when one exists for the exact text; otherwise falls back to the browser's speechSynthesis.
  * No microphone. Voice recognition is not started here.
  */
 
@@ -12,6 +14,22 @@ let caption: string | null = null
 const captionListeners = new Set<CaptionListener>()
 const speakingListeners = new Set<SpeakingListener>()
 let voicesReady: Promise<void> | null = null
+let manifest: Record<string, string> | null = null
+let manifestLoad: Promise<void> | null = null
+let clip: HTMLAudioElement | null = null
+/** Bumped by every speak/cancel so a line whose manifest lookup finishes late never plays. */
+let gen = 0
+
+/** text -> file in /voice/play. Loaded once; a missing manifest just means browser speech. */
+function loadManifest(): Promise<void> {
+  if (!manifestLoad) {
+    manifestLoad = fetch("/voice/play/manifest.json")
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((m: Record<string, string>) => void (manifest = m))
+      .catch(() => void (manifest = {}))
+  }
+  return manifestLoad
+}
 
 function emitCaption(text: string | null) {
   caption = text
@@ -59,12 +77,10 @@ export function unlockPlayback(): void {
   prime.volume = 0
   window.speechSynthesis.speak(prime)
   void waitForVoices()
+  void loadManifest()
 }
 
-export function speak(text: string): void {
-  if (typeof window === "undefined") return
-  cancel()
-  emitCaption(text)
+function speakWithBrowser(text: string) {
   const utter = new SpeechSynthesisUtterance(text)
   utter.onstart = () => emitSpeaking(true)
   utter.onend = () => emitSpeaking(false)
@@ -76,9 +92,43 @@ export function speak(text: string): void {
   })
 }
 
+export function speak(text: string): void {
+  if (typeof window === "undefined") return
+  cancel()
+  const my = gen
+  emitCaption(text)
+  void loadManifest().then(() => {
+    // A newer line (or cancel) took over while the manifest loaded.
+    if (my !== gen) return
+    const file = manifest?.[text]
+    if (!file) return speakWithBrowser(text)
+    const a = new Audio(`/voice/play/${file}`)
+    clip = a
+    a.onplay = () => emitSpeaking(true)
+    a.onended = () => {
+      if (clip === a) clip = null
+      emitSpeaking(false)
+    }
+    a.onerror = () => {
+      if (clip === a) clip = null
+      speakWithBrowser(text)
+    }
+    a.play().catch(() => {
+      if (clip === a) clip = null
+      speakWithBrowser(text)
+    })
+  })
+}
+
 export function cancel(): void {
   if (typeof window === "undefined") return
+  gen++
   window.speechSynthesis.cancel()
+  if (clip) {
+    clip.onended = clip.onerror = null
+    clip.pause()
+    clip = null
+  }
   emitSpeaking(false)
 }
 
