@@ -25,6 +25,32 @@ Built for the Real-Time Video Agents Hack – NYC (VAST Builders Challenge). All
 4. **Four quick questions.** Pain, dizziness, shortness of breath or chest pain, calf pain or swelling. A yes to breath or chest pain goes straight to call-911 instructions.
 5. **Session report.** Hits and a hit timeline, plus one plain-language correction ("You used your arms to help you stand", what it means, what to try next). Never a clinical score.
 
+## YOLO detects, Cosmos verifies
+
+The game reacts instantly because YOLO runs on the phone. Every time YOLO flags a form break (knees caving, too fast, hands pushing off, leaning) or loses tracking, Rise also sends the last ~2 seconds of camera frames to **NVIDIA Cosmos** (`cosmos3-nano-reasoner`, the event's NIM) for a second look. The clinic strip shows whether Cosmos confirms what YOLO saw, what it observed, and "Needs a human look" if anything looks unsafe. With four 448 px frames, Cosmos answers in about 1.3–3.6 s.
+
+<p>
+  <img src="docs/images/07-cosmos-second-look.jpg" alt="Live play with the clinic strip: hits, hit timeline, and a Cosmos second look on 'Miss — hands'" width="640">
+</p>
+
+The screenshot is Ellen's demo replay, which has no camera frames, so the entry is the pose-only fallback, badged "Demo replay". With the live camera, the entry is Cosmos's own reply. Here's a real one from the event endpoint, run on a still frame where there's no motion to judge:
+
+```json
+{
+  "verdict": "unclear",
+  "observation": "The frames show a stick figure in a chair sit-to-stand exercise with green and red circles indicating the knees and hips. The figure remains seated in all visible frames, with no clear movement toward standing or any visible hand position on the chest or thighs.",
+  "compensations": [],
+  "steadiness": "steady",
+  "safetyConcern": false,
+  "uncertainty": "No movement is visible across the frames; the figure remains seated, making it impossible to confirm or deny the flagged hand position.",
+  "model": "nvidia/cosmos3-nano-reasoner",
+  "latencyMs": 1612,
+  "demoData": false
+}
+```
+
+Cosmos is care-team only. It never changes hits, bombs, or triage, and never talks to the patient.
+
 ## Why a game
 
 After a joint replacement, the day-7 phone call hears "I'm fine," and functional decline goes unseen until the next visit or the ED. Patients (often 60–80, alone, with one phone) won't fill in forms, but they will play two minutes of a game. Rise turns the standard test into that game:
@@ -48,7 +74,7 @@ The recommendation always comes from written rules (`lib/rules.ts`), never a mod
 ```
 Phone camera ──> pose on-device (YOLO11n-pose ONNX via WebGPU/WASM, MediaPipe fallback)
              ──> stand counter / form findings ──> fruit, bombs, reps (RehabNinja)
-                                               ├─> on a form break: last ~2 s of frames ──> Cosmos Reason second look ──> clinic strip
+                                               ├─> on a form break: last ~2 s of frames ──> Cosmos (cosmos3-nano-reasoner) second look ──> clinic strip
                                                └─> CDC score + deterministic triage rules
 Voice: ElevenLabs lines pre-rendered to public/voice (hash-keyed; browser speech fallback)
 Hosting: Next.js on the demo laptop ──> Cloudflare Tunnel ──> rise.nextrex.health
@@ -56,7 +82,7 @@ Hosting: Next.js on the demo laptop ──> Cloudflare Tunnel ──> rise.nextr
 
 - **Pose tiers:** YOLO is kept only at 15 fps or more on the phone (benchmarked: 16.6 fps WebGPU on Rex's phone); MediaPipe is preloaded and takes over mid-set if YOLO drops under 12 fps for 2 s; a demo replay drives the same code with no camera.
 - **Counter:** knee angle plus hip rise with hysteresis, the CDC half-way rule at 30 s, arm-use, mid-rise asymmetry, pauses. Unit-tested against all seven seed patients.
-- **Cosmos second look:** YOLO detects, Cosmos verifies. When YOLO flags a form break or loses tracking during live play, the last ~2 s of camera frames (4 downscaled JPEGs, never stored) and YOLO's numbers go to Cosmos Reason through `POST /api/cosmos/second-look`. The clinic strip shows whether Cosmos confirms what YOLO saw, what it observed, and "Needs a human look" on anything unsafe. It is care-team only and never changes hits, bombs, or triage. It uses an OpenAI-compatible endpoint (`COSMOS_*` in `.env.local`; check with `npm run cosmos:probe`), with a pose-only fallback badged "Demo data" when Cosmos is unavailable or in demo replay.
+- **Cosmos second look:** YOLO detects, Cosmos verifies. When YOLO flags a form break or loses tracking during live play, the last ~2 s of camera frames (4 downscaled JPEGs, never stored) and YOLO's numbers go to Cosmos (`nvidia/cosmos3-nano-reasoner` on the event's NVIDIA NIM) through `POST /api/cosmos/second-look`. The clinic strip shows whether Cosmos confirms what YOLO saw, what it observed, and "Needs a human look" on anything unsafe. It is care-team only and never changes hits, bombs, or triage. It uses an OpenAI-compatible endpoint with a bearer token (`COSMOS_BASE_URL`, `COSMOS_API_KEY`, `COSMOS_MODEL` in `.env.local`; check with `npm run cosmos:probe`), with a pose-only fallback badged "Demo data" when Cosmos is unavailable or in demo replay.
 - **Built, not yet wired:** a W&B agent note (Weave-traced), VAST clip ingest and semantic search, Twilio invites, and the live clinic console have typed contracts (`lib/types.ts`) and stubs in `lib/ai/` and `lib/adapters/`, but no live calls yet.
 
 ## Run it
@@ -67,6 +93,7 @@ cp .env.example .env.local   # optional; the demo runs without keys
 npm run dev -- -p 3400        # http://localhost:3400
 npm run check                 # typecheck + tests
 npm run voice                 # re-render changed voice lines (needs ELEVENLABS_* in .env.local)
+npm run cosmos:probe          # check the Cosmos endpoint: model, latency, one real second look
 npm run tunnel:named          # https://rise.nextrex.health -> :3400 (named tunnel "rise")
 bash scripts/install-tunnel-service.sh  # same tunnel as a login service (survives restarts)
 ```
