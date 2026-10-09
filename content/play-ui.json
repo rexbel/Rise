@@ -3,35 +3,51 @@
   "brand": "Rise · RehabNinja",
   "lobby": {
     "play": "Play",
-    "choose_profile": "Choose your profile",
+    "choose_profile": "Your board",
     "pitch_demo": "Try a demo",
     "tagline": "Stand in front of your camera. Good moves slice fruit."
   },
   "picker": {
-    "title": "Who is playing?",
-    "body": "Pick a player. You’ll see today’s move, then play.",
-    "cta": "Continue"
+    "title": "Your board",
+    "body": "You’re on the knee track with your cohort. Only you can play — peers are here for the board.",
+    "cta": "Sign up or sign in",
+    "continue": "Continue as {name} →",
+    "roster": "Received hits"
   },
-  "condition": {
-    "eyebrow": "Today’s move",
-    "procedure_label": "Procedure",
-    "pod_label": "Day after surgery",
-    "workouts_label": "Pick a move",
-    "playable_badge": "Play",
-    "game_label": "Today’s game",
-    "game_name": "RehabNinja",
-    "game_why": "Fruit on your joints = good form. Bombs when knees drift or hands push off.",
-    "begin": "Begin"
+  "home": {
+    "eyebrow": "Your home",
+    "you_badge": "You",
+    "missions_label": "Missions today",
+    "mission_badge_today": "Today",
+    "mission_badge_selected": "Selected",
+    "hint": "Fruit on your joints = good form. Bombs when knees drift or hands push off.",
+    "begin": "Begin",
+    "back_board": "Back to your board",
+    "demo_chip": "Demo data",
+    "meta_checkins": "{n} check-ins",
+    "chips": {
+      "rank": "Board place",
+      "hits": "Board hits"
+    },
+    "recovery": {
+      "tka": "Knee recovery",
+      "tha": "Hip recovery",
+      "hip_fracture": "Fracture recovery"
+    },
+    "trend": {
+      "harder": "Felt harder than last time",
+      "same": "About the same as last time",
+      "better": "Felt easier than last time"
+    },
+    "next_today": "Today",
+    "next_tomorrow": "Tomorrow",
+    "next_in_days": "In {days} days",
+    "next_prefix": "Next"
   },
   "program": {
-    "pick_hint": "Tap a move, then Begin.",
+    "pick_hint": "Tap a mission, then Begin.",
     "sets_reps": "{sets} × {reps}",
     "hold": "Hold {sec}s"
-  },
-  "howto": {
-    "title": "Today’s move",
-    "body": "Fruit on your joints = good form. Bombs when knees drift. Stop is always on screen.",
-    "begin": "Begin"
   },
   "loading": {
     "camera": "Get ready — stand in frame",
@@ -96,7 +112,7 @@
     "care_team": "Your care team can review this session on the clinic board.",
     "done": "Done",
     "back_to_questions": "Answer questions again",
-    "change_profile": "Choose another profile"
+    "change_profile": "Back to your board"
   },
   "synthetic": "Synthetic data"
 }

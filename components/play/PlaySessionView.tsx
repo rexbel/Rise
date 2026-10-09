@@ -48,9 +48,15 @@ function PlayShell({
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[#0a0a0c]">
-      <div className="flex min-h-full flex-1 justify-center portrait-phone">
-        <PhoneColumn patient={patient} />
-        {demo ? <ClinicStrip patient={patient} /> : null}
+      <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-6 sm:px-6 lg:flex-row lg:items-stretch lg:gap-6 lg:px-8 lg:py-8">
+        <div className="min-w-0 flex-1">
+          <PhoneColumn patient={patient} />
+        </div>
+        {demo ? (
+          <div className="hidden shrink-0 lg:flex lg:w-72">
+            <ClinicStrip patient={patient} />
+          </div>
+        ) : null}
       </div>
       {demo ? <PresenterBar onRestart={onRestart} /> : null}
     </div>
