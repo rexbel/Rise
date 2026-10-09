@@ -1,12 +1,14 @@
 "use client"
 
 import type { CSSProperties } from "react"
+import { useEffect, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { Oswald, Overpass_Mono } from "next/font/google"
 import ui from "@/content/play-ui.json"
 import {
   avatarSrc,
+  boardWeekLabel,
   cohortBoard,
   DEFAULT_YOU_ID,
   ordinalPlace,
@@ -40,6 +42,10 @@ function rankStyle(rank: number) {
 export default function PlayBoardPage() {
   const board = cohortBoard(DEFAULT_YOU_ID)
   const youName = firstName(board.you.display_name)
+  const [weekLabel, setWeekLabel] = useState("")
+  useEffect(() => {
+    setWeekLabel(boardWeekLabel(new Date()))
+  }, [])
 
   return (
     <main
@@ -146,7 +152,7 @@ export default function PlayBoardPage() {
                 {ui.picker.roster}
               </h2>
               <div className="mb-4 inline-flex max-w-full items-center rounded-md border border-white/20 px-3 py-2 text-[0.7rem] text-[var(--lb-muted)] sm:mb-0 sm:text-xs">
-                {board.weekLabel}
+                {weekLabel || "\u00a0"}
               </div>
             </div>
 
