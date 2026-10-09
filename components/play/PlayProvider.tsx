@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import type { CosmosLook } from "@/lib/play/cosmosClient"
 import { createPlaySession, reducePlaySession } from "@/lib/play/sessionMachine"
 import type { PlayAction, PlaySession } from "@/lib/play/types"
 import { subscribeCaption, subscribeSpeaking, unlockPlayback } from "@/lib/play/speak"
@@ -24,6 +25,10 @@ type PlayContextValue = {
   hitLog: HitLogKind[]
   pushHitLog: (kind: HitLogKind) => void
   resetHits: () => void
+  /** Cosmos second looks for the clinic strip, newest last (care-team only). */
+  cosmosLooks: CosmosLook[]
+  addCosmosLook: (look: CosmosLook) => void
+  resolveCosmosLook: (id: string, look: CosmosLook) => void
 }
 
 const PlayContext = createContext<PlayContextValue | null>(null)
@@ -48,6 +53,15 @@ export function PlayProvider({
   const [voiceStopOn, setVoiceStopOn] = useState(false)
   const [hitCount, setHitCount] = useState(0)
   const [hitLog, setHitLog] = useState<HitLogKind[]>([])
+  const [cosmosLooks, setCosmosLooks] = useState<CosmosLook[]>([])
+
+  const addCosmosLook = useCallback((look: CosmosLook) => {
+    setCosmosLooks((prev) => [...prev.filter((l) => l.id !== look.id), look].slice(-5))
+  }, [])
+
+  const resolveCosmosLook = useCallback((id: string, look: CosmosLook) => {
+    setCosmosLooks((prev) => (prev.some((l) => l.id === id) ? prev.map((l) => (l.id === id ? look : l)) : [...prev, look].slice(-5)))
+  }, [])
 
   const pushHitLog = useCallback((kind: HitLogKind) => {
     setHitLog((prev) => [...prev.slice(-47), kind])
@@ -57,6 +71,7 @@ export function PlayProvider({
   const resetHits = useCallback(() => {
     setHitCount(0)
     setHitLog([])
+    setCosmosLooks([])
   }, [])
 
   const dispatch = useCallback((action: PlayAction) => {
@@ -103,6 +118,9 @@ export function PlayProvider({
       hitLog,
       pushHitLog,
       resetHits,
+      cosmosLooks,
+      addCosmosLook,
+      resolveCosmosLook,
     }),
     [
       session,
@@ -118,6 +136,9 @@ export function PlayProvider({
       hitLog,
       pushHitLog,
       resetHits,
+      cosmosLooks,
+      addCosmosLook,
+      resolveCosmosLook,
     ],
   )
 

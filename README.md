@@ -48,6 +48,7 @@ The recommendation always comes from written rules (`lib/rules.ts`), never a mod
 ```
 Phone camera ──> pose on-device (YOLO11n-pose ONNX via WebGPU/WASM, MediaPipe fallback)
              ──> stand counter / form findings ──> fruit, bombs, reps (RehabNinja)
+                                               ├─> on a form break: last ~2 s of frames ──> Cosmos Reason second look ──> clinic strip
                                                └─> CDC score + deterministic triage rules
 Voice: ElevenLabs lines pre-rendered to public/voice (hash-keyed; browser speech fallback)
 Hosting: Next.js on the demo laptop ──> Cloudflare Tunnel ──> rise.nextrex.health
@@ -55,7 +56,8 @@ Hosting: Next.js on the demo laptop ──> Cloudflare Tunnel ──> rise.nextr
 
 - **Pose tiers:** YOLO is kept only at 15 fps or more on the phone (benchmarked: 16.6 fps WebGPU on Rex's phone); MediaPipe is preloaded and takes over mid-set if YOLO drops under 12 fps for 2 s; a demo replay drives the same code with no camera.
 - **Counter:** knee angle plus hip rise with hysteresis, the CDC half-way rule at 30 s, arm-use, mid-rise asymmetry, pauses. Unit-tested against all seven seed patients.
-- **Built, not yet wired:** NVIDIA Cosmos observations, a W&B agent note (Weave-traced), VAST clip ingest and semantic search, Twilio invites, and the live clinic console have typed contracts (`lib/types.ts`) and stubs in `lib/ai/` and `lib/adapters/`, but no live calls yet.
+- **Cosmos second look:** YOLO detects, Cosmos verifies. When YOLO flags a form break or loses tracking during live play, the last ~2 s of camera frames (4 downscaled JPEGs, never stored) and YOLO's numbers go to Cosmos Reason through `POST /api/cosmos/second-look`. The clinic strip shows whether Cosmos confirms what YOLO saw, what it observed, and "Needs a human look" on anything unsafe. It is care-team only and never changes hits, bombs, or triage. It uses an OpenAI-compatible endpoint (`COSMOS_*` in `.env.local`; check with `npm run cosmos:probe`), with a pose-only fallback badged "Demo data" when Cosmos is unavailable or in demo replay.
+- **Built, not yet wired:** a W&B agent note (Weave-traced), VAST clip ingest and semantic search, Twilio invites, and the live clinic console have typed contracts (`lib/types.ts`) and stubs in `lib/ai/` and `lib/adapters/`, but no live calls yet.
 
 ## Run it
 

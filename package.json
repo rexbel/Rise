@@ -12,6 +12,7 @@
     "test": "vitest run",
     "check": "npm run typecheck && npm test",
     "voice": "tsx scripts/gen-voice.ts",
+    "cosmos:probe": "tsx scripts/cosmos-probe.ts",
     "tunnel": "bash scripts/tunnel.sh",
     "tunnel:named": "bash scripts/tunnel-named.sh",
     "seed": "python3 -I seed/build_seed.py ../synthetic_hospital/patient_profiles.db seed/patients.json"
