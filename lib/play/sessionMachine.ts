@@ -81,7 +81,7 @@ export function reducePlaySession(state: PlaySession, action: PlayAction): PlayS
     case "BACK_TO_QUESTIONS":
       if (!state.finishedSet) return state
       if (state.phase === "close" || state.phase === "emergency" || state.phase === "emergencyConfirm") {
-        return { ...state, phase: "questions" }
+        return { ...state, phase: "questions", answers: {} }
       }
       return state
     case "PRESENTER_SKIP_TO_LIVE":
@@ -91,7 +91,7 @@ export function reducePlaySession(state: PlaySession, action: PlayAction): PlayS
       return state
     case "PRESENTER_JUMP_TO_QUESTIONS":
       if (!state.finishedSet) return state
-      return { ...state, phase: "questions" }
+      return { ...state, phase: "questions", answers: {} }
     default:
       return state
   }

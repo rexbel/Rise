@@ -109,6 +109,7 @@ describe("sessionMachine", () => {
     ])
     expect(s.phase).toBe("emergencyConfirm")
     expect(s.finishedSet?.durationMs).toBe(12_000)
+    expect(s.answers.pain).toBeUndefined()
   })
 
   it("PRESENTER_JUMP_TO_QUESTIONS is a no-op before the set ends", () => {

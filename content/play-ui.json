@@ -1,0 +1,54 @@
+{
+  "$comment": "Locked Keep the Line chrome. No STEADI, stand counts, or clinical labels.",
+  "howto": {
+    "title": "Keep the Line",
+    "body": "Match the ghost. Keep your knee over your foot as you stand and sit. When the line holds, you score a hit. If knees drift or hands push off, you get a miss on that joint. Stop is always on the screen. Your coach talks when you finish, not during.",
+    "begin": "Begin"
+  },
+  "ready": {
+    "title": "Before you start",
+    "body": "Sturdy chair behind you? Feeling OK to start?",
+    "continue": "I am ready",
+    "not_now": "Not now"
+  },
+  "frame": {
+    "title": "We need to see you",
+    "body": "Stand so your hips, knees, and feet are in the outline.",
+    "continue": "Continue",
+    "demo_badge": "Demo replay"
+  },
+  "countdown": ["Three", "Two", "One", "Go"],
+  "live": {
+    "prompt": "Can you keep the line?",
+    "step_back": "We could not see your knee clearly. Step back.",
+    "stop": "Stop",
+    "pause": "Pause"
+  },
+  "paused": {
+    "title": "It is okay to pause.",
+    "keep_going": "Keep going",
+    "finish_here": "Finish here"
+  },
+  "status": {
+    "stable": "Safe and controlled",
+    "compensating": "Some form changes",
+    "overloaded": "Your knee needs a break",
+    "unsafe": "Stop and adjust",
+    "recovery": "Recovery focus"
+  },
+  "questions": {
+    "yes": "Yes",
+    "no": "No",
+    "next": "Next"
+  },
+  "emergency": {
+    "yes_i_meant_that": "Yes, I meant that",
+    "mistap": "No, go back",
+    "call": "Call now"
+  },
+  "close": {
+    "done": "Done",
+    "back_to_questions": "Answer questions again"
+  },
+  "synthetic": "Synthetic data"
+}

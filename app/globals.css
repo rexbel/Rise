@@ -97,3 +97,38 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Keep the Line phone column stays portrait-shaped; clinic strip hides below lg. */
+.portrait-phone {
+  min-height: 100%;
+}
+
+@keyframes lobby-pulse {
+  0%,
+  100% {
+    transform: translateX(-50%) scale(0.92);
+    opacity: 0.35;
+  }
+  50% {
+    transform: translateX(-50%) scale(1.08);
+    opacity: 0.7;
+  }
+}
+
+.lobby-pulse {
+  animation: lobby-pulse 3.2s ease-in-out infinite;
+}
+
+@keyframes lobby-rails {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.lobby-rails {
+  animation: lobby-rails 2.8s ease-in-out infinite;
+}

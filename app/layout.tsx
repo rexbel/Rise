@@ -4,8 +4,8 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
 
 export const metadata: Metadata = {
-  title: "Rise",
-  description: "CDC-standard mobility check-ins on the patient's phone, scored live for the care team.",
+  title: "Rise · Keep the Line",
+  description: "Keep the Line — mirror the ghost, score hits, rehab as a rhythm game.",
 }
 
 export const viewport: Viewport = {
