@@ -9,7 +9,7 @@ export default function PlayPickerPage() {
   return (
     <main className="mx-auto flex min-h-full w-full max-w-lg flex-col gap-6 bg-[#0a0a0c] px-4 py-10 text-zinc-50">
       <div>
-        <p className="text-sm font-medium tracking-wide text-orange-400">Rise · Keep the Line</p>
+        <p className="text-sm font-medium tracking-wide text-orange-400">{ui.brand}</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">{ui.picker.title}</h1>
         <p className="mt-2 text-lg text-zinc-400">{ui.picker.body}</p>
       </div>

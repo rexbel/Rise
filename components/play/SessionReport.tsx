@@ -1,24 +1,33 @@
 "use client"
 
 import Link from "next/link"
+import { useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { usePlay, type HitLogKind } from "@/components/play/PlayProvider"
 import ui from "@/content/play-ui.json"
 import { formatPlayClose } from "@/lib/play/formatPatient"
+import { exerciseById } from "@/lib/play/programs"
 import { speak } from "@/lib/play/speak"
 import type { SeedPatient } from "@/lib/types"
-import { useEffect, useRef } from "react"
 
 /** Journey step 4 — patient-facing session report (no STEADI / stand counts). */
 export function SessionReport({ patient }: { patient: SeedPatient }) {
   const { session, dispatch, hitCount, hitLog } = usePlay()
   const spokenRef = useRef(false)
-  const out = formatPlayClose(session.finishedSet?.findings ?? session.findings, session.answers, {
-    trend: patient.patient_feedback.trend_vs_previous,
-    recommendation: patient.expected_triage.recommendation,
-    redFlag: false,
-    clinicName: "Riverside Ortho",
-  })
+  const exerciseId = session.finishedSet?.exerciseId ?? session.exerciseId
+  const workout = exerciseById(exerciseId)
+  const out = formatPlayClose(
+    session.finishedSet?.findings ?? session.findings,
+    session.answers,
+    {
+      trend: patient.patient_feedback.trend_vs_previous,
+      recommendation: patient.expected_triage.recommendation,
+      redFlag: false,
+      clinicName: "Riverside Ortho",
+    },
+    [],
+    exerciseId,
+  )
   const firstLine = out.correction?.what ?? out.closingLines[0]
 
   useEffect(() => {
@@ -39,7 +48,11 @@ export function SessionReport({ patient }: { patient: SeedPatient }) {
       </h2>
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/80 p-4">
-        <p className="text-xs text-zinc-500">{ui.close.hits_label}</p>
+        <p className="text-xs text-zinc-500">{ui.close.workout_label}</p>
+        <p className="text-lg font-medium text-zinc-100">
+          {workout.name} · RehabNinja
+        </p>
+        <p className="mt-3 text-xs text-zinc-500">{ui.close.hits_label}</p>
         <p className="text-3xl font-semibold text-orange-400">{hitCount}</p>
         <p className="mt-3 text-xs text-zinc-500">{ui.close.timeline_label}</p>
         <HitTimeline hitLog={hitLog} />

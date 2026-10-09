@@ -1,11 +1,14 @@
 /**
- * ~15 Hz sit-to-stand Keypoints17. Practice tempo ~4s per rise. No STEADI scoring here.
+ * ~15 Hz synthetic keypoints for RehabNinja demos. No STEADI scoring here.
  */
 
+import type { ExerciseId } from "@/lib/play/programs"
 import type { Keypoint, Keypoints17 } from "@/lib/play/types"
 
 export const HZ = 15
 export const MS_PER_RISE = 4000
+export const MS_PER_SQUAT = 3200
+export const MS_BALANCE = 20_000
 
 export type PoseScript = {
   riseId: string
@@ -29,6 +32,12 @@ export function scriptDurationMs(riseId: string): number {
   return poseScript(riseId).rises * MS_PER_RISE
 }
 
+export function exerciseDurationMs(exerciseId: ExerciseId, riseId: string): number {
+  if (exerciseId === "single_leg_balance") return MS_BALANCE
+  if (exerciseId === "mini_squat") return 8 * MS_PER_SQUAT
+  return scriptDurationMs(riseId)
+}
+
 function kp(x: number, y: number, score = 0.95): Keypoint {
   return { x, y, score }
 }
@@ -44,7 +53,39 @@ export function standAmount(tInRise: number): number {
   return 0.5 + 0.5 * Math.cos(((p - 0.5) / 0.5) * Math.PI)
 }
 
+/** Mini squat: 1 = stand, 0 = shallow squat bottom. */
+export function squatAmount(tInCycle: number): number {
+  const p = tInCycle / MS_PER_SQUAT
+  // stand → squat → stand
+  if (p <= 0.5) return 1 - (0.5 - 0.5 * Math.cos((p / 0.5) * Math.PI)) * 0.45
+  return 1 - (0.5 + 0.5 * Math.cos(((p - 0.5) / 0.5) * Math.PI)) * 0.45
+}
+
 export function poseAt(riseId: string, tMs: number): Keypoints17 | null {
+  return poseAtExercise("sit_to_stand", riseId, tMs)
+}
+
+export function poseAtExercise(exerciseId: ExerciseId, riseId: string, tMs: number): Keypoints17 | null {
+  if (exerciseId === "single_leg_balance") {
+    const duration = MS_BALANCE
+    const t = Math.min(Math.max(tMs, 0), duration)
+    const sway = Math.sin(t / 900) * 0.012
+    return buildSkeleton({
+      stand: 0.92,
+      armsOut: false,
+      leftUnload: false,
+      visible: true,
+      hipShift: sway,
+    })
+  }
+  if (exerciseId === "mini_squat") {
+    const duration = 8 * MS_PER_SQUAT
+    const t = Math.min(Math.max(tMs, 0), duration)
+    const cycle = Math.floor(t / MS_PER_SQUAT)
+    const tIn = t - cycle * MS_PER_SQUAT
+    const stand = squatAmount(tIn)
+    return buildSkeleton({ stand, armsOut: false, leftUnload: false, visible: true })
+  }
   const script = poseScript(riseId)
   const duration = scriptDurationMs(riseId)
   if (script.trackingLossAtMs) {
@@ -64,6 +105,7 @@ export function buildSkeleton(opts: {
   armsOut: boolean
   leftUnload: boolean
   visible: boolean
+  hipShift?: number
 }): Keypoints17 {
   const s = opts.stand
   const score = opts.visible ? 0.95 : 0.12
@@ -72,9 +114,9 @@ export function buildSkeleton(opts: {
   const ankleY = 0.88
   const shoulderY = lerp(0.38, 0.22, s)
   const headY = lerp(0.22, 0.08, s)
-  const leftShift = opts.leftUnload ? 0.05 : 0
+  const leftShift = (opts.leftUnload ? 0.05 : 0) + (opts.hipShift ?? 0)
   const hipLx = 0.44 + leftShift
-  const hipRx = 0.56
+  const hipRx = 0.56 + (opts.hipShift ?? 0)
   const hipLy = hipY + (opts.leftUnload ? 0.04 : 0)
   const hipRy = hipY
   const kneeIn = opts.leftUnload ? 0.06 : 0

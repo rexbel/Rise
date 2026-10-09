@@ -1,7 +1,9 @@
 /**
- * Keep the Line session contracts. Phone column and clinic strip both read PlaySession.
+ * RehabNinja session contracts. Phone column and clinic strip both read PlaySession.
  * Do not put STEADI or stand counts here. Seed schema is unchanged.
  */
+
+import type { ExerciseId } from "@/lib/play/programs"
 
 export type SessionState = "stable" | "compensating" | "overloaded" | "unsafe" | "recovery"
 
@@ -77,6 +79,7 @@ export interface FinishedSet {
   findings: Finding[]
   durationMs: number
   endedBy: "script" | "finish_here"
+  exerciseId: ExerciseId
 }
 
 export interface PlaySession {
@@ -87,6 +90,7 @@ export interface PlaySession {
   findings: Finding[]
   finishedSet: FinishedSet | null
   answers: QuestionAnswers
+  exerciseId: ExerciseId
 }
 
 /** Clinic strip is this object — never hardcoded copy. */
@@ -110,5 +114,6 @@ export type PlayAction =
   | { type: "CONFIRM_EMERGENCY" }
   | { type: "EMERGENCY_MISTAP" }
   | { type: "BACK_TO_QUESTIONS" }
+  | { type: "SELECT_EXERCISE"; exerciseId: ExerciseId }
   | { type: "PRESENTER_SKIP_TO_LIVE" }
   | { type: "PRESENTER_JUMP_TO_QUESTIONS" }
