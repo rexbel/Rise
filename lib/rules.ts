@@ -13,8 +13,8 @@
  *
  * Acceptance: reproduces expected_triage for all 7 seed patients (tests/seed.test.ts has the oracle).
  */
-import type { CheckIn, SessionResult, TriageCard } from "@/lib/types"
+import type { CheckIn, SessionResult, TriageDecision } from "@/lib/types"
 
-export function triage(_result: SessionResult, _previous: CheckIn, _postOpDay: number): Omit<TriageCard, "sessionId" | "evidenceFrameUrls"> {
+export function triage(_result: SessionResult, _previous: CheckIn, _postOpDay: number): TriageDecision {
   throw new Error("TODO(day-of): implement lib/rules.ts")
 }
