@@ -27,6 +27,8 @@ export class YoloOnnxEstimator implements PoseEstimator {
   constructor(private prefer?: YoloBackend) {}
 
   async load() {
+    const probe = await fetch(MODEL_URL, { method: "HEAD" }).catch(() => null)
+    if (!probe?.ok) throw new Error(`YOLO model missing at ${MODEL_URL}`)
     const ort = await import("onnxruntime-web/webgpu")
     ort.env.wasm.wasmPaths = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`
     const order: YoloBackend[] = this.prefer ? [this.prefer] : ["webgpu", "wasm"]
