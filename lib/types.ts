@@ -98,47 +98,180 @@ export const SeedFile = z.object({
   patients: z.array(SeedPatient).length(7),
 })
 
-/* ---------- Live session (day-of) ---------- */
+/* ---------- Live session contracts (plan §6b) ----------
+ * Shared by rex/pose and jeremiah/vast. Change only by PR to main; the other person rebases right away.
+ * Every payload that crosses the network is a Zod schema so the receiving route can .parse() it.
+ *
+ *   Phone  -> POST /api/sessions/[id]/events   RepEvent           (Rex sends, Jeremiah serves)
+ *   Phone  -> POST /api/sessions/[id]/clip     multipart clip     -> ClipRef
+ *   Phone  -> POST /api/sessions/[id]/result   SessionResult      -> TriageCard (rules -> Cosmos -> agent)
+ *   Server -> GET  /api/sessions/stream        SSE of SessionSnapshot
+ *   Console-> GET  /api/search?q=              SearchHit[]
+ */
 
-export type PoseTier = "yolo-onnx" | "mediapipe" | "remote-yolo" | "seeded"
+export const PoseTier = z.enum(["yolo-onnx", "mediapipe", "remote-yolo", "seeded"])
+export type PoseTier = z.infer<typeof PoseTier>
 
-/** 17 COCO keypoints: [x, y, confidence], normalized 0..1 */
-export type Keypoints17 = [number, number, number][]
+/** One keypoint: [x, y, confidence], x and y normalized 0..1 to the video frame. */
+export const Keypoint = z.tuple([z.number(), z.number(), z.number()])
+/** 17 COCO keypoints (nose, eyes, ears, shoulders, elbows, wrists, hips, knees, ankles). */
+export const Keypoints17 = z.array(Keypoint).length(17)
+export type Keypoints17 = z.infer<typeof Keypoints17>
 
-export type SessionStatus = "invited" | "setting_up" | "testing" | "paused" | "questions" | "scoring" | "ready" | "needs_confirmation"
+export const SessionStatus = z.enum(["invited", "setting_up", "testing", "paused", "questions", "scoring", "ready", "needs_confirmation"])
+export type SessionStatus = z.infer<typeof SessionStatus>
 
-export type RepEvent =
-  | { type: "status"; sessionId: string; status: SessionStatus; tier?: PoseTier; at: number }
-  | { type: "rep"; sessionId: string; count: number; armsUsed: boolean; at: number }
-  | { type: "stop"; sessionId: string; reason: "button" | "no_stand"; at: number }
-  | { type: "resume"; sessionId: string; at: number }
-  | { type: "finished_early"; sessionId: string; at: number }
+/** Epoch ms. */
+const At = z.number().int().nonnegative()
 
-export interface SessionResult {
-  sessionId: string
-  riseId: string
-  rawStands: number
-  armsUsed: boolean
-  steadiScore: number
-  asymmetryPct: number
-  pausesOver3s: number
-  stoppedEarly: boolean
-  tandemHoldS?: number
-  symptoms: Symptoms
-  patientNote?: string
-  tier: PoseTier
-}
+export const RepEvent = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("status"), sessionId: z.string(), status: SessionStatus, tier: PoseTier.optional(), at: At }),
+  z.object({ type: z.literal("rep"), sessionId: z.string(), count: z.number().int().min(0), armsUsed: z.boolean(), at: At }),
+  /** Tier changed mid-test (e.g. YOLO under 12 fps for 2 s -> MediaPipe). Count and timer carry on. */
+  z.object({ type: z.literal("tier"), sessionId: z.string(), tier: PoseTier, fps: z.number(), at: At }),
+  z.object({ type: z.literal("stop"), sessionId: z.string(), reason: z.enum(["button", "no_stand"]), at: At }),
+  z.object({ type: z.literal("resume"), sessionId: z.string(), at: At }),
+  z.object({ type: z.literal("finished_early"), sessionId: z.string(), at: At }),
+  /** Downsampled keypoint stream, batched (about 5 per second; config pose.upload_keypoints_hz). */
+  z.object({ type: z.literal("keypoints"), sessionId: z.string(), frames: z.array(z.object({ t: At, kp: Keypoints17 })), at: At }),
+])
+export type RepEvent = z.infer<typeof RepEvent>
 
-export interface TriageCard {
-  sessionId: string
-  recommendation: Recommendation
-  route: "surgeon_on_call" | "primary_care" | "care_coordinator" | "physical_therapy" | null
-  ruleFired: string
-  observation?: { observation: string; compensations: string[]; steadiness: string; uncertainty: string; demoData: boolean }
-  careTeamNote?: string
-  evidenceFrameUrls: string[]
-  warnings: string[]
-}
+/** What the phone knows when the test and questions are done. Rex owns this shape. */
+export const SessionResult = z.object({
+  sessionId: z.string(),
+  riseId: z.string(),
+  /** Full stands in 30 s, including arm-assisted ones and a final stand past halfway. */
+  rawStands: z.number().int().min(0),
+  armsUsed: z.boolean(),
+  /** 1-based rep where arms were first used, if any. */
+  armsFromRep: z.number().int().min(1).optional(),
+  /** CDC rule: 0 if arms were used, else rawStands. */
+  steadiScore: z.number().int().min(0),
+  /** Left/right knee-angle asymmetry, percent of weight shifted off one leg. */
+  asymmetryPct: z.number().min(0),
+  favoring: z.enum(["left", "right"]).nullable(),
+  /** Pauses longer than thresholds.orthostatic_pause_s after reaching full stand. */
+  pausesOver3s: z.number().int().min(0),
+  stoppedEarly: z.boolean(),
+  /** Patient chose "Keep going" after a pause (logged on the card, not a stop). */
+  resumedAfterPause: z.boolean(),
+  tandemHoldS: z.number().min(0).optional(),
+  gaitObservations: z.array(z.string()).default([]),
+  symptoms: Symptoms,
+  patientNote: z.string().max(2000).optional(),
+  tier: PoseTier,
+  /** True when any part came from a seeded fallback; shows the "Demo data" badge. */
+  demoData: z.boolean(),
+  startedAt: At,
+  finishedAt: At,
+})
+export type SessionResult = z.infer<typeof SessionResult>
+
+export const Route = z.enum(["surgeon_on_call", "primary_care", "care_coordinator", "physical_therapy"])
+export type Route = z.infer<typeof Route>
+
+/** What lib/rules.ts decides. Deterministic; no model can change it. */
+export const TriageDecision = z.object({
+  recommendation: Recommendation,
+  route: Route.nullable(),
+  /** Rule name from lib/rules.ts, e.g. "red_flag", "decline", "on_track". */
+  ruleFired: z.string(),
+  /** Short human-readable reasons, e.g. "3 stands vs 5 last time", "arms used from rep 2". */
+  reasons: z.array(z.string()),
+  /** True when the phone must show the emergency screen (red flag). */
+  emergency: z.boolean(),
+})
+export type TriageDecision = z.infer<typeof TriageDecision>
+
+export const CosmosObservation = z.object({
+  observation: z.string(),
+  compensations: z.array(z.string()),
+  steadiness: z.string(),
+  uncertainty: z.string(),
+  demoData: z.boolean(),
+})
+export type CosmosObservation = z.infer<typeof CosmosObservation>
+
+/** Pointer to a stored session clip. Jeremiah owns this shape. */
+export const ClipRef = z.object({
+  sessionId: z.string(),
+  riseId: z.string(),
+  store: z.enum(["vast", "local"]),
+  /** VAST object id, or a path under the local fallback dir. */
+  key: z.string(),
+  /** URL the console can play (may be a local /api route). */
+  url: z.string(),
+  mimeType: z.string(),
+  durationMs: z.number().int().nonnegative(),
+  uploadedAt: At,
+  demoData: z.boolean(),
+})
+export type ClipRef = z.infer<typeof ClipRef>
+
+/** One semantic-search match: a moment inside a clip. Jeremiah owns this shape. */
+export const SearchHit = z.object({
+  riseId: z.string(),
+  sessionId: z.string(),
+  clip: ClipRef,
+  startMs: z.number().int().nonnegative(),
+  endMs: z.number().int().nonnegative(),
+  label: z.string(),
+  score: z.number(),
+  thumbnailUrl: z.string().optional(),
+  /** True when served from pre-indexed seed moments. */
+  demoData: z.boolean(),
+})
+export type SearchHit = z.infer<typeof SearchHit>
+
+export const ApprovalState = z.enum(["pending", "approved", "edited", "downgraded"])
+export type ApprovalState = z.infer<typeof ApprovalState>
+
+/** The console's triage card (C3). Built server-side from SessionResult + TriageDecision + Cosmos + agent. */
+export const TriageCard = TriageDecision.extend({
+  sessionId: z.string(),
+  riseId: z.string(),
+  metrics: z.object({
+    rawStands: z.number().int(),
+    steadiScore: z.number().int(),
+    previousRawStands: z.number().int().nullable(),
+    previousSteadiScore: z.number().int().nullable(),
+    /** CDC below-average cutoff for the patient's age and sex, or null outside 60-94. */
+    cdcCutoff: z.number().int().nullable(),
+    armsUsed: z.boolean(),
+    armsFromRep: z.number().int().optional(),
+    asymmetryPct: z.number(),
+    pausesOver3s: z.number().int(),
+    tandemHoldS: z.number().optional(),
+  }),
+  symptoms: Symptoms,
+  patientNote: z.string().optional(),
+  /** Phrase screen hit on the patient note ("chest pain", "fell", ...) -> amber "Note needs review". */
+  noteNeedsReview: z.boolean(),
+  observation: CosmosObservation.optional(),
+  careTeamNote: z.string().optional(),
+  clip: ClipRef.optional(),
+  evidenceFrameUrls: z.array(z.string()),
+  tier: PoseTier,
+  approval: ApprovalState,
+  warnings: z.array(z.string()),
+  demoData: z.boolean(),
+})
+export type TriageCard = z.infer<typeof TriageCard>
+
+/** One tile on the live board (C2), pushed over SSE on every change. */
+export const SessionSnapshot = z.object({
+  sessionId: z.string(),
+  riseId: z.string(),
+  status: SessionStatus,
+  count: z.number().int().min(0),
+  armsUsed: z.boolean(),
+  tier: PoseTier.nullable(),
+  card: TriageCard.optional(),
+  updatedAt: At,
+  demoData: z.boolean(),
+})
+export type SessionSnapshot = z.infer<typeof SessionSnapshot>
 
 export interface OverrideLogEntry {
   setting: string
