@@ -5,7 +5,7 @@
  * Fruits sit on the knees; clean form → slice hits; bent form → bomb / miss.
  */
 
-import { useEffect, useRef } from "react"
+import { useEffect, useLayoutEffect, useRef } from "react"
 import { Application, Container, Graphics, Text } from "pixi.js"
 import type { LiveVisual } from "@/lib/play/findings"
 import type { HitMissEvent } from "@/lib/play/hitMiss"
@@ -60,7 +60,9 @@ export function PixiLiveField({
   const fxRef = useRef<Fx[]>([])
   const juiceRef = useRef<Juice[]>([])
   const stateRef = useRef({ keypoints, visual, hitCount, combo, elapsedMs, durationMs, frozen, showGhost })
-  stateRef.current = { keypoints, visual, hitCount, combo, elapsedMs, durationMs, frozen, showGhost }
+  useLayoutEffect(() => {
+    stateRef.current = { keypoints, visual, hitCount, combo, elapsedMs, durationMs, frozen, showGhost }
+  })
 
   useEffect(() => {
     if (!events.length) return

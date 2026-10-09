@@ -149,7 +149,6 @@ function Countdown() {
 
   useEffect(() => {
     speak(ui.countdown[0])
-    setI(0)
     let n = 0
     const id = window.setInterval(() => {
       n += 1

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { Pause as PauseIcon, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PixiLiveField } from "@/components/play/PixiLiveField"
@@ -41,10 +41,23 @@ export function LivePlay() {
   const hitMissRef = useRef(createHitMissTracker())
   const lostFor = useRef(0)
   const phaseRef = useRef<PlayPhase>(session.phase)
-  phaseRef.current = session.phase
+  useLayoutEffect(() => {
+    phaseRef.current = session.phase
+  }, [session.phase])
   const completedRef = useRef(false)
 
   const inSet = session.phase === "live" || session.phase === "stepBack" || session.phase === "paused"
+  // Fresh visual state at the start of every set (adjusting state on a prop change, not in an effect).
+  const [wasInSet, setWasInSet] = useState(inSet)
+  if (inSet !== wasInSet) {
+    setWasInSet(inSet)
+    if (inSet) {
+      setCombo(0)
+      setFxEvents([])
+      setUsingDemo(false)
+      setCamHint(null)
+    }
+  }
   const durationMs = scriptDurationMs(session.riseId)
 
   const onPoseFrame = useCallback(
@@ -84,9 +97,13 @@ export function LivePlay() {
     [dispatch, setElapsedMs, pushHitLog, durationMs],
   )
 
-  const camera = usePlayCamera(onPoseFrame)
-  const camApi = useRef(camera)
-  camApi.current = camera
+  // Destructured: the hook's object holds a ref, which must not be read during render.
+  const { videoRef: camVideoRef, start: camStart, stop: camStop, pause: camPause, resume: camResume, status: camStatus, error: camError } =
+    usePlayCamera(onPoseFrame)
+  const camApi = useRef({ start: camStart, stop: camStop, pause: camPause, resume: camResume, status: camStatus, error: camError })
+  useLayoutEffect(() => {
+    camApi.current = { start: camStart, stop: camStop, pause: camPause, resume: camResume, status: camStatus, error: camError }
+  }, [camStart, camStop, camPause, camResume, camStatus, camError])
 
   useEffect(() => {
     if (!inSet) return
@@ -94,11 +111,7 @@ export function LivePlay() {
     trackerRef.current.reset()
     hitMissRef.current.reset()
     resetHits()
-    setCombo(0)
-    setFxEvents([])
     completedRef.current = false
-    setUsingDemo(false)
-    setCamHint(null)
 
     void (async () => {
       clientLog("info", "live set starting camera", { riseId: session.riseId })
@@ -167,8 +180,9 @@ export function LivePlay() {
 
   const stepBack = session.phase === "stepBack"
   const paused = session.phase === "paused"
-  const elapsed = usingDemo ? (busRef.current?.tMs() ?? elapsedMs) : elapsedMs
-  const loadingCam = camera.status === "requesting" || camera.status === "loading"
+  // The demo bus reports its clock through onPoseFrame, so elapsedMs covers both paths.
+  const elapsed = elapsedMs
+  const loadingCam = camStatus === "requesting" || camStatus === "loading"
 
   return (
     <div className="relative flex h-full min-h-0 flex-1 flex-col bg-black text-zinc-50">
@@ -187,7 +201,7 @@ export function LivePlay() {
         role="presentation"
       >
         <video
-          ref={camera.videoRef}
+          ref={camVideoRef}
           playsInline
           muted
           className={`absolute inset-0 h-full w-full object-cover -scale-x-100 ${usingDemo ? "opacity-0" : "opacity-100"}`}
