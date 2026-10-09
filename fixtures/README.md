@@ -1,6 +1,6 @@
 # Pose fixtures
 
-Recorded keypoint streams that the `seeded` pose tier replays through the same counter as live tracking, so the fallback behaves exactly like Rex's real movement. Recorded on build day from the preflight clips (or live), with the fixture recorder at `/dev/pose`.
+Recorded keypoint streams that the `seeded` pose tier replays through the same counter as live tracking, so the fallback behaves exactly like Rex's real movement. Recorded on build day from the preflight clips (or live), with the fixture recorder at `/dev/fixtures`. Save the downloaded files to `public/fixtures/` (served to the phone); demo mode replays a patient's fixture when it exists, else synthetic frames from `scripted_today`. `tests/fixtures.test.ts` checks every committed fixture replays to its expected counts.
 
 ## Files to record
 
@@ -24,10 +24,12 @@ These match each patient's `scripted_today` in `seed/patients.json`, so the repl
   "source": "video:rise-01-arms.mov",
   "expected": { "rawStands": 3, "armsUsed": true, "armsFromRep": 2, "asymmetryPct": null },
   "frames": [
-    { "t_ms": 0, "keypoints": [[0.51, 0.18, 0.97], "... 17 COCO points as [x, y, confidence], normalized 0..1"] }
+    { "t_ms": -1000, "keypoints": [[0.51, 0.18, 0.97], "... 17 COCO points as [x, y, confidence], normalized 0..1"] }
   ]
 }
 ```
+
+`t_ms` is relative to Go: about 1 s of negative-time seated frames comes first (the counter calibrates on them), then 30 s of test.
 
 Keypoint order is COCO-17: nose, left/right eye, left/right ear, left/right shoulder, left/right elbow, left/right wrist, left/right hip, left/right knee, left/right ankle. MediaPipe's 33 landmarks are mapped to these 17 before saving.
 
