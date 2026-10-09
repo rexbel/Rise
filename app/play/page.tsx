@@ -1,7 +1,7 @@
 "use client"
 
 import type { CSSProperties } from "react"
-import { useEffect, useState } from "react"
+import { useSyncExternalStore } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { Oswald, Overpass_Mono } from "next/font/google"
@@ -30,6 +30,8 @@ const RANK = {
   3: { bg: "#E17055", text: "#101010", score: "#E17055", emoji: "💯" },
 } as const
 
+const noSubscribe = () => () => {}
+
 function firstName(name: string) {
   return name.split(" ")[0] ?? name
 }
@@ -42,10 +44,8 @@ function rankStyle(rank: number) {
 export default function PlayBoardPage() {
   const board = cohortBoard(DEFAULT_YOU_ID)
   const youName = firstName(board.you.display_name)
-  const [weekLabel, setWeekLabel] = useState("")
-  useEffect(() => {
-    setWeekLabel(boardWeekLabel(new Date()))
-  }, [])
+  // Client-only date: empty during prerender, this week's label in the browser (no setState in an effect).
+  const weekLabel = useSyncExternalStore(noSubscribe, () => boardWeekLabel(new Date()), () => "")
 
   return (
     <main
