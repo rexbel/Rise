@@ -1,0 +1,80 @@
+{
+  "$comment": "Locked Keep the Line chrome. No STEADI, stand counts, or clinical labels.",
+  "lobby": {
+    "choose_profile": "Choose your profile",
+    "pitch_demo": "Pitch demo (Ellen)",
+    "tagline": "Full-screen Fruit Ninja on your camera. Sit to stand with knees over feet — slice fruit for hits, avoid bombs when form breaks."
+  },
+  "picker": {
+    "title": "Who is playing?",
+    "body": "Pick a synthetic patient. You’ll see their condition, then today’s Fruit Ninja sit-to-stand.",
+    "cta": "Continue"
+  },
+  "condition": {
+    "eyebrow": "Today’s program",
+    "procedure_label": "Procedure",
+    "pod_label": "Day after surgery",
+    "game_label": "Today’s game",
+    "game_name": "Keep the Line · Fruit Ninja",
+    "game_why": "Chair sit-to-stand. Camera tracks your body; fruit on your knees scores form. Not a score chart — hits and misses only.",
+    "begin": "Start session"
+  },
+  "howto": {
+    "title": "How to play",
+    "body": "Fruit on knees = good form. Bombs = knees drifting in or hands pushing off. Slice hits when you keep the line. Stop is always on screen.",
+    "begin": "Begin"
+  },
+  "ready": {
+    "title": "Before you start",
+    "body": "Sturdy chair behind you? Feeling OK to start?",
+    "continue": "I am ready",
+    "not_now": "Not now"
+  },
+  "frame": {
+    "title": "We need to see you",
+    "body": "Stand so your hips, knees, and feet are in the outline.",
+    "continue": "Continue",
+    "demo_badge": "Demo replay"
+  },
+  "countdown": ["Three", "Two", "One", "Go"],
+  "live": {
+    "prompt": "Slice the fruit — sit to stand",
+    "how": "Watermelon on knees = good form. Bombs = knees in or hands pushing off.",
+    "step_back": "Step back so we can see your knees — then keep playing.",
+    "stop": "Stop",
+    "pause": "Pause",
+    "demo_badge": "Demo replay"
+  },
+  "paused": {
+    "title": "It is okay to pause.",
+    "keep_going": "Keep going",
+    "finish_here": "Finish here"
+  },
+  "status": {
+    "stable": "Safe and controlled",
+    "compensating": "Some form changes",
+    "overloaded": "Your knee needs a break",
+    "unsafe": "Stop and adjust",
+    "recovery": "Recovery focus"
+  },
+  "questions": {
+    "yes": "Yes",
+    "no": "No",
+    "next": "Next"
+  },
+  "emergency": {
+    "yes_i_meant_that": "Yes, I meant that",
+    "mistap": "No, go back",
+    "call": "Call now"
+  },
+  "close": {
+    "title": "Your session",
+    "hits_label": "Hits",
+    "timeline_label": "Hit timeline",
+    "care_team": "Your care team can review this session on the clinic board.",
+    "done": "Done",
+    "back_to_questions": "Answer questions again",
+    "change_profile": "Choose another profile"
+  },
+  "synthetic": "Synthetic data"
+}

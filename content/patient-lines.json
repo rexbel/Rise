@@ -14,6 +14,11 @@
     "finished_early": "Someone from your care team will reach out to see how you're doing."
   },
   "closure": "Thank you for taking the time to do this. You're all done for today, and you can close this page whenever you're ready.",
-  "emergency": "Because you told us you're short of breath or have chest pain, please call 911 now. If someone is with you, ask them to stay with you.",
+  "emergency": {
+    "line": "Because you told us you're short of breath or have chest pain, please call 911 now. If someone is with you, ask them to stay with you.",
+    "care_team_told": "Your care team is being told right now.",
+    "mistap_confirm": "Did you mean to say you are short of breath or have chest pain?",
+    "follow_up": "Please keep your phone nearby."
+  },
   "note_prompt": "Is there anything you'd like your nurse to know? You can skip this."
 }
