@@ -332,7 +332,7 @@ export function CheckIn({ patient, clinicName }: { patient: SeedPatient; clinicN
     return (
       <main className="flex min-h-dvh flex-col justify-center gap-8 bg-red-700 px-5 py-10 text-white" role="alert">
         <AlertTriangle aria-hidden className="size-16" />
-        <p className="text-3xl font-semibold leading-snug">{lines.emergency}</p>
+        <p className="text-3xl font-semibold leading-snug">{lines.emergency.line}</p>
         <Button asChild size="lg" className="h-16 bg-white text-2xl text-red-700 hover:bg-white/90">
           <a href="tel:911">
             <Phone aria-hidden className="size-6" /> Call 911

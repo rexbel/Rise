@@ -22,7 +22,8 @@
     "prompt": "Can you keep the line?",
     "step_back": "We could not see your knee clearly. Step back.",
     "stop": "Stop",
-    "pause": "Pause"
+    "pause": "Pause",
+    "demo_badge": "Demo replay"
   },
   "paused": {
     "title": "It is okay to pause.",

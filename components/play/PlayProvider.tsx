@@ -10,6 +10,7 @@ export type HitLogKind = "hit" | "miss"
 
 type PlayContextValue = {
   session: PlaySession
+  demo: boolean
   dispatch: (action: PlayAction) => void
   dispatchMany: (actions: PlayAction[]) => void
   begin: () => void
@@ -86,6 +87,7 @@ export function PlayProvider({
   const value = useMemo(
     () => ({
       session,
+      demo,
       dispatch,
       dispatchMany,
       begin,
@@ -102,6 +104,7 @@ export function PlayProvider({
     }),
     [
       session,
+      demo,
       dispatch,
       dispatchMany,
       begin,

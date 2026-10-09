@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Pause as PauseIcon, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PixiLiveField } from "@/components/play/PixiLiveField"
@@ -12,7 +12,8 @@ import { createSyntheticBus, type SyntheticBus } from "@/lib/play/poseBus"
 import { scriptDurationMs } from "@/lib/play/syntheticPose"
 import { speak } from "@/lib/play/speak"
 import { playTone } from "@/lib/play/tones"
-import type { Keypoints17, PlayPhase } from "@/lib/play/types"
+import { usePlayCamera } from "@/lib/play/usePlayCamera"
+import type { Keypoints17, PlayPhase, PoseFrame } from "@/lib/play/types"
 
 const idleVisual: LiveVisual = {
   trackingOk: true,
@@ -26,38 +27,31 @@ const idleVisual: LiveVisual = {
 }
 
 export function LivePlay() {
-  const { session, dispatch, setElapsedMs, elapsedMs, hitCount, hitLog, pushHitLog, resetHits } = usePlay()
+  const { session, dispatch, setElapsedMs, elapsedMs, hitCount, hitLog, pushHitLog, resetHits, demo } = usePlay()
   const [keypoints, setKeypoints] = useState<Keypoints17 | null>(null)
   const [visual, setVisual] = useState<LiveVisual>(idleVisual)
   const [fxEvents, setFxEvents] = useState<HitMissEvent[]>([])
   const [combo, setCombo] = useState(0)
+  const [usingDemo, setUsingDemo] = useState(false)
+  const [camHint, setCamHint] = useState<string | null>(null)
   const busRef = useRef<SyntheticBus | null>(null)
   const trackerRef = useRef(createFindingTracker())
   const hitMissRef = useRef(createHitMissTracker())
   const lostFor = useRef(0)
   const phaseRef = useRef<PlayPhase>(session.phase)
   phaseRef.current = session.phase
+  const completedRef = useRef(false)
 
   const inSet = session.phase === "live" || session.phase === "stepBack" || session.phase === "paused"
   const durationMs = scriptDurationMs(session.riseId)
 
-  useEffect(() => {
-    if (!inSet) return
-    trackerRef.current.reset()
-    hitMissRef.current.reset()
-    resetHits()
-    setCombo(0)
-    setFxEvents([])
-    const bus = createSyntheticBus(session.riseId, () => {
-      if (phaseRef.current === "live" || phaseRef.current === "stepBack") {
-        dispatch({ type: "SET_COMPLETE", durationMs: scriptDurationMs(session.riseId) })
-      }
-    })
-    bus.subscribe((frame) => {
+  const onPoseFrame = useCallback(
+    (frame: PoseFrame) => {
       const { visual: vis, finding } = trackerRef.current.push(frame)
       setKeypoints(frame.keypoints)
       setVisual(vis)
       setElapsedMs(frame.t)
+
       if (!vis.trackingOk) {
         lostFor.current += 1
         if (lostFor.current === 9) dispatch({ type: "TRACKING_LOST" })
@@ -79,22 +73,73 @@ export function LivePlay() {
             setCombo((c) => (e.kind === "hit" ? c + 1 : 0))
           }
         }
+        if (!completedRef.current && frame.t >= durationMs) {
+          completedRef.current = true
+          dispatch({ type: "SET_COMPLETE", durationMs })
+        }
       }
-    })
-    bus.start()
-    busRef.current = bus
-    if (phaseRef.current === "paused" || phaseRef.current === "stepBack") bus.pause()
+    },
+    [dispatch, setElapsedMs, pushHitLog, durationMs],
+  )
+
+  const camera = usePlayCamera(onPoseFrame)
+  const camApi = useRef(camera)
+  camApi.current = camera
+
+  // Prefer live camera + YOLO/MediaPipe; fall back to synthetic demo replay.
+  useEffect(() => {
+    if (!inSet) return
+    let cancelled = false
+    trackerRef.current.reset()
+    hitMissRef.current.reset()
+    resetHits()
+    setCombo(0)
+    setFxEvents([])
+    completedRef.current = false
+    setUsingDemo(false)
+    setCamHint(null)
+
+    void (async () => {
+      const ok = await camApi.current.start("user")
+      if (cancelled) return
+      if (ok) {
+        setUsingDemo(false)
+        setCamHint(null)
+        return
+      }
+      // Camera or model failed — seeded Fruit Ninja replay so the demo still runs.
+      setUsingDemo(true)
+      setCamHint(camApi.current.error ?? ui.live.demo_badge)
+      const bus = createSyntheticBus(session.riseId, () => {
+        if (phaseRef.current === "live" || phaseRef.current === "stepBack") {
+          dispatch({ type: "SET_COMPLETE", durationMs: scriptDurationMs(session.riseId) })
+        }
+      })
+      bus.subscribe(onPoseFrame)
+      bus.start()
+      busRef.current = bus
+      if (phaseRef.current === "paused" || phaseRef.current === "stepBack") bus.pause()
+    })()
+
     return () => {
-      bus.stop()
+      cancelled = true
+      camApi.current.stop()
+      busRef.current?.stop()
       busRef.current = null
     }
-  }, [inSet, session.riseId, dispatch, setElapsedMs, pushHitLog, resetHits])
+  }, [inSet, session.riseId, dispatch, resetHits, onPoseFrame])
 
   useEffect(() => {
     const bus = busRef.current
-    if (!bus) return
-    if (session.phase === "paused" || session.phase === "stepBack") bus.pause()
-    else bus.resume()
+    const freeze = session.phase === "paused" || session.phase === "stepBack"
+    if (bus) {
+      if (freeze) bus.pause()
+      else bus.resume()
+    }
+    if (camApi.current.status === "live") {
+      if (freeze) camApi.current.pause()
+      else camApi.current.resume()
+    }
   }, [session.phase])
 
   useEffect(() => {
@@ -103,7 +148,8 @@ export function LivePlay() {
 
   const stepBack = session.phase === "stepBack"
   const paused = session.phase === "paused"
-  const elapsed = busRef.current?.tMs() ?? elapsedMs
+  const elapsed = usingDemo ? (busRef.current?.tMs() ?? elapsedMs) : elapsedMs
+  const loadingCam = camera.status === "requesting" || camera.status === "loading"
 
   return (
     <div className="flex flex-1 flex-col gap-3 text-zinc-50">
@@ -112,9 +158,21 @@ export function LivePlay() {
           <p className="text-xs font-medium tracking-wide text-orange-400">Keep the Line</p>
           <p className="text-sm text-zinc-400">{ui.live.prompt}</p>
         </div>
-        <div className="flex items-center gap-2 rounded-full bg-zinc-900 px-3 py-1.5 text-lg font-semibold text-orange-400">
-          <Zap className="size-5 fill-orange-400" aria-hidden />
-          x{Math.max(1, combo)}
+        <div className="flex items-center gap-2">
+          {usingDemo || demo ? (
+            <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-xs text-zinc-400">
+              {ui.live.demo_badge}
+            </span>
+          ) : camera.tier ? (
+            <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-xs text-zinc-500">
+              {camera.tier}
+              {camera.fps ? ` · ${camera.fps}fps` : ""}
+            </span>
+          ) : null}
+          <div className="flex items-center gap-2 rounded-full bg-zinc-900 px-3 py-1.5 text-lg font-semibold text-orange-400">
+            <Zap className="size-5 fill-orange-400" aria-hidden />
+            x{Math.max(1, combo)}
+          </div>
         </div>
       </div>
       <button
@@ -125,6 +183,16 @@ export function LivePlay() {
         }}
         aria-label={ui.live.pause}
       >
+        {/* Live selfie — mirrored for front camera; Fruit Ninja overlays sit on top */}
+        <video
+          ref={camera.videoRef}
+          playsInline
+          muted
+          className={`absolute inset-0 h-full w-full object-cover -scale-x-100 ${usingDemo ? "opacity-0" : "opacity-100"}`}
+        />
+        {usingDemo ? (
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,#1c1917_0%,#0a0a0c_70%)]" aria-hidden />
+        ) : null}
         <PixiLiveField
           keypoints={keypoints}
           visual={visual}
@@ -133,7 +201,18 @@ export function LivePlay() {
           elapsedMs={elapsed}
           durationMs={durationMs}
           frozen={visual.hard}
+          showGhost={usingDemo}
         />
+        {loadingCam ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/70 text-lg text-zinc-200">
+            Opening camera…
+          </div>
+        ) : null}
+        {camHint && usingDemo ? (
+          <div className="absolute left-3 top-12 max-w-[85%] rounded-md bg-zinc-950/80 px-2 py-1 text-left text-xs text-zinc-400">
+            {camHint}
+          </div>
+        ) : null}
         {paused ? (
           <div className="absolute inset-0 flex flex-col justify-center gap-3 bg-zinc-950/90 p-4">
             <h2 className="text-2xl font-semibold leading-snug">{ui.paused.title}</h2>
