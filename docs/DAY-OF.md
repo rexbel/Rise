@@ -2,16 +2,17 @@
 
 Full plan: [Rise — Hackathon Build Plan](https://claude.ai/code/artifact/dd20cc44-fbae-45d1-aa14-2fcd2f7f796a)
 
-| Time | Phase | Exit gate |
-| --- | --- | --- |
-| 9:00 | Keynote | Ask about pre-built code, Cosmos / VAST / W&B endpoints, demo time limit |
-| 9:30–10:00 | Phase 0 | `npm run dev` + tunnel; seed loads on `/clinic`; `/p/rise-01` opens on the phone |
-| 10:00–11:00 | Risk first | On-phone pose → counter → arm-use and stop detection (`lib/pose/*`) |
-| 11:00–12:15 | Phase 1 | Console C1–C3 and phone P1–P5 + P3a on seeded data. **Checkpoint 1 — Static Demo** (backup: Option C on the phone only) |
-| 12:15–1:00 | Lunch + relay | Rep events phone → app → SSE to the console board |
-| 1:00–2:45 | Phase 2 | `lib/rules.ts`, `lib/feedback.ts` wiring, Cosmos, W&B agent, VAST, Twilio. **Checkpoint 2 — Live Capability** |
-| 2:45–3:45 | Phase 3 | All UI states, Weave eval over 7 patients, stage-lighting test, projector test. **Checkpoint 3 — Demo Lock 3:45** |
-| 3:45–4:30 | Phase 4 | Backup recording first, README, screenshots, two timed rehearsals |
+Two people, two branches. Ownership, contracts, and seams: [docs/TEAM.md](TEAM.md).
+
+| Time | Rex (`rex/pose`) | Jeremiah (`jeremiah/vast`) | Together / gate |
+| --- | --- | --- | --- |
+| 9:00 | Ask about W&B inference and the pre-built-code rule | Ask about VAST and Cosmos endpoints and the shared videos | Keynote |
+| 9:30–10:00 | Tunnel up; `/p/rise-01` opens on the phone | Organizers' videos downloaded; VAST credentials working | Contracts PR to main (`lib/types.ts`), then branch |
+| 10:00–12:15 | YOLO, MediaPipe, tier switch, counter, fixtures; then P1–P3 | VAST ingest (organizers' videos + fixture clips); session store + SSE; console C1–C2 on seed | **Checkpoint 1 — Static Demo 12:15:** merge both (backup: Option C on the phone only) |
+| 12:15–1:00 | Phone posts live events | Board shows live count | Lunch + integration |
+| 1:00–2:45 | `lib/rules.ts`, `lib/cadence.ts`, `lib/feedback.ts`; P3a, P4, P5; Twilio | Clip upload to VAST; search C4; Cosmos; W&B agent; triage card C3 | **Checkpoint 2 — Live Capability 2:45:** merge both |
+| 2:45–3:45 | Phone states, stage-light test, fixture replay check | Console states, Weave eval, monitoring summary, projector test | **Checkpoint 3 — Demo Lock 3:45:** final merge |
+| 3:45–4:30 | Rehearse chair stand and phone flow | Backup recording first, README, screenshots | Two timed rehearsals |
 
 After Demo Lock: defects and copy only. New ideas go to the plan's Post-hackathon list.
 

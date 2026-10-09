@@ -57,7 +57,8 @@ Seven synthetic patients in [seed/patients.json](seed/patients.json) (see [seed/
 Timed Up and Go and full 4-Stage Balance · spoken answers via CareBridge Voice · validation study vs. clinician scoring · FHIR write-back to Epic / Oracle Health · caregiver view.
 
 ## Team and credits
-- Rex Belgarde — everything.
+- Rex Belgarde: pose, patient phone, rules.
+- Jeremiah: VAST, video intelligence, clinic console.
 - Patients: [Synthetic Hospital v1.3](https://github.com/sparkcpark/synthetic_hospital) (MIT), Park, Chen, Dettmers, 2026.
 - Protocol: CDC STEADI [30-Second Chair Stand](https://www.cdc.gov/steadi/media/pdfs/STEADI-Assessment-30Sec-508.pdf) and [4-Stage Balance](https://www.cdc.gov/steadi/media/pdfs/STEADI-Assessment-4Stage-508.pdf).
 - Patient language: SAMHSA's six trauma-informed principles.

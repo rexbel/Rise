@@ -1,12 +1,12 @@
 # Cursor prompts for build day
 
-Paste one prompt per phase into Cursor (Agent mode). Each one names what to read first, the job, and the exit check. Cursor also loads `.cursor/rules/rise.mdc` and `AGENTS.md` automatically. If a prompt grows past its phase, stop and park the extra idea in the plan's Post-hackathon list.
+Paste one prompt per phase into Cursor (Agent mode), on your own branch. Owner is in each heading; ownership and seams are in docs/TEAM.md. Each one names what to read first, the job, and the exit check. Cursor also loads `.cursor/rules/rise.mdc` and `AGENTS.md` automatically. If a prompt grows past its phase, stop and park the extra idea in the plan's Post-hackathon list.
 
 After every prompt: `npm run check`, try it on the phone through the tunnel, commit, push. CI runs the same checks plus lint and build on every push.
 
 ---
 
-## 0. Kickoff (9:30)
+## 0. Kickoff (9:30) · both
 
 ```
 Read AGENTS.md, docs/DAY-OF.md, config/protocol.default.json, lib/types.ts and lib/seed.ts.
@@ -15,7 +15,7 @@ what the patient phone must never show, and the pose tier ladder with its fps th
 Then list the files you expect to create today, in the order of docs/DAY-OF.md.
 ```
 
-## 1. Risk first: pose on the phone (10:00–11:00)
+## 1. Risk first: pose on the phone (10:00–11:30) · Rex
 
 ```
 Read lib/pose/index.ts, lib/pose/counter.ts, config/protocol.default.json (pose, thresholds) and lib/types.ts.
@@ -41,26 +41,35 @@ Exit: on my phone via the tunnel, the counter counts 5 real stands correctly and
 the three fixtures replay through the seeded tier with the same counts as live.
 ```
 
-## 2. Static slice: both surfaces on seed data (11:00–12:15)
+## 2a. Phone screens (11:30–12:15, then P3a–P5 after lunch) · Rex
 
 ```
-Read docs/DAY-OF.md, the UX plan in the build plan (§5), content/patient-lines.json, content/voice-lines.json,
-lib/feedback.ts and lib/seed.ts. Use only components in components/ui.
-Build, all on seeded data (no live AI yet):
-- Console: C1 /clinic patient list (name, procedure, POD, episode day, last status) with a Send check-in Dialog;
-  C2 live board tiles (Invited, Setting up, Testing with count, Scoring, Ready, Needs confirmation in amber);
-  C3 /clinic/[riseId] triage card using the patient's scripted_today and expected_triage
-  (recommendation + route on top, metrics vs history and CDC cutoff, evidence frame placeholder,
-  side Sheet with observation, answers, rule fired, note; Approve / Edit / Downgrade).
-- Phone /p/[token]: P1 welcome, P2 safety checks + framing guide (uses the pose layer), P3 chair stand
-  (voice from /voice/*.mp3 with captions, 30 s ring, big counter, Stop always visible), P3a paused
-  ("keep going or finish here"), P4 four symptom questions, P5 closing lines from lib/feedback.ts
-  plus the optional note box; emergency screen alone on a red-flag answer.
+Read docs/TEAM.md, the UX plan in the build plan (§5), content/patient-lines.json, content/voice-lines.json,
+lib/feedback.ts and lib/seed.ts. Use only components in components/ui. Work only in app/p/** and lib/feedback.ts.
+Build /p/[token]: P1 welcome, P2 safety checks + framing guide (uses lib/pose), P3 chair stand
+(voice from /voice/*.mp3 with captions, 30 s ring, big counter, Stop always visible), P3a paused
+("keep going or finish here"), P4 four symptom questions, P5 closing lines from lib/feedback.ts plus the
+optional note box; emergency screen alone on a red-flag answer. Post RepEvents to
+POST /api/sessions/[id]/events (log to the browser console until Jeremiah's route is merged).
 Phone rules: 20px+ text, 56px+ buttons, portrait, no scores anywhere under app/p.
-Exit: I can click through both surfaces end to end at 390px and 1280px with no live services.
+Exit: I can complete the whole phone flow at 390px with the fixture tier and with live pose.
 ```
 
-## 3. Live relay (12:15–1:00)
+## 2b. VAST first, then the console (10:00–12:15) · Jeremiah
+
+```
+Read docs/TEAM.md, lib/types.ts, lib/adapters/vast.ts, lib/seed.ts and the UX plan in the build plan (§5).
+Work only in lib/adapters/vast.ts, lib/sessions.ts, app/api/sessions/** and app/clinic/**.
+1. lib/adapters/vast.ts: ingest(clip) -> ClipRef and search(query) -> SearchHit[] against the VAST endpoint
+   from the organizers (env VAST_BASE_URL, VAST_API_KEY). 6 s timeout; fallback stores locally and returns
+   pre-indexed seed moments with a "Demo data" badge. Test it on the organizers' videos and fixtures/ clips.
+2. lib/sessions.ts + POST /api/sessions/[id]/events + GET /api/sessions/stream (SSE).
+3. Console on seed data: C1 /clinic patient list with Send check-in Dialog; C2 live board tiles
+   (Invited, Setting up, Testing with count, Scoring, Ready, Needs confirmation in amber).
+Exit: a curl-posted RepEvent moves a tile within 1 second; a search returns hits with timestamps.
+```
+
+## 3. Live relay (12:15–1:00) · Jeremiah builds the routes and board, Rex wires the phone
 
 ```
 Read lib/types.ts (RepEvent, SessionStatus, SessionResult).
@@ -70,24 +79,36 @@ status, rep, stop, resume and finished_early events, and the C2 tiles to update 
 Exit: during a test on my phone, the console tile shows the live count within 1 second.
 ```
 
-## 4. Core intelligence (1:00–2:45)
+## 4a. Rules, cadence, Twilio (1:00–2:45) · Rex
 
 ```
 Read lib/rules.ts, tests/seed.test.ts (the oracle), lib/cadence.ts, seed/build_seed.py (next_checkin),
-config/protocol.default.json, lib/ai/*.ts and lib/adapters/*.ts.
-1. Implement lib/rules.ts exactly per its comment table; add tests that it matches the oracle for all 7
-   patients plus a stopped-early case (human_confirm).
+config/protocol.default.json and lib/adapters/twilio.ts.
+1. Implement lib/rules.ts exactly per its comment table; tests: matches the oracle for all 7 patients plus a
+   stopped-early case (human_confirm).
 2. Implement lib/cadence.ts to match next_checkin in seed/build_seed.py, reading defaults from config.
-3. lib/ai/cosmos.ts and lib/ai/agent.ts: Zod-validated outputs, 8 s timeout, one retry, then template
-   fallback with a "Demo data" badge. The agent writes only the care-team note and route explanation.
-   Wrap the agent call with W&B Weave tracing.
-4. lib/adapters/twilio.ts (invite + callback SMS, QR fallback) and lib/adapters/vast.ts (clip upload,
-   local-file fallback). Read keys from env; with no keys, everything falls back cleanly.
-5. On session finish: rules -> Cosmos -> agent -> TriageCard pushed to the console.
-Exit: Ellen's live session produces Escalate urgent -> surgeon on call, live and with every key removed.
+3. lib/adapters/twilio.ts: invite + callback SMS, one retry, QR fallback. Keys from env; no keys = clean fallback.
+4. On session finish the phone sends SessionResult; rules produce the TriageCard core
+   (recommendation, route, ruleFired) for Jeremiah's pipeline.
+Exit: Ellen's live session yields Escalate urgent -> surgeon on call; all rule tests green.
 ```
 
-## 5. Polish (2:45–3:45)
+## 4b. Clip to card: VAST, Cosmos, agent (1:00–2:45) · Jeremiah
+
+```
+Read lib/types.ts (TriageCard, ClipRef, SearchHit), lib/ai/*.ts and lib/adapters/vast.ts.
+1. POST /api/sessions/[id]/clip: store the phone's clip in VAST; ClipRef on the session.
+2. lib/ai/cosmos.ts: clip + numbers -> Zod-validated { observation, compensations[], steadiness, uncertainty };
+   8 s timeout, one retry, template fallback with "Demo data" badge.
+3. lib/ai/agent.ts: W&B model writes the care-team note and route explanation only; Weave-traced.
+4. C3 /clinic/[riseId] triage card: recommendation + route on top, metrics vs history and CDC cutoff,
+   evidence frames, side Sheet with Cosmos observation, answers, rule fired, note; Approve / Edit / Downgrade.
+   Until lib/rules.ts merges, render from scripted_today + expected_triage.
+5. C4 search box over all sessions (VAST), results with timestamps.
+Exit: Ellen's session shows a full card with a Cosmos line; search finds "pushed off the chair" moments.
+```
+
+## 5. Polish (2:45–3:45) · Rex on the phone, Jeremiah on the console
 
 ```
 Read AGENTS.md and the acceptance criteria in the build plan (§8).
@@ -97,7 +118,7 @@ all 7 seeded sessions against expected_triage and shows the table. Do not add fe
 Exit: no broken state anywhere on the primary path. Demo Lock at 3:45: after this, fixes and copy only.
 ```
 
-## 6. Submission (3:45–4:30)
+## 6. Submission (3:45–4:30) · Jeremiah
 
 ```
 Update README.md: demo link, screenshots, final architecture, the env vars actually used, known limitations.
