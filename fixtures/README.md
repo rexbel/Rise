@@ -1,6 +1,6 @@
 # Pose fixtures
 
-Recorded keypoint streams that the `seeded` pose tier replays through the same counter as live tracking, so the fallback behaves exactly like Rex's real movement. Recorded on build day from the clips made the night before (or live), with the fixture recorder at `/dev/pose`.
+Recorded keypoint streams that the `seeded` pose tier replays through the same counter as live tracking, so the fallback behaves exactly like Rex's real movement. Recorded on build day from the preflight clips (or live), with the fixture recorder at `/dev/pose`.
 
 ## Files to record
 

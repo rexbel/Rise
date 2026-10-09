@@ -48,7 +48,7 @@ Build the pose layer for the patient phone:
    knee-angle asymmetry). Pure functions over keypoints, with vitest tests on synthetic keypoint sequences.
 5. A bare test page at app/dev/pose/page.tsx: camera, skeleton overlay on canvas, fps, tier, rep count, arms flag.
 6. Fixture recorder on the same page (format in fixtures/README.md):
-   - Source: live camera OR an uploaded video file (the clips recorded the night before).
+   - Source: live camera OR an uploaded video file (the clips recorded during preflight).
    - "Record fixture" captures every pose frame for 30 s: { t_ms, keypoints (17 x [x,y,conf]) } plus
      metadata { riseId, variant, tier, fps, recordedAt }, and downloads it as fixtures/<riseId>-<variant>.json.
    - lib/pose/seeded.ts replays a fixture through the SAME counter at its recorded timestamps, so the
