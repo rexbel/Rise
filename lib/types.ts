@@ -412,6 +412,8 @@ export const SessionSnapshot = z.object({
   tier: PoseTier.nullable(),
   card: TriageCard.optional(),
   audit: z.array(AuditEntry),
+  /** True while this session keeps the patient off their crew (red flag, escalation, human confirm). */
+  crewPaused: z.boolean(),
   invitedAt: At.nullable(),
   updatedAt: At,
   demoData: z.boolean(),

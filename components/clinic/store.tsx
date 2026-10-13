@@ -27,6 +27,8 @@ type Store = {
   retryNow: () => void
   invite: (riseId: string, surface: Surface) => Promise<ApiResult<InviteResponse>>
   decide: (sessionId: string, req: ApprovalRequest) => Promise<ApiResult<SessionSnapshot>>
+  /** Return a paused patient to their crew (audited on the server). */
+  resumeCrew: (sessionId: string) => Promise<ApiResult<SessionSnapshot>>
   reset: () => Promise<ApiResult<null>>
   refresh: () => Promise<void>
 }
@@ -149,6 +151,20 @@ export function ClinicProvider({ patients, children }: { patients: PatientSummar
     [upsert, refresh],
   )
 
+  const resumeCrew = useCallback(
+    async (sessionId: string) => {
+      const r = await call(
+        `/api/sessions/${encodeURIComponent(sessionId)}/crew`,
+        { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "resume", user: DEMO_USER }) },
+        (res) => res.json() as Promise<SessionSnapshot>,
+      )
+      if (r.ok) upsert(r.data)
+      else if (r.status === 409 || r.status === 404) void refresh()
+      return r
+    },
+    [upsert, refresh],
+  )
+
   const reset = useCallback(async () => {
     const r = await call("/api/sessions/reset", { method: "POST" }, async () => null)
     if (r.ok) setSessions(new Map())
@@ -159,8 +175,8 @@ export function ClinicProvider({ patients, children }: { patients: PatientSummar
   const patient = useCallback((riseId: string) => byId.get(riseId), [byId])
 
   const value = useMemo<Store>(
-    () => ({ patients, patient, sessions, loaded, connection, retryNow, invite, decide, reset, refresh }),
-    [patients, patient, sessions, loaded, connection, retryNow, invite, decide, reset, refresh],
+    () => ({ patients, patient, sessions, loaded, connection, retryNow, invite, decide, resumeCrew, reset, refresh }),
+    [patients, patient, sessions, loaded, connection, retryNow, invite, decide, resumeCrew, reset, refresh],
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

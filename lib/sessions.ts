@@ -99,9 +99,10 @@ function crewPause(s: SessionSnapshot): boolean {
   )
 }
 
-function put(s: SessionSnapshot) {
+function put(next: SessionSnapshot) {
+  const s = { ...next, crewPaused: crewPause(next) }
   store.sessions.set(s.sessionId, s)
-  syncPause(s.riseId, s.sessionId, crewPause(s))
+  syncPause(s.riseId, s.sessionId, s.crewPaused)
   if (store.sessions.size > MAX_SESSIONS) {
     // Cards waiting for a person are evicted last.
     const waiting = (x: SessionSnapshot) => (x.card?.approval === "pending" ? 1 : 0)
@@ -122,6 +123,7 @@ function blank(sessionId: string, riseId: string, now: number, surface: Surface 
     armsUsed: false,
     tier: null,
     audit: [],
+    crewPaused: false,
     invitedAt: null,
     updatedAt: now,
     demoData: false,

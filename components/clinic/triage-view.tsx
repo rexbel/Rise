@@ -1,8 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { useId, useState } from "react"
-import { ArrowLeft, Check, CircleCheck, CircleMinus, History, Hourglass, TriangleAlert } from "lucide-react"
+import { useEffect, useId, useState } from "react"
+import { ArrowLeft, Check, CircleCheck, CircleMinus, History, Hourglass, PauseCircle, TriangleAlert, Users } from "lucide-react"
 import { toast } from "sonner"
 import protocol from "@/config/protocol.default.json"
 import { exerciseById } from "@/lib/play/programs"
@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
-import type { Recommendation, SessionSnapshot, TriageCard } from "@/lib/types"
+import type { ConsentRecord, Recommendation, SessionSnapshot, TriageCard } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { clinicFontClass } from "./fonts"
 import {
@@ -116,6 +116,7 @@ function Detail({ s, p }: { s: SessionSnapshot; p: PatientSummary | undefined })
         <aside className="grid min-w-0 gap-6">
           {card && card.approval === "pending" && <Actions s={s} card={card} />}
           {!card && <ActionsLocked />}
+          <CrewPanel s={s} />
           <Audit s={s} />
         </aside>
       </div>
@@ -662,6 +663,98 @@ function Field({ label, id, error, children }: { label: React.ReactNode; id: str
         </p>
       )}
     </div>
+  )
+}
+
+const CONSENT_LABEL: Record<ConsentRecord["action"], string> = {
+  joined: "Joined their crew",
+  left: "Left their crew",
+  photo_shown: "Chose to show their photo",
+  photo_hidden: "Chose to hide their photo",
+}
+
+/**
+ * The patient's crew (peer encouragement board): whether this session keeps them off it, a person's control to
+ * return them, and their consent log. Peers never see why someone is paused; they just stop seeing them.
+ */
+function CrewPanel({ s }: { s: SessionSnapshot }) {
+  const { resumeCrew } = useClinic()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [consent, setConsent] = useState<ConsentRecord[] | null>(null)
+
+  useEffect(() => {
+    let live = true
+    fetch(`/api/crew/consent/${encodeURIComponent(s.riseId)}`, { cache: "no-store", signal: AbortSignal.timeout(8000) })
+      .then((r) => (r.ok ? (r.json() as Promise<ConsentRecord[]>) : []))
+      .then((rows) => live && setConsent(rows))
+      .catch(() => live && setConsent([]))
+    return () => {
+      live = false
+    }
+  }, [s.riseId, s.updatedAt])
+
+  const joined = consent ? [...consent].reverse().find((c) => c.action === "joined" || c.action === "left")?.action === "joined" : null
+
+  async function resume() {
+    setBusy(true)
+    setError(null)
+    const r = await resumeCrew(s.sessionId)
+    setBusy(false)
+    if (r.ok) toast.success("Returned to their crew.")
+    else setError(r.message)
+  }
+
+  return (
+    <section aria-labelledby="crew-heading" className="grid gap-3 rounded-md border border-cl-line bg-cl-surface p-5">
+      <h2 id="crew-heading" className={cn(serif, "flex items-center gap-2 text-2xl font-semibold")}>
+        <Users aria-hidden className="size-5 text-cl-muted" />
+        Crew
+      </h2>
+      {s.crewPaused ? (
+        <>
+          <p className="flex items-start gap-2 text-base">
+            <PauseCircle aria-hidden className="mt-0.5 size-5 shrink-0 text-status-confirm" />
+            <span>
+              <span className="font-semibold">Paused from their crew.</span> Peers no longer see them or can cheer them; they see a
+              resting note. This lifts when you return them or downgrade the card.
+            </span>
+          </p>
+          {error && (
+            <p role="alert" className="text-base text-status-escalate">
+              {error}
+            </p>
+          )}
+          <Button type="button" variant="outline" className="h-11 text-base" disabled={busy} onClick={resume}>
+            Return to their crew
+          </Button>
+        </>
+      ) : (
+        <p className="text-base text-cl-muted">Not paused by this session.</p>
+      )}
+      <div className="grid gap-1">
+        <Eyebrow>Consent</Eyebrow>
+        {consent === null ? (
+          <p className="text-base text-cl-muted">Loading consent…</p>
+        ) : consent.length === 0 ? (
+          <p className="text-base text-cl-muted">Has not joined a crew.</p>
+        ) : (
+          <>
+            <p className="text-base">{joined ? "Currently a member (opted in)." : "Not a member (left)."}</p>
+            <ol className="grid gap-0.5">
+              {consent.map((c, i) => (
+                <li key={`${c.at}-${i}`} className="flex flex-wrap justify-between gap-x-3 text-base">
+                  <span>{CONSENT_LABEL[c.action]}</span>
+                  <span className="text-cl-muted tabular-nums">
+                    {formatTime(c.at)} · text v{c.consentVersion}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </>
+        )}
+      </div>
+    </section>
   )
 }
 

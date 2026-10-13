@@ -84,6 +84,7 @@ describe("board helpers", () => {
     riseId,
     surface: "play",
     status: "invited",
+    crewPaused: false,
     count: 0,
     armsUsed: false,
     tier: null,
