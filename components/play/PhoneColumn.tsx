@@ -49,7 +49,7 @@ export function PhoneColumn({ patient }: { patient: SeedPatient }) {
           ) : null}
         </div>
         {session.demo && !onHome ? (
-          <span className="rounded-full border border-pt-accent/50 px-3 py-0.5 text-xl text-pt-ink">{ui.frame.demo_badge}</span>
+          <span className="shrink-0 whitespace-nowrap rounded-full border border-pt-accent/50 px-3 py-0.5 text-xl text-pt-ink">{ui.frame.demo_badge}</span>
         ) : null}
       </header>
       <div className={cn("flex min-h-0 flex-1 flex-col", onHome ? "px-1 pb-6 sm:px-0" : "p-4 sm:p-6")}>

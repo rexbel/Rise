@@ -314,6 +314,10 @@ export function LivePlay() {
                 {coachLine(session.exerciseId, ui.live)}
               </p>
             ) : null}
+            {/* Camera error only; the "Demo replay" pill on the right already says the replay is running. */}
+            {camHint && usingDemo && camHint !== ui.live.demo_badge ? (
+              <p className="mt-2 max-w-md rounded-md border border-pt-accent/40 bg-pt-bg/85 px-3 py-2 text-xl text-pt-ink">{camHint}</p>
+            ) : null}
           </div>
           <div className="flex shrink-0 flex-col items-end gap-2">
             {usingDemo ? (
@@ -348,11 +352,6 @@ export function LivePlay() {
             <div className="size-12 animate-pulse rounded-full border-4 border-pt-accent/40 border-t-pt-accent motion-reduce:animate-none" aria-hidden />
             <p className={`${playDisplay.className} text-2xl font-bold text-pt-ink`}>{ui.loading.camera}</p>
             <p className="text-xl text-pt-muted">{ui.loading.tip}</p>
-          </div>
-        ) : null}
-        {camHint && usingDemo ? (
-          <div className="absolute left-4 top-32 max-w-sm rounded-md border border-pt-accent/40 bg-pt-bg/85 px-3 py-2 text-xl text-pt-ink">
-            {camHint}
           </div>
         ) : null}
 

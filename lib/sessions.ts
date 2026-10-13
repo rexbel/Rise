@@ -202,8 +202,16 @@ export function applyResult(sessionId: string, result: SessionResult, now = Date
   if (riseIdOf(sessionId) !== result.riseId) throw new SessionError("session does not match patient", 400)
   const s = ensure(sessionId, now)
   const fresh = buildCard(result)
-  const card: TriageCard = s.card
-    ? { ...fresh, approval: s.card.approval, careTeamNote: s.card.careTeamNote }
+  // A human decision covers the card it was made on. If the patient re-answered into a different rule or
+  // recommendation, or a newly flagged note arrived, the card goes back to pending for a fresh look.
+  const prev = s.card
+  const sameDecision =
+    prev !== undefined &&
+    prev.recommendation === fresh.recommendation &&
+    prev.ruleFired === fresh.ruleFired &&
+    (prev.noteNeedsReview || !fresh.noteNeedsReview)
+  const card: TriageCard = prev
+    ? { ...fresh, approval: sameDecision ? prev.approval : "pending", careTeamNote: prev.careTeamNote }
     : fresh
   const status = card.recommendation === "human_confirm" || card.noteNeedsReview ? "needs_confirmation" : "ready"
   put({

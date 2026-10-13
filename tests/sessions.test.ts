@@ -74,14 +74,33 @@ describe("session store", () => {
     expect(getSession(sessionId)?.status).toBe("ready")
   })
 
-  it("posting the result again with a note keeps a human decision and flags risky notes", () => {
+  it("posting the result again with a plain note keeps a human decision", () => {
+    const { sessionId } = invite("rise-04", "classic")
+    applyResult(sessionId, resultFor(gary, sessionId))
+    approve(sessionId, { action: "approve", user: "Nurse A" })
+    const card = applyResult(sessionId, resultFor(gary, sessionId, { patientNote: "Knees a bit stiff today" }))
+    expect(card.approval).toBe("approved")
+    expect(card.patientNote).toBe("Knees a bit stiff today")
+  })
+
+  it("a newly flagged note reopens an approved card", () => {
     const { sessionId } = invite("rise-04", "classic")
     applyResult(sessionId, resultFor(gary, sessionId))
     approve(sessionId, { action: "approve", user: "Nurse A" })
     const card = applyResult(sessionId, resultFor(gary, sessionId, { patientNote: "I had a fall yesterday" }))
-    expect(card.approval).toBe("approved")
     expect(card.noteNeedsReview).toBe(true)
+    expect(card.approval).toBe("pending")
     expect(getSession(sessionId)?.status).toBe("needs_confirmation")
+    expect(approve(sessionId, { action: "approve", user: "Nurse A" }).card?.approval).toBe("approved")
+  })
+
+  it("re-answering into a different rule reopens an approved card", () => {
+    const { sessionId } = invite("rise-01", "play")
+    applyResult(sessionId, resultFor(ellen, sessionId))
+    approve(sessionId, { action: "approve", user: "Nurse A" })
+    const noRedFlag = { ...ellen.scripted_today.symptoms, short_of_breath_or_chest_pain: false }
+    const card = applyResult(sessionId, resultFor(ellen, sessionId, { symptoms: noRedFlag }))
+    expect(card).toMatchObject({ recommendation: "escalate_urgent", ruleFired: "decline", approval: "pending" })
   })
 
   it("Reset demo clears every session", () => {

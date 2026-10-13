@@ -332,6 +332,24 @@ const SYMPTOMS: { key: "dizzy" | "short_of_breath_or_chest_pain" | "calf_pain_or
   { key: "new_incontinence", label: "New incontinence" },
 ]
 
+const NOT_ASKED: Record<(typeof SYMPTOMS)[number]["key"], string> = {
+  short_of_breath_or_chest_pain: "Not asked",
+  calf_pain_or_swelling: "Not asked: questions stopped at the red flag",
+  dizzy: "Not asked",
+  new_incontinence: "Not asked on the phone",
+}
+
+/**
+ * The phone sends booleans for every symptom, but a red-flag Yes ends the questions before the calf question,
+ * and incontinence is never asked on the phone (demo sessions carry the scripted value). Showing "No" for
+ * those would read as a negative answer the patient never gave.
+ */
+function symptomAsked(card: TriageCard, key: (typeof SYMPTOMS)[number]["key"]): "asked" | "not_asked" | "scripted" {
+  if (key === "calf_pain_or_swelling" && card.symptoms.short_of_breath_or_chest_pain) return "not_asked"
+  if (key === "new_incontinence") return card.demoData ? "scripted" : "not_asked"
+  return "asked"
+}
+
 function SymptomsAndNote({ card }: { card: TriageCard }) {
   return (
     <section aria-labelledby="symptoms-heading" className="grid gap-3">
@@ -345,10 +363,20 @@ function SymptomsAndNote({ card }: { card: TriageCard }) {
         </div>
         {SYMPTOMS.map((q) => {
           const yes = card.symptoms[q.key]
+          const asked = symptomAsked(card, q.key)
           return (
             <div key={q.key} className="flex items-baseline justify-between gap-3 border-b border-cl-line py-1">
               <dt>{q.label}</dt>
-              <dd className="shrink-0 font-semibold">{yes ? q.red ? <RedFlag>Yes, red flag</RedFlag> : "Yes" : "No"}</dd>
+              <dd className={cn("shrink-0", asked === "not_asked" ? "text-base text-cl-muted" : "font-semibold")}>
+                {asked === "not_asked"
+                  ? NOT_ASKED[q.key]
+                  : yes
+                    ? q.red
+                      ? <RedFlag>Yes, red flag</RedFlag>
+                      : "Yes"
+                    : "No"}
+                {asked === "scripted" ? <span className="ml-1 text-base font-normal text-cl-muted">(scripted)</span> : null}
+              </dd>
             </div>
           )
         })}
