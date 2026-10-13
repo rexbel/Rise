@@ -33,11 +33,21 @@ type Sent = { link: string; surface: Surface; demo: boolean }
 
 /** Send check-in: choose a surface, create the session, then hand the coordinator the link to share. */
 export function SendCheckInDialog({ patient, onClose }: { patient: PatientSummary | null; onClose: () => void }) {
+  // Keep the last patient mounted while the dialog animates closed, so it never flashes an empty shell.
+  const open = patient !== null
+  const [shown, setShown] = useState(patient)
+  const [wasOpen, setWasOpen] = useState(open)
+  const [opens, setOpens] = useState(0)
+  if (patient && patient !== shown) setShown(patient)
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    if (open) setOpens((n) => n + 1)
+  }
   return (
-    <Dialog open={patient !== null} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className={cn(clinicFontClass, "max-h-[calc(100dvh-2rem)] overflow-y-auto border-cl-line bg-cl-surface text-cl-ink sm:max-w-xl")}>
         {/* Keyed so each patient starts from a fresh form. */}
-        {patient && <SendForm key={patient.riseId} patient={patient} />}
+        {shown && <SendForm key={`${shown.riseId}-${opens}`} patient={shown} />}
       </DialogContent>
     </Dialog>
   )

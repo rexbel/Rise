@@ -5,6 +5,7 @@ import { useId, useState } from "react"
 import { ArrowLeft, Check, CircleCheck, CircleMinus, History, Hourglass, TriangleAlert } from "lucide-react"
 import { toast } from "sonner"
 import protocol from "@/config/protocol.default.json"
+import { exerciseById } from "@/lib/play/programs"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -248,7 +249,7 @@ function Metrics({ card }: { card: TriageCard }) {
       </div>
       {isPlay ? (
         <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
-          <Big label="Reps" value={m.rawStands} note={card.exerciseId ? `Exercise: ${card.exerciseId}` : undefined} />
+          <Big label="Reps" value={m.rawStands} note={card.exerciseId ? exerciseById(card.exerciseId).name : undefined} />
           <Big
             label="Arm use"
             value={m.armsUsed ? "Yes" : "No"}
