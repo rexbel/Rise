@@ -102,11 +102,15 @@ export const SeedFile = z.object({
  * Shared by rex/pose and jeremiah/vast. Change only by PR to main; the other person rebases right away.
  * Every payload that crosses the network is a Zod schema so the receiving route can .parse() it.
  *
- *   Phone  -> POST /api/sessions/[id]/events   RepEvent           (Rex sends, Jeremiah serves)
- *   Phone  -> POST /api/sessions/[id]/clip     multipart clip     -> ClipRef
- *   Phone  -> POST /api/sessions/[id]/result   SessionResult      -> TriageCard (rules -> Cosmos -> agent)
- *   Server -> GET  /api/sessions/stream        SSE of SessionSnapshot
- *   Console-> GET  /api/search?q=              SearchHit[]
+ *   Console-> POST /api/sessions                InviteRequest      -> InviteResponse
+ *   Console-> GET  /api/sessions                -> SessionSnapshot[]
+ *   Phone  -> POST /api/sessions/[id]/events   RepEvent           -> 204
+ *   Phone  -> POST /api/sessions/[id]/clip     multipart clip     -> ClipRef (not built yet)
+ *   Phone  -> POST /api/sessions/[id]/result   SessionResult      -> TriageCard (rules on the server; idempotent per session)
+ *   Console-> POST /api/sessions/[id]/approval ApprovalRequest    -> SessionSnapshot
+ *   Console-> POST /api/sessions/reset         -> 204 (Reset demo)
+ *   Server -> GET  /api/sessions/stream        SSE of SessionStreamMessage
+ *   Console-> GET  /api/search?q=              SearchHit[] (not built yet)
  */
 
 export const PoseTier = z.enum(["yolo-onnx", "mediapipe", "remote-yolo", "seeded"])
@@ -137,10 +141,26 @@ export const RepEvent = z.discriminatedUnion("type", [
 ])
 export type RepEvent = z.infer<typeof RepEvent>
 
+/**
+ * What produced the numbers. steadi_30s = CDC 30-Second Chair Stand (classic /p flow).
+ * play_set = a RehabNinja set: a fixed rep target, not timed, so it is never compared to CDC norms or
+ * to a 30 s count, and the count-based decline rule does not apply (lib/rules.ts).
+ */
+export const SessionProtocol = z.enum(["steadi_30s", "play_set"])
+export type SessionProtocol = z.infer<typeof SessionProtocol>
+
+/** Session ids are `<riseId>-<suffix>` so the server can tie a phone's first event to a seed patient. */
+export const SESSION_ID = /^rise-\d{2}-[a-z0-9]{4,24}$/
+export const SessionId = z.string().regex(SESSION_ID)
+
 /** What the phone knows when the test and questions are done. Rex owns this shape. */
 export const SessionResult = z.object({
   sessionId: z.string(),
   riseId: z.string(),
+  protocol: SessionProtocol.default("steadi_30s"),
+  /** RehabNinja only: which exercise and its rep target. */
+  exerciseId: z.string().max(40).optional(),
+  targetReps: z.number().int().min(0).optional(),
   /** Full stands in 30 s, including arm-assisted ones and a final stand past halfway. */
   rawStands: z.number().int().min(0),
   armsUsed: z.boolean(),
@@ -284,6 +304,8 @@ export type ApprovalState = z.infer<typeof ApprovalState>
 export const TriageCard = TriageDecision.extend({
   sessionId: z.string(),
   riseId: z.string(),
+  protocol: SessionProtocol,
+  exerciseId: z.string().optional(),
   metrics: z.object({
     rawStands: z.number().int(),
     steadiScore: z.number().int(),
@@ -312,19 +334,82 @@ export const TriageCard = TriageDecision.extend({
 })
 export type TriageCard = z.infer<typeof TriageCard>
 
+/** Which patient surface the invite opens. */
+export const Surface = z.enum(["play", "classic"])
+export type Surface = z.infer<typeof Surface>
+
+/** Console -> POST /api/sessions. Creates an "invited" session and its link. */
+export const InviteRequest = z.object({ riseId: z.string().regex(/^rise-\d{2}$/), surface: Surface })
+export type InviteRequest = z.infer<typeof InviteRequest>
+
+export const InviteResponse = z.object({
+  sessionId: z.string(),
+  /** Path on this app, e.g. /play/rise-01?s=rise-01-abc123. The console prefixes the public origin. */
+  path: z.string(),
+  /** Twilio is not wired yet: always { sent: false, demoData: true } until it is. */
+  sms: z.object({ sent: z.boolean(), demoData: z.boolean() }),
+})
+export type InviteResponse = z.infer<typeof InviteResponse>
+
+/** Console -> POST /api/sessions/[id]/approval. A person decides; nothing escalates without this. */
+export const ApprovalRequest = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("approve"),
+    /** Coordinator's edit of the care-team note, if any. */
+    careTeamNote: z.string().max(2000).optional(),
+    user: z.string().min(1).max(80),
+  }),
+  z.object({
+    action: z.literal("downgrade"),
+    to: Recommendation,
+    /** Code from config/protocol.default.json -> downgrade_reasons. */
+    reasonCode: z.string().min(1).max(40),
+    freeText: z.string().max(500).optional(),
+    user: z.string().min(1).max(80),
+  }),
+])
+export type ApprovalRequest = z.infer<typeof ApprovalRequest>
+
+/** Append-only record of every human decision on a card. No patient answers or notes are copied in. */
+export const AuditEntry = z.object({
+  sessionId: z.string(),
+  riseId: z.string(),
+  action: z.enum(["invited", "approved", "downgraded", "reset"]),
+  from: Recommendation.optional(),
+  to: Recommendation.optional(),
+  reasonCode: z.string().optional(),
+  freeText: z.string().optional(),
+  user: z.string(),
+  at: At,
+})
+export type AuditEntry = z.infer<typeof AuditEntry>
+
 /** One tile on the live board (C2), pushed over SSE on every change. */
 export const SessionSnapshot = z.object({
   sessionId: z.string(),
   riseId: z.string(),
+  surface: Surface.nullable(),
   status: SessionStatus,
+  /** Live count: stands (classic) or clean reps (RehabNinja). Care-team only. */
   count: z.number().int().min(0),
   armsUsed: z.boolean(),
   tier: PoseTier.nullable(),
   card: TriageCard.optional(),
+  audit: z.array(AuditEntry),
+  invitedAt: At.nullable(),
   updatedAt: At,
   demoData: z.boolean(),
 })
 export type SessionSnapshot = z.infer<typeof SessionSnapshot>
+
+/**
+ * GET /api/sessions/stream (text/event-stream). First message is `snapshot` with every session,
+ * then `session` on each change and `reset` after Reset demo.
+ */
+export type SessionStreamMessage =
+  | { type: "snapshot"; sessions: SessionSnapshot[] }
+  | { type: "session"; session: SessionSnapshot }
+  | { type: "reset" }
 
 export interface OverrideLogEntry {
   setting: string

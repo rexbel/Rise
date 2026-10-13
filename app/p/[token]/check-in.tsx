@@ -252,6 +252,7 @@ export function CheckIn({ patient, clinicName }: { patient: SeedPatient; clinicN
       return {
         sessionId,
         riseId: patient.rise_id,
+        protocol: "steadi_30s",
         rawStands: s.rawStands,
         armsUsed: s.armsUsed,
         armsFromRep: s.armsFromRep,

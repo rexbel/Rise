@@ -69,6 +69,13 @@
     { "code": "caregiver", "label": "Caregiver or helper availability" },
     { "code": "other", "label": "Other", "requires_free_text": true }
   ],
+  "downgrade_reasons": [
+    { "code": "spoke_with_patient", "label": "Spoke with the patient; lower priority is appropriate" },
+    { "code": "known_finding", "label": "Finding already known and managed by the care team" },
+    { "code": "measurement_issue", "label": "Camera, framing, or tracking problem made the result unreliable" },
+    { "code": "in_person_soon", "label": "In-person visit already scheduled within 24 hours" },
+    { "code": "other", "label": "Other", "requires_free_text": true }
+  ],
   "billing_profiles": {
     "default_for_team": {
       "ortho_surgical_practice": "rtm_via_pt",
