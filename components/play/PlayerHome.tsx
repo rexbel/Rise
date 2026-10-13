@@ -6,7 +6,7 @@ import { Check } from "lucide-react"
 import ui from "@/content/play-ui.json"
 import { useCrewBoard } from "@/components/play/CrewBoard"
 import { playDisplay, ptFocus } from "@/components/play/playTheme"
-import { yourRow } from "@/lib/play/crewView"
+import { homeChipsRow } from "@/lib/play/crewView"
 import { crewChips, missionDose, playerHome } from "@/lib/play/playerHome"
 import type { ProgramExercise } from "@/lib/play/programs"
 import type { SeedPatient } from "@/lib/types"
@@ -32,7 +32,8 @@ export function PlayerHome({
 }) {
   const home = playerHome(patient)
   const { state: crew } = useCrewBoard(patient.rise_id)
-  const chips = crewChips(crew.status === "ready" ? yourRow(crew.board) : undefined)
+  // Chips only while the patient is on the crew: never when paused or not joined.
+  const chips = crewChips(homeChipsRow(crew.status === "ready" ? crew.board : undefined))
 
   return (
     <div className="rn-home-enter grid gap-6 motion-reduce:animate-none lg:grid-cols-12 lg:gap-8">
