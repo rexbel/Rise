@@ -10,7 +10,7 @@ import Link from "next/link"
 import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { usePlay } from "@/components/play/PlayProvider"
-import { playDisplay, ptCta, ptFocus, ptSecondary } from "@/components/play/playTheme"
+import { playDisplay, ptCta, ptFocus, ptLink, ptSecondary } from "@/components/play/playTheme"
 import lines from "@/content/patient-lines.json"
 import ui from "@/content/play-ui.json"
 import { playClose } from "@/lib/play/playResult"
@@ -113,6 +113,12 @@ export function SessionReport({ patient }: { patient: SeedPatient }) {
               {noteDone === "sent" ? ui.note.sent : ui.note.skipped}
             </p>
             {closureLine ? <p className="text-xl leading-snug text-pt-ink">{closureLine}</p> : null}
+            <p className="flex flex-wrap items-center gap-x-3 text-xl leading-snug text-pt-ink">
+              <span>{ui.crew.report_line}</span>
+              <Link href="/play#crew" className={cn(ptLink, "inline-flex min-h-14 items-center")}>
+                {ui.crew.report_link}
+              </Link>
+            </p>
           </section>
         ) : (
           <NoteBox onDone={setNoteDone} />

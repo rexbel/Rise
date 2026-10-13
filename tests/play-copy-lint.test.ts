@@ -56,8 +56,44 @@ describe("play patient copy", () => {
   })
 
   it("new patient lines stay short (under 20 words)", () => {
-    for (const text of stringsOf([playUi.week, playUi.note, playUi.emergency, playUi.close.tip_label, playUi.ready])) {
+    for (const text of stringsOf([playUi.week, playUi.note, playUi.emergency, playUi.close.tip_label, playUi.ready, playUi.crew])) {
       expect(text.split(/\s+/).length, text).toBeLessThan(20)
+    }
+  })
+})
+
+/*
+ * The crew board deliberately allows "crew" and "cheer" on the patient surface. It is engagement, not performance:
+ * still no rank, place, score, leaderboard, peer, below average, streak, missed day, or ordinal ("1st", "9th place").
+ */
+const CREW_BANNED =
+  /\b(rank\w*|places?|placed|score\w*|leaderboards?|peers?|cohorts?|streaks?|missed|miss|behind|last|winner|top|podium|trophy|below average)\b/i
+const ORDINAL = /\b\d+(st|nd|rd|th)\b|\b(first|second|third|fourth|fifth)\b/i
+
+describe("crew copy", () => {
+  const { cheers, ...rest } = playUi.crew
+
+  it("allows crew and cheer words", () => {
+    expect(playUi.crew.heading).toMatch(/crew/i)
+    expect(playUi.crew.cheer_button).toMatch(/cheer/i)
+  })
+
+  it("never ranks, places, scores, or calls out missed days", () => {
+    for (const text of stringsOf(playUi.crew)) {
+      expect(text, text).not.toMatch(BANNED)
+      expect(text, text).not.toMatch(CREW_BANNED)
+      expect(text, text).not.toMatch(ORDINAL)
+      expect(text, text).not.toMatch(/\d\s*(?:\w+\s+)?place/i)
+    }
+  })
+
+  it("has exactly the three fixed cheer phrases keyed by CheerId", () => {
+    expect(cheers).toEqual({ nice_work: "Nice work!", keep_going: "Keep going!", proud_of_you: "Proud of you!" })
+  })
+
+  it("puts counts only in {n}, {done}, or {target} templates, never literal digits", () => {
+    for (const text of stringsOf(rest)) {
+      expect(text, text).not.toMatch(/\d/)
     }
   })
 })

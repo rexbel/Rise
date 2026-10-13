@@ -1,6 +1,7 @@
 import Image from "next/image"
 import Link from "next/link"
 import { notFound } from "next/navigation"
+import { CrewBoard } from "@/components/play/CrewBoard"
 import { playBody, playDisplay, ptCta, ptLink } from "@/components/play/playTheme"
 import ui from "@/content/play-ui.json"
 import { DEFAULT_YOU_ID } from "@/lib/play/cohort"
@@ -8,7 +9,10 @@ import { missionDose, playerHome } from "@/lib/play/playerHome"
 import { getPatient } from "@/lib/seed"
 import { cn } from "@/lib/utils"
 
-/** Your week: the patient's own progress. No peers, ranks, places, or counts from stands. */
+/**
+ * Your week: the patient's own progress first (Continue stays the first action), then their crew. The crew shows
+ * days active and cheers only: no ranks, places, scores, or counts from stands.
+ */
 export default function YourWeekPage() {
   const patient = getPatient(DEFAULT_YOU_ID)
   if (!patient) notFound()
@@ -73,6 +77,8 @@ export default function YourWeekPage() {
             </Link>
           </section>
         </div>
+
+        <CrewBoard riseId={home.riseId} />
 
         <footer className="flex flex-col gap-2 border-t border-pt-line pt-5 sm:flex-row sm:items-center sm:justify-between">
           <Link href="/" className={cn(ptLink, "inline-flex min-h-14 items-center self-start")}>
