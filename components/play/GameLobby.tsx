@@ -8,14 +8,15 @@ import { playBody, playDisplay, ptCta } from "@/components/play/playTheme"
 import { cn } from "@/lib/utils"
 import ui from "@/content/play-ui.json"
 
+/** Surgeon ninja mark: teal scrub cap with the orange tie, mask. Same art as app/icon.svg. */
 function NinjaMark({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 40 40" fill="none" aria-hidden>
-      <circle cx="20" cy="20" r="20" fill="var(--pt-bg)" />
-      <rect x="8" y="14" width="24" height="5" rx="1" fill="var(--rn-orange)" />
-      <path d="M8 14 L3 10 L6 18 Z" fill="var(--rn-orange)" />
-      <path d="M8 16 L4 22 L10 18 Z" fill="var(--rn-orange)" />
-      <circle cx="26" cy="22" r="2.5" fill="white" />
+      <circle cx="20" cy="20" r="20" fill="#111111" />
+      <path d="M2 18 Q2 1 20 1 Q38 1 38 18 Z" fill="#1D9E75" />
+      <path d="M5 13 L0 10 L2 19 Z" fill="var(--rn-orange)" />
+      <circle cx="26" cy="22" r="2.6" fill="white" />
+      <path d="M8 26 H34 Q33 34 20 35 Q8 34 8 26 Z" fill="#85B7EB" />
     </svg>
   )
 }

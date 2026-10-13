@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef } from "react"
+import { DROP_EVERY_PX, pruneDrops, spawnDrop, stepDrops, type Drop } from "@/lib/play/lobbyDrops"
 
 type Phase =
   | "waiting"
@@ -26,6 +27,7 @@ const HERO_H = 30
 
 const TREE_COLORS = ["#6D8821", "#8FAC34", "#98B333"]
 
+
 type LobbyStageProps = {
   /** Pixels reserved at top for title/CTAs — playfield sits below this band. */
   topReserve?: number
@@ -35,7 +37,8 @@ type LobbyStageProps = {
 
 /**
  * Ambient Stick Hero–style loop for the RehabNinja lobby.
- * Green hills from the original; orange accents for RehabNinja.
+ * Green hills from the original; the hero is a surgeon ninja (teal scrub cap with the orange tie, white coat,
+ * mask) who drops crutches, pills, and band-aids behind him as he walks.
  * Auto-plays; no input. Pointer-events stay on the CTAs above.
  */
 export function LobbyStage({
@@ -94,6 +97,9 @@ export function LobbyStage({
     let platforms: Platform[] = []
     let sticks: Stick[] = []
     let trees: Tree[] = []
+    let drops: Drop[] = []
+    let dropCount = 0
+    let nextDropAt = 0
     let stretchTarget = 0
     const FLASH_LABELS = ["PERFECT", "COMBO ×2", "NICE", "STREAK"]
 
@@ -142,6 +148,8 @@ export function LobbyStage({
       trees = []
       for (let i = 0; i < 14; i++) generateTree()
       heroX = platforms[0]!.x + platforms[0]!.w - HERO_FROM_EDGE
+      drops = []
+      nextDropAt = heroX + DROP_EVERY_PX
       planStretch()
     }
 
@@ -224,9 +232,62 @@ export function LobbyStage({
       ctx.fill()
     }
 
+    function drawDrop(d: Drop) {
+      ctx.save()
+      // Resting supplies sit on the surface: lift each by half its height so it rests on top.
+      const lift = d.kind === "crutch" ? 2.2 : 3
+      ctx.translate(d.x, VIEW - PLATFORM_H + d.y - lift)
+      ctx.rotate(d.rot)
+      if (d.kind === "bandaid") {
+        ctx.fillStyle = "#F2C9A0"
+        drawRoundedRect(-8, -3, 16, 6, 3)
+        ctx.fillStyle = "#E7B184"
+        ctx.fillRect(-2.5, -3, 5, 6)
+        ctx.fillStyle = "#B9875A"
+        ctx.beginPath()
+        ctx.arc(-1.2, -1, 0.5, 0, Math.PI * 2)
+        ctx.arc(1.2, 1, 0.5, 0, Math.PI * 2)
+        ctx.fill()
+      } else if (d.kind === "pill") {
+        ctx.fillStyle = "#ffffff"
+        drawRoundedRect(-6, -2.5, 12, 5, 2.5)
+        ctx.fillStyle = "#f97316"
+        ctx.beginPath()
+        ctx.moveTo(0, -2.5)
+        ctx.lineTo(3.5, -2.5)
+        ctx.arc(3.5, 0, 2.5, -Math.PI / 2, Math.PI / 2)
+        ctx.lineTo(0, 2.5)
+        ctx.closePath()
+        ctx.fill()
+        ctx.strokeStyle = "#9CA3AF"
+        ctx.lineWidth = 0.5
+        ctx.stroke()
+      } else {
+        // Crutch, drawn vertical (it rests on its side)
+        ctx.strokeStyle = "#7A7F87"
+        ctx.lineWidth = 1.4
+        ctx.beginPath()
+        ctx.moveTo(-1.7, -12)
+        ctx.lineTo(-1.7, 10)
+        ctx.moveTo(1.7, -12)
+        ctx.lineTo(1.7, 10)
+        ctx.stroke()
+        ctx.fillStyle = "#4B5563"
+        drawRoundedRect(-4.5, -13.5, 9, 2.6, 1.3)
+        drawRoundedRect(-3, -1.5, 6, 2, 1)
+        ctx.fillStyle = "#111"
+        drawRoundedRect(-2.2, 9.5, 4.4, 2.2, 1)
+      }
+      ctx.restore()
+    }
+
+    function drawDrops() {
+      drops.forEach(drawDrop)
+    }
+
     function drawHero() {
       ctx.save()
-      // Stick Hero black body; orange band = RehabNinja
+      // Surgeon ninja: Stick Hero body, white coat, teal scrub cap with the orange RehabNinja tie, blue mask
       ctx.fillStyle = "black"
       ctx.translate(
         heroX - HERO_W / 2,
@@ -240,22 +301,56 @@ export function LobbyStage({
       ctx.beginPath()
       ctx.arc(-leg, 11.5, 3, 0, Math.PI * 2)
       ctx.fill()
+      // White coat over the lower body, with lapels and a red-cross pocket
+      const half = HERO_W / 2
+      ctx.fillStyle = "#ffffff"
       ctx.beginPath()
-      ctx.fillStyle = "white"
-      ctx.arc(5, -7, 3, 0, Math.PI * 2)
+      ctx.moveTo(-half, -3)
+      ctx.lineTo(half, -3)
+      ctx.lineTo(half, 6)
+      ctx.arcTo(half, 11, half - 5, 11, 5)
+      ctx.lineTo(-half + 5, 11)
+      ctx.arcTo(-half, 11, -half, 6, 5)
+      ctx.closePath()
+      ctx.fill()
+      ctx.strokeStyle = "#C9CDD3"
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(-2.5, -3)
+      ctx.lineTo(0, 2)
+      ctx.lineTo(2.5, -3)
+      ctx.stroke()
+      ctx.fillStyle = "#E24B4A"
+      drawRoundedRect(2.2, 4, 4.4, 4.4, 1)
+      ctx.strokeStyle = "#ffffff"
+      ctx.lineWidth = 0.9
+      ctx.beginPath()
+      ctx.moveTo(4.4, 4.9)
+      ctx.lineTo(4.4, 7.5)
+      ctx.moveTo(3.1, 6.2)
+      ctx.lineTo(5.7, 6.2)
+      ctx.stroke()
+      // Teal scrub cap with the orange tie trailing behind
+      ctx.fillStyle = "#1D9E75"
+      ctx.beginPath()
+      ctx.moveTo(-half - 1, -8.5)
+      ctx.quadraticCurveTo(-half - 1, -19.5, 0, -19.5)
+      ctx.quadraticCurveTo(half + 1, -19.5, half + 1, -8.5)
+      ctx.closePath()
       ctx.fill()
       ctx.fillStyle = "#f97316"
-      ctx.fillRect(-HERO_W / 2 - 1, -12, HERO_W + 2, 4.5)
       ctx.beginPath()
-      ctx.moveTo(-9, -14.5)
-      ctx.lineTo(-17, -18.5)
-      ctx.lineTo(-14, -8.5)
+      ctx.moveTo(-half, -11)
+      ctx.lineTo(-16, -14)
+      ctx.lineTo(-14.5, -7.5)
       ctx.fill()
+      // Eye and surgical mask
       ctx.beginPath()
-      ctx.moveTo(-10, -10.5)
-      ctx.lineTo(-15, -3.5)
-      ctx.lineTo(-5, -7)
+      ctx.fillStyle = "white"
+      ctx.arc(4.5, -6.3, 2.3, 0, Math.PI * 2)
       ctx.fill()
+      ctx.fillStyle = "#85B7EB"
+      drawRoundedRect(-0.8, -4.4, half + 0.8, 4.2, 1.8)
       ctx.restore()
     }
 
@@ -380,8 +475,9 @@ export function LobbyStage({
       ctx.save()
       ctx.translate((w - VIEW) / 2 - sceneOffset, sceneTop(h))
       drawPlatforms()
-      drawHero()
       drawSticks()
+      drawDrops()
+      drawHero()
       ctx.restore()
 
       drawHud()
@@ -436,6 +532,10 @@ export function LobbyStage({
         }
         case "walking": {
           heroX += dt / 1.85
+          if (heroX >= nextDropAt) {
+            drops = spawnDrop(drops, heroX - HERO_W - 2, -HERO_H + 6, dropCount++)
+            nextDropAt = heroX + DROP_EVERY_PX
+          }
           const [landed] = stickHits()
           if (landed) {
             const maxX = landed.x + landed.w - HERO_FROM_EDGE
@@ -468,6 +568,7 @@ export function LobbyStage({
               (p) => p.x + p.w > sceneOffset - 80,
             )
             sticks = sticks.filter((s) => s.x > sceneOffset - 120)
+            drops = pruneDrops(drops, sceneOffset - 60)
             while (platforms.length < 10) generatePlatform()
             trees = trees.filter((t) => t.x > sceneOffset * BG_PARALLAX - 40)
             while (trees.length < 14) generateTree()
@@ -496,6 +597,7 @@ export function LobbyStage({
         }
       }
 
+      drops = stepDrops(drops, dt)
       draw()
       lastTs = ts
       raf = requestAnimationFrame(animate)
