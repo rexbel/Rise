@@ -14,7 +14,7 @@ beforeEach(() => {
 describe("crew board", () => {
   it("parses as the contract and lists the patient's whole track, Ellen included", () => {
     const board = CrewBoard.parse(crewBoard("rise-01", NOW))
-    expect(board.track).toBe("tka")
+    expect(board.members.some((m) => m.id === "rise-08")).toBe(true) // knee crew
     expect(board.members.filter((m) => m.isYou).map((m) => m.id)).toEqual(["rise-01"])
     expect(board.members.length).toBeGreaterThan(4)
     expect(board.demoData).toBe(true)
@@ -38,10 +38,11 @@ describe("crew board", () => {
   it("a finished session makes today active once, however many sets she plays", () => {
     const before = crewBoard("rise-01", NOW).members.find((m) => m.isYou)!
     const goalBefore = crewBoard("rise-01", NOW).goal.done
+    const calm = { ...patients[0].scripted_today.symptoms, short_of_breath_or_chest_pain: false }
     const { sessionId } = invite("rise-01", "play", "A", NOW)
-    applyResult(sessionId, scriptedResult(patients[0], { sessionId }), NOW)
+    applyResult(sessionId, scriptedResult(patients[0], { sessionId, symptoms: calm }), NOW)
     const second = invite("rise-01", "play", "A", NOW + 1000).sessionId
-    applyResult(second, scriptedResult(patients[0], { sessionId: second }), NOW + 2000)
+    applyResult(second, scriptedResult(patients[0], { sessionId: second, symptoms: calm }), NOW + 2000)
     const after = crewBoard("rise-01", NOW + 3000).members.find((m) => m.isYou)!
     expect(after.activeDays).toBe(before.activeDays + 1)
     expect(after.activeToday).toBe(true)
@@ -90,5 +91,35 @@ describe("cheers", () => {
     resetSessions()
     expect(crewBoard("rise-01", NOW).members.find((m) => m.id === "rise-08")?.cheeredByYouToday).toBe(false)
     expect(crewBoard("rise-01", NOW).members.find((m) => m.isYou)?.activeToday).toBe(false)
+  })
+})
+
+describe("review fixes (crew)", () => {
+  it("a red-flag session never marks the day active", () => {
+    const { sessionId } = invite("rise-01", "play", "A", NOW)
+    applyResult(sessionId, scriptedResult(patients[0], { sessionId }), NOW) // Ellen's scripted session has the red flag
+    expect(crewBoard("rise-01", NOW + 1).members.find((m) => m.isYou)?.activeToday).toBe(false)
+    const calm = { ...patients[0].scripted_today.symptoms, short_of_breath_or_chest_pain: false }
+    const ok = invite("rise-01", "play", "A", NOW + 10).sessionId
+    applyResult(ok, scriptedResult(patients[0], { sessionId: ok, symptoms: calm }), NOW + 20)
+    expect(crewBoard("rise-01", NOW + 30).members.find((m) => m.isYou)?.activeToday).toBe(true)
+  })
+
+  it("a self-started game set counts for the crew, an emergency or classic test does not", async () => {
+    const { recordSelfStartedSet } = await import("../lib/crew")
+    const calm = { ...patients[0].scripted_today.symptoms, short_of_breath_or_chest_pain: false }
+    expect(recordSelfStartedSet(scriptedResult(patients[0], { protocol: "play_set" }), NOW)).toBe(false)
+    expect(recordSelfStartedSet(scriptedResult(patients[0], { protocol: "steadi_30s", symptoms: calm }), NOW)).toBe(false)
+    expect(recordSelfStartedSet(scriptedResult(patients[0], { protocol: "play_set", symptoms: calm }), NOW)).toBe(true)
+    expect(crewBoard("rise-01", NOW + 1).members.find((m) => m.isYou)?.activeToday).toBe(true)
+  })
+
+  it("never shows more active days than have passed this week", () => {
+    const monday = weekStart(NOW) + 9 * 3_600_000
+    for (const m of crewBoard("rise-01", monday).members) expect(m.activeDays, m.name).toBeLessThanOrEqual(1)
+  })
+
+  it("the board response has no procedure track", () => {
+    expect(JSON.stringify(crewBoard("rise-04", NOW))).not.toMatch(/"track"|tka|tha|hip_fracture|fracture/i)
   })
 })

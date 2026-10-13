@@ -1,5 +1,6 @@
 import { handle, readBody } from "@/lib/api"
-import { applyResult } from "@/lib/sessions"
+import { recordSelfStartedSet } from "@/lib/crew"
+import { applyResult, SessionError } from "@/lib/sessions"
 import { SessionResult } from "@/lib/types"
 
 /** Phone -> triage card. lib/rules.ts decides here, on the server; posting again (with a note) is safe. */
@@ -10,6 +11,11 @@ export async function POST(request: Request, ctx: RouteContext<"/api/sessions/[i
   try {
     return Response.json(applyResult(id, body.data))
   } catch (e) {
+    // Gated tunnel, uninvited session (the patient tapped Continue on their own): not for the console, but a
+    // finished non-emergency set still counts on the crew board. 202 = accepted for the crew only.
+    if (e instanceof SessionError && e.status === 404 && process.env.CONSOLE_KEY && body.data.sessionId === id && recordSelfStartedSet(body.data)) {
+      return Response.json({ crewOnly: true }, { status: 202 })
+    }
     return handle(e)
   }
 }

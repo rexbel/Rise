@@ -5,13 +5,16 @@
  */
 import protocol from "@/config/protocol.default.json"
 import peersFile from "@/content/play-board-peers.json"
+import ui from "@/content/play-ui.json"
 import { procedureFamily } from "@/lib/play/programs"
+import { triage } from "@/lib/rules"
 import { getPatient, patients } from "@/lib/seed"
-import type { CheerId, CheerRequest, CheerResponse, CrewBoard, CrewMember, SeedPatient } from "@/lib/types"
+import type { CheerId, CheerRequest, CheerResponse, CrewBoard, CrewMember, SeedPatient, SessionResult } from "@/lib/types"
 
 type Family = "tka" | "tha" | "hip_fracture"
 type Peer = (typeof peersFile.peers)[number]
-type LiveCheer = { from: string; to: string; cheerId: CheerId; at: number }
+/** client = the caller's network address, so a stranger cannot use up a patient's daily cheer quota. */
+type LiveCheer = { from: string; to: string; cheerId: CheerId; at: number; client: string }
 
 const C = protocol.crew
 const PHOTO_IDS = new Set(["rise-01", "rise-02", "rise-03", "rise-04", "rise-05", "rise-06", "rise-07", ...peersFile.peers.filter((p) => p.photo).map((p) => p.id)])
@@ -41,6 +44,11 @@ export function weekStart(at: number): number {
   d.setHours(0, 0, 0, 0)
   d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
   return d.getTime()
+}
+
+/** Days of this week so far, today included (Monday = 1). */
+function daysElapsed(now: number): number {
+  return Math.min(7, Math.floor((now - weekStart(now)) / 86_400_000) + 1)
 }
 
 /** Called by the session store when a session's first result arrives: that day counts as active. */
@@ -108,7 +116,8 @@ function member(
     avatarSrc: PHOTO_IDS.has(id) ? `/play/avatars/${id}.jpg` : null,
     initials: initialsOf(fullName),
     isYou,
-    activeDays: Math.min(7, base.activeDays),
+    // Never more days than have passed this week (seed check-ins stand in for earlier days and could overrun on a Monday).
+    activeDays: Math.min(daysElapsed(now), base.activeDays),
     activeToday: base.activeToday,
     cheersReceived: base.cheers + liveCheersTo(id, now).length,
     cheeredByYouToday: store.cheers.some((c) => c.from === viewer && c.to === id && dayKey(c.at) === today),
@@ -134,7 +143,7 @@ function nameOf(id: string): string {
   const seed = getPatient(id)
   if (seed) return shortName(seed.display_name, false)
   const peer = peersFile.peers.find((p) => p.id === id)
-  return peer ? shortName(peer.display_name, false) : "Someone on your crew"
+  return peer ? shortName(peer.display_name, false) : ui.crew.someone
 }
 
 export function crewBoard(riseId: string, now = Date.now()): CrewBoard {
@@ -149,7 +158,6 @@ export function crewBoard(riseId: string, now = Date.now()): CrewBoard {
   const live = liveCheersTo(riseId, now).map((c) => ({ fromName: nameOf(c.from), cheerId: c.cheerId, at: c.at }))
   return {
     riseId,
-    track: family,
     weekStart: weekStart(now),
     members,
     goal: { done: members.reduce((n, m) => n + m.activeDays, 0), target: members.length * C.weekly_goal_days_per_member },
@@ -162,7 +170,7 @@ export function crewBoard(riseId: string, now = Date.now()): CrewBoard {
  * One cheer per sender, recipient and day (a repeat is a no-op, not an error). Only a playable patient can send,
  * only to someone else on the same track, and at most max_cheers_per_sender_per_day a day.
  */
-export function cheer(req: CheerRequest, now = Date.now()): CheerResponse {
+export function cheer(req: CheerRequest, now = Date.now(), client = "local"): CheerResponse {
   const from = getPatient(req.from)
   if (!from) throw new CrewError("unknown sender", 404)
   if (req.from === req.to) throw new CrewError("you can't cheer yourself", 400)
@@ -177,9 +185,10 @@ export function cheer(req: CheerRequest, now = Date.now()): CheerResponse {
   store.cheers = store.cheers.filter((c) => c.at >= start)
   const already = store.cheers.some((c) => c.from === req.from && c.to === req.to && dayKey(c.at) === today)
   if (!already) {
-    const sentToday = store.cheers.filter((c) => c.from === req.from && dayKey(c.at) === today).length
+    // The sender is not authenticated in this demo, so the daily cap is per sender and caller address.
+    const sentToday = store.cheers.filter((c) => c.from === req.from && c.client === client && dayKey(c.at) === today).length
     if (sentToday >= C.max_cheers_per_sender_per_day) throw new CrewError("that's a lot of cheering for one day; try again tomorrow", 429)
-    store.cheers.push({ from: req.from, to: req.to, cheerId: req.cheerId, at: now })
+    store.cheers.push({ from: req.from, to: req.to, cheerId: req.cheerId, at: now, client })
   }
   const m = toSeed ? seedMember(toSeed, req.from, now) : peerMember(toPeer!, req.from, now)
   return { recorded: !already, member: m }
@@ -188,4 +197,17 @@ export function cheer(req: CheerRequest, now = Date.now()): CheerResponse {
 export function resetCrew() {
   store.active.clear()
   store.cheers = []
+}
+
+/**
+ * With the console key set, the board only takes invited sessions, but a patient who taps Continue on their own
+ * still showed up. A finished non-emergency game set from a known patient counts for the crew without reaching
+ * the console. Returns false (nothing recorded) for emergencies, so the phone never claims the care team was told.
+ */
+export function recordSelfStartedSet(result: SessionResult, now = Date.now()): boolean {
+  const patient = getPatient(result.riseId)
+  if (!patient || result.protocol !== "play_set") return false
+  if (triage(result, patient.checkins.at(-1), patient.episode.post_op_day_today).emergency) return false
+  markActive(result.riseId, now)
+  return true
 }

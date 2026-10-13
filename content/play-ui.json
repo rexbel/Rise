@@ -1,5 +1,5 @@
 {
-  "$comment": "Locked RehabNinja chrome. No STEADI, stand counts, ranks, peers, or clinical labels. Patient lines follow content/patient-lines.json rules.",
+  "$comment": "Locked RehabNinja chrome. No STEADI, stand counts, ranks, places, or clinical labels. Other patients appear only in `crew`: first name and initial, days active, and fixed cheers. Patient lines follow the SAMHSA trauma-informed rules in content/patient-lines.json.",
   "brand": "Rise · RehabNinja",
   "lobby": {
     "play": "Play",
@@ -68,7 +68,12 @@
     "step_back": "Step back until hips and knees are in the outline.",
     "fallback": "We could not use the camera, so a demo replay will play instead."
   },
-  "countdown": ["Three", "Two", "One", "Go"],
+  "countdown": [
+    "Three",
+    "Two",
+    "One",
+    "Go"
+  ],
   "live": {
     "prompt": "RehabNinja",
     "how": "Clean reps slice fruit. Bombs = knees in or hands pushing off.",
@@ -137,9 +142,9 @@
   },
   "crew": {
     "heading": "Your crew",
-    "intro": "People on the same recovery path. Every day you show up counts for everyone.",
+    "intro": "People on the same recovery path, cheering each other on. Only days active and cheers are shared.",
     "goal_label": "Crew goal this week",
-    "goal_progress": "{done} of {target} crew check-ins this week",
+    "goal_progress": "{done} of {target} crew days active this week",
     "goal_reached": "Your crew reached the goal this week. Nice teamwork.",
     "you": "You",
     "active_days": "Active {n} days this week",
@@ -181,9 +186,8 @@
     "chip_days": "Days active",
     "chip_days_value": "{n} this week",
     "chip_cheers": "Cheers",
-    "report_line": "Your crew can see you showed up today.",
-    "report_link": "See your crew",
-    "demo": "Demo data"
+    "demo": "Demo data",
+    "someone": "Someone on your crew"
   },
   "synthetic": "Synthetic data"
 }

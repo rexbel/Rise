@@ -445,8 +445,6 @@ export interface OverrideLogEntry {
  *   Phone -> POST /api/crew/cheers      CheerRequest -> CheerResponse (one cheer per sender, recipient and day)
  */
 
-export const ProcedureFamily = z.enum(["tka", "tha", "hip_fracture"])
-
 /** Fixed cheer phrases (copy in content/play-ui.json crew.cheers). No free text, so nothing needs moderation. */
 export const CheerId = z.enum(["nice_work", "keep_going", "proud_of_you"])
 export type CheerId = z.infer<typeof CheerId>
@@ -472,7 +470,6 @@ export type CrewMember = z.infer<typeof CrewMember>
 
 export const CrewBoard = z.object({
   riseId: RiseIdLike,
-  track: ProcedureFamily,
   /** Week start, epoch ms (Monday 00:00 server time). */
   weekStart: At,
   /** Sorted by activeDays, then name. No ordinal places are shown. */

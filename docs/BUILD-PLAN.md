@@ -617,6 +617,7 @@ Ideas cut from scope live here; nothing on this list enters the build before Dem
 - Native app with on-device pose for offline homes
 - Gait analysis from a hallway walk; wound photo assessment
 - RehabNinja XP shop, multi-character dojo, and live acl-rehab-ai session sync on player home
+- Crew board (added after the event; engagement only: days active, shared goal, fixed cheers). Before real patients: opt-in with "Leave crew" and "Hide my photo", recorded consent; a clinician-set pause that hides escalated or resting patients and blocks cheers to them; authenticated cheer senders; neutral crew names so the track does not reveal a diagnosis; clinician sign-off on the weekly goal, row ordering, and the "Keep going!" phrase
 
 ## Sources
 

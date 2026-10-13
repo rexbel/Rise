@@ -35,12 +35,12 @@ describe("crew labels", () => {
   })
 
   it("labels the crew goal in words and clamps the bar", () => {
-    expect(goalView({ done: 20, target: 30 })).toEqual({ label: "20 of 30 crew check-ins this week", value: 20, max: 30, percent: 67, reached: false })
+    expect(goalView({ done: 20, target: 30 })).toEqual({ label: "20 of 30 crew days active this week", value: 20, max: 30, percent: 67, reached: false })
     const over = goalView({ done: 35, target: 30 })
     expect(over.value).toBe(30)
     expect(over.percent).toBe(100)
     expect(over.reached).toBe(true)
-    expect(over.label).toBe("35 of 30 crew check-ins this week")
+    expect(over.label).toBe("35 of 30 crew days active this week")
   })
 
   it("writes cheers for you as a sentence", () => {

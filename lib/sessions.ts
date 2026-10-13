@@ -230,8 +230,6 @@ export function applyResult(sessionId: string, result: SessionResult, now = Date
   if (riseIdOf(sessionId) !== result.riseId) throw new SessionError("session does not match patient", 400)
   const s = ensure(sessionId, now)
   const prev = s.card
-  // A finished check-in makes today an active day on the patient's crew board (engagement only).
-  if (!prev) markActive(result.riseId, now)
   // Re-answering resends the result without the note the patient already sent; keep it.
   const fresh = buildCard(prev?.patientNote && !result.patientNote ? { ...result, patientNote: prev.patientNote } : result)
   let card: TriageCard = fresh
@@ -268,6 +266,10 @@ export function applyResult(sessionId: string, result: SessionResult, now = Date
       audit = [...audit, entry].slice(-MAX_AUDIT)
     }
   }
+  // A finished set makes today an active day on the crew board, but never a red-flag session: peers must not
+  // see "Today" (or cheer) while the patient is being told to call 911. A later re-answer of the same session
+  // does not count either; a retracted red flag waits for a person, not the crew.
+  if (!prev && !card.emergency) markActive(result.riseId, now)
   const status = card.recommendation === "human_confirm" || card.noteNeedsReview ? "needs_confirmation" : "ready"
   put({
     ...s,

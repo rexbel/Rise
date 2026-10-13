@@ -282,6 +282,8 @@ function MemberRow({
       setProblem("limit")
       setMode("idle")
       announce(C.cheer_limit)
+      // The picker unmounts with the focused phrase; return focus to Cheer instead of dropping it to the page.
+      requestAnimationFrame(() => triggerRef.current?.focus())
       return
     }
     setProblem("failed")

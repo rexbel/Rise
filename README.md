@@ -19,7 +19,7 @@ Built for the Real-Time Video Agents Hack – NYC (VAST Builders Challenge). All
 
 ## How a session plays
 
-1. **Your board.** Each patient sees their rank and score in a cohort on the same recovery track (knee or hip), with avatars and the week's received hits. Peers are on the board; only you play.
+1. **Your week and your crew.** Each patient sees their own progress, plus a crew of people on the same recovery path: first name and initial, days active this week, a shared crew goal, and three fixed cheers they can send once a day. No ranks, places, scores, reps, or procedures are shared, and a red-flag session never shows as active. The crew peers are synthetic.
 2. **Your home and today's missions.** Day since surgery, check-ins, how last time felt, and the moves the program assigns for this stage: chair sit-to-stand, mini squat, or single-leg balance.
 3. **Play.** The phone tracks the body on-device. Clean reps slice the fruit on your joints; form breaks (knees caving in, moving too fast, pushing off with your hands, leaning to one side) become bombs. A voice coach (ElevenLabs) and captions guide every step, and Stop is always on screen.
 4. **Four quick questions.** Pain, dizziness, shortness of breath or chest pain, calf pain or swelling. A yes to breath or chest pain goes straight to call-911 instructions.
