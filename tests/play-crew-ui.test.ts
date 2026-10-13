@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest"
-import { crewBoard, resetCrew } from "@/lib/crew"
+import { crewBoard, joinCrew, resetCrew } from "@/lib/crew"
 import {
   activeDaysLabel,
   CHEER_IDS,
@@ -14,7 +14,7 @@ import {
 } from "@/lib/play/crewView"
 import * as crewView from "@/lib/play/crewView"
 import { crewChips } from "@/lib/play/playerHome"
-import { CheerId } from "@/lib/types"
+import { CheerId, CREW_CONSENT_VERSION } from "@/lib/types"
 
 const NOW = new Date("2026-10-14T15:00:00").getTime()
 const MIN = 60_000
@@ -66,7 +66,8 @@ describe("crew labels", () => {
 
 describe("crew board view on the real board", () => {
   it("finds your own row and replaces a member without reordering", () => {
-    const board = crewBoard("rise-01", NOW)
+    // Your own row exists only after you join (opt-in).
+    const board = joinCrew({ riseId: "rise-01", showPhoto: true, consentVersion: CREW_CONSENT_VERSION }, NOW).board
     expect(yourRow(board)?.id).toBe("rise-01")
     const order = board.members.map((m) => m.id)
     const target = board.members.find((m) => !m.isYou)!

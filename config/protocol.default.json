@@ -70,8 +70,11 @@
     { "code": "other", "label": "Other", "requires_free_text": true }
   ],
   "crew": {
-    "$comment": "Rise defaults for the RehabNinja crew board. Engagement only: never reps, hits, or scores.",
-    "weekly_goal_days_per_member": 3,
+    "$comment": "Rise defaults for the RehabNinja crew board. Engagement only: never reps, hits, or scores. CDC STEADI sets no weekly exercise frequency; the goal follows CDC's older-adult guideline of at least 2 days a week of muscle-strengthening activity (source below). Post-op dosing belongs to the surgeon or PT protocol and overrides this.",
+    "weekly_goal_days_per_member": 2,
+    "weekly_goal_source": "https://www.cdc.gov/physical-activity-basics/guidelines/older-adults.html",
+    "neutral_names": { "tka": "Maple crew", "tha": "Harbor crew", "hip_fracture": "Cedar crew" },
+    "pause_on": ["escalate_urgent", "human_confirm"],
     "max_cheers_per_sender_per_day": 20
   },
   "downgrade_reasons": [

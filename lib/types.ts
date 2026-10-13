@@ -390,7 +390,7 @@ export const AuditEntry = z.object({
    * reopened = new answers or a flagged note sent a decided card back to pending; restarted = a demo set was replayed;
    * red_flag_retracted = the patient answered Yes to breath/chest pain, saw the 911 screen, then said it was a mistake.
    */
-  action: z.enum(["invited", "approved", "downgraded", "reopened", "restarted", "red_flag_retracted", "reset"]),
+  action: z.enum(["invited", "approved", "downgraded", "reopened", "restarted", "red_flag_retracted", "crew_resumed", "reset"]),
   from: Recommendation.optional(),
   to: Recommendation.optional(),
   reasonCode: z.string().optional(),
@@ -441,8 +441,18 @@ export interface OverrideLogEntry {
  * Social motivation without clinical comparison. These shapes carry no reps, hits, stands, scores, symptoms,
  * procedures, post-op days, or triage: only engagement (days active this week) and fixed-phrase cheers.
  *
- *   Phone -> GET  /api/crew/[riseId]   -> CrewBoard
- *   Phone -> POST /api/crew/cheers      CheerRequest -> CheerResponse (one cheer per sender, recipient and day)
+ * Membership is opt-in: joining records consent and sets an httpOnly device token (cookie rise_crew_<riseId>)
+ * that every write must carry, so the sender is authenticated, not claimed. Crews have neutral names so
+ * membership does not reveal a diagnosis. A patient whose current card is a red flag, escalation, or
+ * human-confirm is paused: hidden from the crew, out of the goal, and unable to receive cheers.
+ *
+ *   Phone   -> GET  /api/crew/[riseId]          -> CrewBoard (viewer = riseId; "joined" only with that patient's token)
+ *   Phone   -> POST /api/crew/join              CrewJoinRequest -> CrewBoard (sets the token cookie, records consent)
+ *   Phone   -> POST /api/crew/leave             { riseId } -> 204 (token required; records consent withdrawal)
+ *   Phone   -> POST /api/crew/photo             { riseId, showPhoto } -> CrewBoard (token required; recorded)
+ *   Phone   -> POST /api/crew/cheers            CheerRequest -> CheerResponse (token for `from` required)
+ *   Console -> POST /api/sessions/[id]/crew     { action: "resume", user } -> SessionSnapshot (ends a pause; audited)
+ *   Console -> GET  /api/crew/consent/[riseId]  -> ConsentRecord[]
  */
 
 /** Fixed cheer phrases (copy in content/play-ui.json crew.cheers). No free text, so nothing needs moderation. */
@@ -468,13 +478,26 @@ export const CrewMember = z.object({
 })
 export type CrewMember = z.infer<typeof CrewMember>
 
+/** Membership state of the viewer. */
+export const CrewStatus = z.enum(["not_joined", "joined", "paused"])
+export type CrewStatus = z.infer<typeof CrewStatus>
+
 export const CrewBoard = z.object({
   riseId: RiseIdLike,
+  /** Neutral crew name ("Maple crew"): never the procedure or track. */
+  crewName: z.string(),
+  /**
+   * not_joined: show the join card (members are still listed so the patient sees who they would join).
+   * paused: the care team is checking in; show the pause note, no cheers, no goal pressure.
+   */
+  status: CrewStatus,
+  /** The viewer's own photo preference (only meaningful when joined). */
+  showPhoto: z.boolean(),
   /** Week start, epoch ms (Monday 00:00 server time). */
   weekStart: At,
-  /** Sorted by activeDays, then name. No ordinal places are shown. */
+  /** Joined, unpaused members (you included when joined), sorted by activeDays then name. No places shown. */
   members: z.array(CrewMember),
-  /** Shared goal: everyone's active days count toward one target. */
+  /** Shared goal over the listed members (paused and not-joined people are excluded). */
   goal: z.object({ done: z.number().int().min(0), target: z.number().int().min(1) }),
   /** Latest cheers you received, newest first. */
   cheersForYou: z.array(z.object({ fromName: z.string(), cheerId: CheerId, at: At })).max(10),
@@ -483,6 +506,7 @@ export const CrewBoard = z.object({
 })
 export type CrewBoard = z.infer<typeof CrewBoard>
 
+/** `from` must match the device token cookie for that patient; the server refuses it otherwise (401). */
 export const CheerRequest = z.object({ from: RiseIdLike, to: RiseIdLike, cheerId: CheerId })
 export type CheerRequest = z.infer<typeof CheerRequest>
 
@@ -492,4 +516,31 @@ export const CheerResponse = z.object({
   member: CrewMember,
 })
 export type CheerResponse = z.infer<typeof CheerResponse>
+
+/** Version of the consent text shown on the join card; bump when content/play-ui.json crew.join changes. */
+export const CREW_CONSENT_VERSION = "2026-10-13"
+
+export const CrewJoinRequest = z.object({
+  riseId: RiseIdLike,
+  showPhoto: z.boolean(),
+  /** The consent text version the patient saw; must equal CREW_CONSENT_VERSION. */
+  consentVersion: z.string().max(20),
+})
+export type CrewJoinRequest = z.infer<typeof CrewJoinRequest>
+
+export const CrewLeaveRequest = z.object({ riseId: RiseIdLike })
+export const CrewPhotoRequest = z.object({ riseId: RiseIdLike, showPhoto: z.boolean() })
+
+/** Append-only consent log. Holds no clinical data. */
+export const ConsentRecord = z.object({
+  riseId: RiseIdLike,
+  action: z.enum(["joined", "left", "photo_shown", "photo_hidden"]),
+  consentVersion: z.string(),
+  source: z.enum(["patient_phone", "synthetic_seed"]),
+  at: At,
+})
+export type ConsentRecord = z.infer<typeof ConsentRecord>
+
+export const CrewResumeRequest = z.object({ action: z.literal("resume"), user: z.string().min(1).max(80) })
+export type CrewResumeRequest = z.infer<typeof CrewResumeRequest>
 

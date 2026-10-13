@@ -5,7 +5,7 @@
  * are never copied into the audit log.
  */
 import protocol from "@/config/protocol.default.json"
-import { markActive, resetCrew } from "@/lib/crew"
+import { markActive, resetCrew, syncPause } from "@/lib/crew"
 import { triage } from "@/lib/rules"
 import { getPatient, lastCheckIn } from "@/lib/seed"
 import { belowAverageCutoff } from "@/lib/steadi"
@@ -82,8 +82,26 @@ function emit(m: SessionStreamMessage) {
   }
 }
 
+/**
+ * Pause the patient on their crew while the care team is checking on them: a red flag (even retracted), an
+ * escalation, or a human-confirm card, until a person returns them to the crew (crew_resumed) or downgrades the card.
+ * A resume holds until new patient input reopens the card.
+ */
+function crewPause(s: SessionSnapshot): boolean {
+  if (!s.card) return false
+  const lastTurn = [...s.audit].reverse().find((a) => ["crew_resumed", "reopened", "red_flag_retracted", "restarted"].includes(a.action))
+  if (lastTurn?.action === "crew_resumed") return false
+  const final = finalRecommendation(s)
+  return (
+    s.card.emergency ||
+    s.card.warnings.some((w) => w.startsWith(RETRACTED_PREFIX)) ||
+    (final !== null && (protocol.crew.pause_on as string[]).includes(final))
+  )
+}
+
 function put(s: SessionSnapshot) {
   store.sessions.set(s.sessionId, s)
+  syncPause(s.riseId, s.sessionId, crewPause(s))
   if (store.sessions.size > MAX_SESSIONS) {
     // Cards waiting for a person are evicted last.
     const waiting = (x: SessionSnapshot) => (x.card?.approval === "pending" ? 1 : 0)
@@ -351,6 +369,21 @@ export function finalRecommendation(s: Pick<SessionSnapshot, "card" | "audit">):
     if (down?.to) return down.to
   }
   return s.card.recommendation
+}
+
+/** Console: return a paused patient to their crew. A person decides; audited. */
+export function resumeCrew(sessionId: string, user: string, now = Date.now()): SessionSnapshot {
+  const s = store.sessions.get(sessionId)
+  if (!s) throw new SessionError("unknown session", 404)
+  if (!crewPause(s)) throw new SessionError("not paused from the crew", 409)
+  const entry: AuditEntry = { sessionId, riseId: s.riseId, action: "crew_resumed", user, at: now }
+  return put({ ...s, audit: [...s.audit, entry].slice(-MAX_AUDIT), updatedAt: now })
+}
+
+/** Console: whether this session currently keeps the patient off their crew. */
+export function crewPaused(sessionId: string): boolean {
+  const s = store.sessions.get(sessionId)
+  return s ? crewPause(s) : false
 }
 
 export function resetSessions() {
