@@ -277,13 +277,19 @@ describe("review fixes", () => {
     expect(getSession(sessionId)?.count).toBe(3)
   })
 
-  it("a replayed demo set starts fresh; a real session's card is never cleared by the phone", () => {
-    const demo = invite("rise-01", "play").sessionId
-    applyResult(demo, resultFor(ellen, demo))
+  it("a replayed demo set starts fresh; a red-flag demo or a real session's card is never cleared by the phone", () => {
+    const demo = invite("rise-04", "play").sessionId
+    applyResult(demo, resultFor(gary, demo))
     applyEvent(demo, { type: "status", sessionId: demo, status: "setting_up", at: 1 })
     expect(getSession(demo)).toMatchObject({ status: "setting_up", count: 0 })
     expect(getSession(demo)?.card).toBeUndefined()
     expect(getSession(demo)?.audit.at(-1)?.action).toBe("restarted")
+
+    // Ellen's red flag keeps her off her crew: a replay must not clear it; only a person does.
+    const flagged = invite("rise-01", "play").sessionId
+    applyResult(flagged, resultFor(ellen, flagged))
+    applyEvent(flagged, { type: "status", sessionId: flagged, status: "setting_up", at: 1 })
+    expect(getSession(flagged)?.card?.ruleFired).toBe("red_flag")
 
     const real = invite("rise-04", "classic").sessionId
     applyResult(real, resultFor(gary, real, { demoData: false, scripted: [] }))

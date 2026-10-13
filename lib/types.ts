@@ -390,7 +390,7 @@ export const AuditEntry = z.object({
    * reopened = new answers or a flagged note sent a decided card back to pending; restarted = a demo set was replayed;
    * red_flag_retracted = the patient answered Yes to breath/chest pain, saw the 911 screen, then said it was a mistake.
    */
-  action: z.enum(["invited", "approved", "downgraded", "reopened", "restarted", "red_flag_retracted", "crew_resumed", "reset"]),
+  action: z.enum(["invited", "approved", "downgraded", "reopened", "answers_changed", "restarted", "red_flag_retracted", "crew_resumed", "reset"]),
   from: Recommendation.optional(),
   to: Recommendation.optional(),
   reasonCode: z.string().optional(),
@@ -481,7 +481,8 @@ export const CrewMember = z.object({
 export type CrewMember = z.infer<typeof CrewMember>
 
 /** Membership state of the viewer. */
-export const CrewStatus = z.enum(["not_joined", "joined", "paused"])
+/** joined_elsewhere = a member whose token is not on this phone (cleared cookie, new device). */
+export const CrewStatus = z.enum(["not_joined", "joined", "joined_elsewhere", "paused"])
 export type CrewStatus = z.infer<typeof CrewStatus>
 
 export const CrewBoard = z.object({
@@ -524,7 +525,10 @@ export const CREW_CONSENT_VERSION = "2026-10-13"
 
 export const CrewJoinRequest = z.object({
   riseId: RiseIdLike,
-  showPhoto: z.boolean(),
+  /** Omitted on a re-join from another phone: keeps the current photo choice. */
+  showPhoto: z.boolean().optional(),
+  /** The console invite's session id (?s=). Required when the console key is set (public tunnel). */
+  sessionId: z.string().max(40).optional(),
   /** The consent text version the patient saw; must equal CREW_CONSENT_VERSION. */
   consentVersion: z.string().max(20),
 })
@@ -538,11 +542,18 @@ export const ConsentRecord = z.object({
   riseId: RiseIdLike,
   action: z.enum(["joined", "left", "photo_shown", "photo_hidden"]),
   consentVersion: z.string(),
-  source: z.enum(["patient_phone", "synthetic_seed"]),
+  /** invited_link = joined from the patient's console invite link; unverified_phone = local dev without an invite. */
+  source: z.enum(["invited_link", "unverified_phone", "synthetic_seed"]),
   at: At,
 })
 export type ConsentRecord = z.infer<typeof ConsentRecord>
 
-export const CrewResumeRequest = z.object({ action: z.literal("resume"), user: z.string().min(1).max(80) })
+/** Overrides the pause default, so it needs a reason code (config crew.resume_reasons) like any override. */
+export const CrewResumeRequest = z.object({
+  action: z.literal("resume"),
+  reasonCode: z.string().min(1).max(40),
+  freeText: z.string().max(500).optional(),
+  user: z.string().min(1).max(80),
+})
 export type CrewResumeRequest = z.infer<typeof CrewResumeRequest>
 

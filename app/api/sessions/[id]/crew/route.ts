@@ -8,7 +8,7 @@ export async function POST(request: Request, ctx: RouteContext<"/api/sessions/[i
   const body = await readBody(request, CrewResumeRequest)
   if ("error" in body) return body.error
   try {
-    return Response.json(resumeCrew(id, body.data.user))
+    return Response.json(resumeCrew(id, body.data))
   } catch (e) {
     return handle(e)
   }

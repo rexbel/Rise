@@ -109,7 +109,8 @@ export function crewPanels(status: CrewStatus): CrewPanels {
     case "joined":
       return { joinCard: false, members: "cheer", intro: true, goal: true, cheersForYou: true, settings: true, pauseNote: false, homeChips: true }
     case "paused":
-      return { joinCard: false, members: "none", intro: false, goal: false, cheersForYou: false, settings: false, pauseNote: true, homeChips: false }
+      // Still a member: Leave and the photo choice stay available ("You can leave any time").
+      return { joinCard: false, members: "none", intro: false, goal: false, cheersForYou: false, settings: true, pauseNote: true, homeChips: false }
     default:
       return { joinCard: true, members: "readonly", intro: false, goal: false, cheersForYou: false, settings: false, pauseNote: false, homeChips: false }
   }
@@ -217,7 +218,8 @@ export async function postCheer(
     })
     if (res.status === 429) return { kind: "limit" }
     if (res.status === 401) return { kind: "signed_out" }
-    if (res.status === 403) return { kind: "refresh" }
+    // 403: you are on hold; 404: they left or were put on hold while this board was open. Re-sync either way.
+    if (res.status === 403 || res.status === 404) return { kind: "refresh" }
     if (!res.ok) return { kind: "failed" }
     const parsed = CheerResponse.safeParse(await res.json())
     return parsed.success ? { kind: "ok", recorded: parsed.data.recorded, member: parsed.data.member } : { kind: "failed" }
@@ -250,11 +252,19 @@ export type JoinOutcome =
   | { kind: "changed" }
   /** 403: paused while the care team checks in. */
   | { kind: "refresh" }
+  /** 403 on the public tunnel: join only from the patient's own check-in link. */
+  | { kind: "need_invite" }
   | { kind: "failed" }
 
 /** POST /api/crew/join with the consent version of the card the patient read. Not retried: it is a consent act. */
+/** The console invite's session id from this page's ?s=, which proves the join comes from the patient's own link. */
+export function inviteSessionId(search: string = typeof window === "undefined" ? "" : window.location.search): string | undefined {
+  const s = new URLSearchParams(search).get("s")
+  return s && /^rise-\d{2}-[a-z0-9]{4,24}$/.test(s) ? s : undefined
+}
+
 export async function joinCrewCall(
-  req: { riseId: string; showPhoto: boolean },
+  req: { riseId: string; showPhoto?: boolean; sessionId?: string },
   opts: { fetchImpl?: FetchLike; timeoutMs?: number; consentVersion?: string } = {},
 ): Promise<JoinOutcome> {
   const doFetch = opts.fetchImpl ?? ((input, init) => fetch(input, init))
@@ -262,11 +272,14 @@ export async function joinCrewCall(
     const res = await postJson(
       doFetch,
       "/api/crew/join",
-      { riseId: req.riseId, showPhoto: req.showPhoto, consentVersion: opts.consentVersion ?? CREW_CONSENT_VERSION },
+      { riseId: req.riseId, showPhoto: req.showPhoto, sessionId: req.sessionId, consentVersion: opts.consentVersion ?? CREW_CONSENT_VERSION },
       opts.timeoutMs ?? CREW_TIMEOUT_MS,
     )
     if (res.status === 409) return { kind: "changed" }
-    if (res.status === 403) return { kind: "refresh" }
+    if (res.status === 403) {
+      const body = (await res.json().catch(() => null)) as { error?: string } | null
+      return /check-in link/.test(body?.error ?? "") ? { kind: "need_invite" } : { kind: "refresh" }
+    }
     if (!res.ok) return { kind: "failed" }
     const board = await boardFrom(res)
     return board ? { kind: "ok", board } : { kind: "failed" }
@@ -307,4 +320,9 @@ export async function leaveCrewCall(riseId: string, opts: { fetchImpl?: FetchLik
   } catch {
     return { kind: "failed" }
   }
+}
+
+/** "Your week" link that keeps the invite id, so joining the crew there is tied to the patient's own link. */
+export function weekHref(sessionId: string | undefined): string {
+  return sessionId ? `/play?s=${encodeURIComponent(sessionId)}` : "/play"
 }

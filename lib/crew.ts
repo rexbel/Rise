@@ -33,7 +33,7 @@ type LiveCheer = { from: string; to: string; cheerId: CheerId; at: number; clien
 const C = protocol.crew
 const PHOTO_IDS = new Set(["rise-01", "rise-02", "rise-03", "rise-04", "rise-05", "rise-06", "rise-07", ...peersFile.peers.filter((p) => p.photo).map((p) => p.id)])
 
-type Membership = { joinedAt: number; showPhoto: boolean }
+type Membership = { joinedAt: number; showPhoto: boolean; source: ConsentRecord["source"] }
 type Store = {
   active: Map<string, Set<string>>
   cheers: LiveCheer[]
@@ -41,8 +41,8 @@ type Store = {
   members: Map<string, Membership>
   /** Device token -> riseId. Set as an httpOnly cookie on join; required for every write. */
   tokens: Map<string, string>
-  /** riseId -> the session whose card paused them. */
-  paused: Map<string, string>
+  /** riseId -> sessions whose cards keep them paused (any one is enough). */
+  paused: Map<string, Set<string>>
   consent: ConsentRecord[]
 }
 const g = globalThis as typeof globalThis & { __riseCrew?: Store }
@@ -184,9 +184,18 @@ function visibleSeed(seed: SeedPatient[]): SeedPatient[] {
   return seed.filter((p) => store.members.has(p.rise_id) && !store.paused.has(p.rise_id))
 }
 
+/** Pause is shown only to the patient's own phone; to anyone else a paused patient looks like a non-member. */
 function statusOf(riseId: string, authed: boolean): CrewBoard["status"] {
-  if (store.paused.has(riseId)) return "paused"
-  return authed && store.members.has(riseId) ? "joined" : "not_joined"
+  const member = store.members.has(riseId)
+  if (!member) return "not_joined"
+  if (!authed) return "joined_elsewhere"
+  return store.paused.has(riseId) ? "paused" : "joined"
+}
+
+/** Whether `id` (seed patient or synthetic peer) is visible to the crew right now. */
+function visible(id: string): boolean {
+  if (!getPatient(id)) return true // synthetic peers
+  return store.members.has(id) && !store.paused.has(id)
 }
 
 /** The board as `riseId` sees it. `authed` = the request carried this patient's device token. */
@@ -203,7 +212,10 @@ export function crewBoard(riseId: string, now = Date.now(), authed = false): Cre
     ...peers.map((p) => peerMember(p, riseId, now)),
   ].sort((a, b) => b.activeDays - a.activeDays || a.name.localeCompare(b.name))
   const seeded = seededCheersTo(riseId).map((c) => ({ fromName: nameOf(c.from), cheerId: c.cheer_id as CheerId, at: now - c.minutes_ago * 60_000 }))
-  const live = liveCheersTo(riseId, now).map((c) => ({ fromName: nameOf(c.from), cheerId: c.cheerId, at: c.at }))
+  // People who left or are paused drop out of everyone's feed too.
+  const live = liveCheersTo(riseId, now)
+    .filter((c) => visible(c.from))
+    .map((c) => ({ fromName: nameOf(c.from), cheerId: c.cheerId, at: c.at }))
   return {
     riseId,
     crewName: C.neutral_names[family],
@@ -227,7 +239,7 @@ export function cheer(req: CheerRequest, now = Date.now(), client = "local", aut
   if (!from) throw new CrewError("unknown sender", 404)
   if (!authed) throw new CrewError("join your crew on this phone first", 401)
   if (!store.members.has(req.from)) throw new CrewError("join your crew first", 403)
-  if (store.paused.has(req.from)) throw new CrewError("your crew is paused while your care team checks in", 403)
+  if (store.paused.has(req.from)) throw new CrewError("your crew is on hold", 403)
   if (req.from === req.to) throw new CrewError("you can't cheer yourself", 400)
   const family = procedureFamily(from)
   const { seed, peers } = crewIds(family)
@@ -261,8 +273,8 @@ export function resetCrew() {
 
 /* ---------- Membership, consent, device tokens ---------- */
 
-function logConsent(riseId: string, action: ConsentRecord["action"], now: number) {
-  store.consent.push({ riseId, action, consentVersion: CREW_CONSENT_VERSION, source: "patient_phone", at: now })
+function logConsent(riseId: string, action: ConsentRecord["action"], now: number, source: ConsentRecord["source"]) {
+  store.consent.push({ riseId, action, consentVersion: CREW_CONSENT_VERSION, source, at: now })
 }
 
 /** True when `token` is this patient's device token. */
@@ -270,26 +282,37 @@ export function tokenMatches(riseId: string, token: string | undefined): boolean
   return !!token && store.tokens.get(token) === riseId
 }
 
-/** Opt in after the patient read the join card. Returns a fresh device token for the cookie. */
-export function joinCrew(req: CrewJoinRequest, now = Date.now()): { token: string; board: CrewBoard } {
+/**
+ * Opt in after the patient read the join card. `verified` = the request carried the patient's console invite
+ * (required on the public tunnel); it is recorded as the consent source. Returns a fresh device token.
+ */
+export function joinCrew(req: CrewJoinRequest, now = Date.now(), verified = false): { token: string; board: CrewBoard } {
   if (!getPatient(req.riseId)) throw new CrewError("unknown patient", 404)
   if (req.consentVersion !== CREW_CONSENT_VERSION) throw new CrewError("the join text changed; please read it again", 409)
-  if (store.paused.has(req.riseId)) throw new CrewError("your crew is paused while your care team checks in", 403)
+  if (store.paused.has(req.riseId)) throw new CrewError("your crew is on hold", 403)
+  const source = verified ? "invited_link" : "unverified_phone"
   const token = randomBytes(24).toString("base64url")
   store.tokens.set(token, req.riseId)
-  const wasMember = store.members.has(req.riseId)
-  store.members.set(req.riseId, { joinedAt: store.members.get(req.riseId)?.joinedAt ?? now, showPhoto: req.showPhoto })
-  if (!wasMember) logConsent(req.riseId, "joined", now)
-  logConsent(req.riseId, req.showPhoto ? "photo_shown" : "photo_hidden", now)
+  // Keep only the newest few tokens per patient (old phones fall back to "joined elsewhere").
+  const mine = [...store.tokens].filter(([, id]) => id === req.riseId).map(([t]) => t)
+  for (const t of mine.slice(0, Math.max(0, mine.length - C.max_tokens_per_patient))) store.tokens.delete(t)
+
+  const prev = store.members.get(req.riseId)
+  const showPhoto = req.showPhoto ?? prev?.showPhoto ?? false
+  store.members.set(req.riseId, { joinedAt: prev?.joinedAt ?? now, showPhoto, source: prev?.source === "invited_link" ? "invited_link" : source })
+  if (!prev) logConsent(req.riseId, "joined", now, source)
+  // Record a photo choice only when it is new or changed (a re-join from another phone keeps it).
+  if (!prev || prev.showPhoto !== showPhoto) logConsent(req.riseId, showPhoto ? "photo_shown" : "photo_hidden", now, source)
   return { token, board: crewBoard(req.riseId, now, true) }
 }
 
 /** Withdraw: leaves the crew everywhere, revokes every device token for this patient. */
 export function leaveCrew(riseId: string, now = Date.now()) {
-  if (!store.members.has(riseId)) return
+  const m = store.members.get(riseId)
+  if (!m) return
   store.members.delete(riseId)
   for (const [t, id] of store.tokens) if (id === riseId) store.tokens.delete(t)
-  logConsent(riseId, "left", now)
+  logConsent(riseId, "left", now, m.source)
 }
 
 export function setPhoto(riseId: string, showPhoto: boolean, now = Date.now()): CrewBoard {
@@ -297,7 +320,7 @@ export function setPhoto(riseId: string, showPhoto: boolean, now = Date.now()): 
   if (!m) throw new CrewError("join your crew first", 403)
   if (m.showPhoto !== showPhoto) {
     store.members.set(riseId, { ...m, showPhoto })
-    logConsent(riseId, showPhoto ? "photo_shown" : "photo_hidden", now)
+    logConsent(riseId, showPhoto ? "photo_shown" : "photo_hidden", now, m.source)
   }
   return crewBoard(riseId, now, true)
 }
@@ -310,8 +333,11 @@ export function consentLog(riseId: string): ConsentRecord[] {
 
 /** The session store calls this whenever a card changes. A pause belongs to the session that set it. */
 export function syncPause(riseId: string, sessionId: string, shouldPause: boolean) {
-  if (shouldPause) store.paused.set(riseId, sessionId)
-  else if (store.paused.get(riseId) === sessionId) store.paused.delete(riseId)
+  const holds = store.paused.get(riseId) ?? new Set<string>()
+  if (shouldPause) holds.add(sessionId)
+  else holds.delete(sessionId)
+  if (holds.size) store.paused.set(riseId, holds)
+  else store.paused.delete(riseId)
 }
 
 export function isPaused(riseId: string): boolean {
@@ -326,7 +352,8 @@ export function isPaused(riseId: string): boolean {
 export function recordSelfStartedSet(result: SessionResult, now = Date.now()): boolean {
   const patient = getPatient(result.riseId)
   if (!patient || result.protocol !== "play_set") return false
-  if (triage(result, patient.checkins.at(-1), patient.episode.post_op_day_today).emergency) return false
+  // Only an on-track set counts: any escalation from an uninvited set must not show the patient as active.
+  if (triage(result, patient.checkins.at(-1), patient.episode.post_op_day_today).recommendation !== "continue_plan") return false
   markActive(result.riseId, now)
   return true
 }

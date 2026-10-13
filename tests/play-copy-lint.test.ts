@@ -110,9 +110,11 @@ describe("crew copy", () => {
     expect(shared).toMatch(/initial/)
     expect(shared).toMatch(/days/)
     expect(shared).toMatch(/cheers/)
-    expect(playUi.crew.join_private).toEqual(["How you did", "Your answers", "Your health"])
+    expect(playUi.crew.join_private).toEqual(["How you did in your exercises", "Your answers to health questions", "Messages with your care team"])
     expect(playUi.crew.join_button).toBe("Join my crew")
     expect(playUi.crew.join_note).toBe("You can leave any time.")
+    // Disclosed before joining: a care-team check-in hides you from your crew.
+    expect(playUi.crew.join_hold_note).toMatch(/care team checks in/)
     expect(playUi.crew.photo_label).toBe("Show my photo")
     expect(playUi.crew.leave_confirm).toBe("Leave your crew? You can join again later.")
   })

@@ -142,10 +142,10 @@
   },
   "crew": {
     "heading": "Your crew",
-    "intro": "People on the same recovery path, cheering each other on. Only days active and cheers are shared.",
+    "intro": "People on the same recovery path, cheering each other on. Only your name, days active, and cheers are shared.",
     "goal_label": "Crew goal this week",
     "goal_progress": "{done} of {target} crew days active this week",
-    "goal_reached": "Your crew reached the goal this week. Nice teamwork.",
+    "goal_reached": "Your crew showed up together this week.",
     "you": "You",
     "active_days": "Active {n} days this week",
     "active_day_one": "Active one day this week",
@@ -171,7 +171,7 @@
     "for_you_line": "{name} sent: {cheer}",
     "for_you_empty": "Cheers from your crew will show up here.",
     "join_heading": "Want to join your crew?",
-    "join_body": "Your crew cheers each other on through the week. It is your choice.",
+    "join_body": "Your crew is on a recovery path like yours. They cheer each other on. It is your choice.",
     "join_shared_label": "What your crew sees",
     "join_shared": [
       "Your name with one initial, like Sam T.",
@@ -180,9 +180,9 @@
     ],
     "join_private_label": "What your crew never sees",
     "join_private": [
-      "How you did",
-      "Your answers",
-      "Your health"
+      "How you did in your exercises",
+      "Your answers to health questions",
+      "Messages with your care team"
     ],
     "join_button": "Join my crew",
     "join_sending": "Joining your crew",
@@ -209,8 +209,8 @@
     "leave_sending": "Leaving your crew",
     "leave_done": "You left your crew. You can join again any time.",
     "leave_failed": "Leaving did not go through yet. You can try again.",
-    "paused_heading": "Resting for now",
-    "paused_body": "Your crew is resting while your care team checks in. Take the time you need.",
+    "paused_heading": "Crew on hold",
+    "paused_body": "Your crew is on hold while your care team checks in. Your crew does not see why.",
     "empty": "Your crew is just getting started. Others will show up here soon.",
     "loading": "Loading your crew",
     "error": "Your crew could not load right now. You can still play.",
@@ -228,7 +228,12 @@
     "chip_days_value": "{n} this week",
     "chip_cheers": "Cheers",
     "demo": "Demo data",
-    "someone": "Someone on your crew"
+    "someone": "Someone on your crew",
+    "elsewhere_heading": "You are on your crew",
+    "elsewhere_body": "This phone does not know you yet. Join again here to change settings or leave.",
+    "elsewhere_button": "Join again on this phone",
+    "join_need_invite": "Please open the check-in link your care team sent, then join from there.",
+    "join_hold_note": "If your care team checks in with you, your crew will not see you for a while."
   },
   "synthetic": "Synthetic data"
 }

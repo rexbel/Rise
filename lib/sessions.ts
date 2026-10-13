@@ -12,6 +12,7 @@ import { belowAverageCutoff } from "@/lib/steadi"
 import {
   SESSION_ID,
   type ApprovalRequest,
+  type CrewResumeRequest,
   type AuditEntry,
   type Recommendation,
   type RepEvent,
@@ -84,12 +85,14 @@ function emit(m: SessionStreamMessage) {
 
 /**
  * Pause the patient on their crew while the care team is checking on them: a red flag (even retracted), an
- * escalation, or a human-confirm card, until a person returns them to the crew (crew_resumed) or downgrades the card.
- * A resume holds until new patient input reopens the card.
+ * escalation, or a human-confirm card, until a person returns them to the crew (crew_resumed, only on a decided card)
+ * or downgrades the card. Any change in the patient's answers after that (answers_changed, reopened, a retracted red
+ * flag, a new set) ends the resume, so a later red flag always pauses again.
  */
 function crewPause(s: SessionSnapshot): boolean {
   if (!s.card) return false
-  const lastTurn = [...s.audit].reverse().find((a) => ["crew_resumed", "reopened", "red_flag_retracted", "restarted"].includes(a.action))
+  const turns = ["crew_resumed", "answers_changed", "reopened", "red_flag_retracted", "restarted"]
+  const lastTurn = [...s.audit].reverse().find((a) => turns.includes(a.action))
   if (lastTurn?.action === "crew_resumed") return false
   const final = finalRecommendation(s)
   return (
@@ -108,6 +111,8 @@ function put(next: SessionSnapshot) {
     const waiting = (x: SessionSnapshot) => (x.card?.approval === "pending" ? 1 : 0)
     const oldest = [...store.sessions.values()].sort((a, b) => waiting(a) - waiting(b) || a.updatedAt - b.updatedAt)[0]
     store.sessions.delete(oldest.sessionId)
+    // An evicted session can no longer be resumed from the console, so it stops holding a pause.
+    syncPause(oldest.riseId, oldest.sessionId, false)
   }
   emit({ type: "session", session: s })
   return s
@@ -153,7 +158,9 @@ export function invite(riseId: string, surface: Surface, user = "Demo coordinato
 export function applyEvent(sessionId: string, e: RepEvent, now = Date.now()): SessionSnapshot {
   if (e.sessionId !== sessionId) throw new SessionError("session id mismatch", 400)
   const s = ensure(sessionId, now)
-  if (s.card && e.type === "status" && e.status === "setting_up" && s.card.demoData) {
+  // A demo replay may restart a set, but never one that is keeping the patient off their crew: only a person
+  // lifts that (crew_resumed or a downgrade).
+  if (s.card && e.type === "status" && e.status === "setting_up" && s.card.demoData && !crewPause(s)) {
     // A replayed demo set (presenter Restart keeps the id) starts a fresh attempt. Cards from a real,
     // non-demo session are never cleared by the phone.
     const entry: AuditEntry = { sessionId, riseId: s.riseId, action: "restarted", from: s.card.recommendation, user: "Patient phone (demo replay)", at: now }
@@ -284,6 +291,10 @@ export function applyResult(sessionId: string, result: SessionResult, now = Date
     if (prev.approval !== "pending" && card.approval === "pending") {
       const entry: AuditEntry = { sessionId, riseId: s.riseId, action: "reopened", from: prev.recommendation, to: fresh.recommendation, user: "Rise rules (new patient input)", at: now }
       audit = [...audit, entry].slice(-MAX_AUDIT)
+    } else if (!sameFindings(prev, fresh)) {
+      // Pending card, new answers: recorded so a crew resume never outlives them.
+      const entry: AuditEntry = { sessionId, riseId: s.riseId, action: "answers_changed", from: prev.recommendation, to: fresh.recommendation, user: "Rise rules (new patient input)", at: now }
+      audit = [...audit, entry].slice(-MAX_AUDIT)
     }
   }
   // A finished set makes today an active day on the crew board, but never a red-flag session: peers must not
@@ -374,11 +385,25 @@ export function finalRecommendation(s: Pick<SessionSnapshot, "card" | "audit">):
 }
 
 /** Console: return a paused patient to their crew. A person decides; audited. */
-export function resumeCrew(sessionId: string, user: string, now = Date.now()): SessionSnapshot {
+export function resumeCrew(sessionId: string, req: CrewResumeRequest, now = Date.now()): SessionSnapshot {
   const s = store.sessions.get(sessionId)
   if (!s) throw new SessionError("unknown session", 404)
   if (!crewPause(s)) throw new SessionError("not paused from the crew", 409)
-  const entry: AuditEntry = { sessionId, riseId: s.riseId, action: "crew_resumed", user, at: now }
+  if (s.card?.approval === "pending") throw new SessionError("decide the card first", 409)
+  const reason = protocol.crew.resume_reasons.find((r) => r.code === req.reasonCode)
+  if (!reason) throw new SessionError("unknown reason code", 400)
+  if ("requires_free_text" in reason && reason.requires_free_text && !req.freeText?.trim()) {
+    throw new SessionError("this reason needs a note", 400)
+  }
+  const entry: AuditEntry = {
+    sessionId,
+    riseId: s.riseId,
+    action: "crew_resumed",
+    reasonCode: req.reasonCode,
+    freeText: req.freeText?.trim() || undefined,
+    user: req.user,
+    at: now,
+  }
   return put({ ...s, audit: [...s.audit, entry].slice(-MAX_AUDIT), updatedAt: now })
 }
 

@@ -20,6 +20,7 @@ import { questionKind, questionText } from "@/lib/play/questionCopy"
 import { speak, speakLines } from "@/lib/play/speak"
 import type { QuestionId } from "@/lib/play/types"
 import type { SeedPatient } from "@/lib/types"
+import { weekHref } from "@/lib/play/crewView"
 import { cn } from "@/lib/utils"
 
 export function PhoneColumn({ patient }: { patient: SeedPatient }) {
@@ -71,7 +72,7 @@ export function PhoneColumn({ patient }: { patient: SeedPatient }) {
 }
 
 function PhoneBody({ patient }: { patient: SeedPatient }) {
-  const { session, dispatch, begin, voiceStopOn, setVoiceStopOn } = usePlay()
+  const { session, dispatch, begin, voiceStopOn, setVoiceStopOn, sessionId } = usePlay()
   const { phase } = session
   const home = useMemo(() => playerHome(patient), [patient])
   const missionKey = home.missions.map((m) => m.id).join("|")
@@ -113,7 +114,7 @@ function PhoneBody({ patient }: { patient: SeedPatient }) {
                   Voice Stop {voiceStopOn ? "on" : "off"}
                 </Button>
               ) : null}
-              <Link href="/play" className={cn(ptLink, "inline-flex min-h-14 items-center self-start")}>
+              <Link href={weekHref(sessionId)} className={cn(ptLink, "inline-flex min-h-14 items-center self-start")}>
                 {ui.home.back_week}
               </Link>
             </>

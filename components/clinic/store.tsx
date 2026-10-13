@@ -28,7 +28,7 @@ type Store = {
   invite: (riseId: string, surface: Surface) => Promise<ApiResult<InviteResponse>>
   decide: (sessionId: string, req: ApprovalRequest) => Promise<ApiResult<SessionSnapshot>>
   /** Return a paused patient to their crew (audited on the server). */
-  resumeCrew: (sessionId: string) => Promise<ApiResult<SessionSnapshot>>
+  resumeCrew: (sessionId: string, reasonCode: string, freeText?: string) => Promise<ApiResult<SessionSnapshot>>
   reset: () => Promise<ApiResult<null>>
   refresh: () => Promise<void>
 }
@@ -152,10 +152,14 @@ export function ClinicProvider({ patients, children }: { patients: PatientSummar
   )
 
   const resumeCrew = useCallback(
-    async (sessionId: string) => {
+    async (sessionId: string, reasonCode: string, freeText?: string) => {
       const r = await call(
         `/api/sessions/${encodeURIComponent(sessionId)}/crew`,
-        { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "resume", user: DEMO_USER }) },
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "resume", reasonCode, freeText, user: DEMO_USER }),
+        },
         (res) => res.json() as Promise<SessionSnapshot>,
       )
       if (r.ok) upsert(r.data)

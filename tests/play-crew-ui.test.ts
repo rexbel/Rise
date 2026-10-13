@@ -185,7 +185,7 @@ describe("crew panels by membership status", () => {
       intro: false,
       goal: false,
       cheersForYou: false,
-      settings: false,
+      settings: true, // Leave and photo stay available while on hold
       pauseNote: true,
       homeChips: false,
     })

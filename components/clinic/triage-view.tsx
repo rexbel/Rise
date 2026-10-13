@@ -673,16 +673,38 @@ const CONSENT_LABEL: Record<ConsentRecord["action"], string> = {
   photo_hidden: "Chose to hide their photo",
 }
 
+const CONSENT_SOURCE: Record<ConsentRecord["source"], string> = {
+  invited_link: "from their invite link",
+  unverified_phone: "unverified phone (no invite)",
+  synthetic_seed: "synthetic",
+}
+
+/** Why this session keeps the patient off their crew, in the words the card should use. */
+function pauseTrigger(card: TriageCard | undefined): "red_flag" | "retracted" | "recommendation" {
+  if (card?.emergency) return "red_flag"
+  if (card?.warnings.some((w) => w.startsWith("Red flag retracted"))) return "retracted"
+  return "recommendation"
+}
+
 /**
  * The patient's crew (peer encouragement board): whether this session keeps them off it, a person's control to
- * return them, and their consent log. Peers never see why someone is paused; they just stop seeing them.
+ * return them (a decided card and a reason code, like any override), and their consent log. Peers never see why
+ * someone is on hold; they just stop seeing them.
  */
 function CrewPanel({ s }: { s: SessionSnapshot }) {
   const { resumeCrew } = useClinic()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [reason, setReason] = useState("")
+  const [freeText, setFreeText] = useState("")
   const [consent, setConsent] = useState<ConsentRecord[] | null>(null)
+  const id = useId()
+  const decided = !!s.card && s.card.approval !== "pending"
+  const reasonDef = protocol.crew.resume_reasons.find((r) => r.code === reason)
+  const needsText = !!reasonDef && "requires_free_text" in reasonDef && reasonDef.requires_free_text === true
 
+  // Refetch only when membership-relevant things change, not on every live rep event.
+  const auditLen = s.audit.length
   useEffect(() => {
     let live = true
     fetch(`/api/crew/consent/${encodeURIComponent(s.riseId)}`, { cache: "no-store", signal: AbortSignal.timeout(8000) })
@@ -692,14 +714,19 @@ function CrewPanel({ s }: { s: SessionSnapshot }) {
     return () => {
       live = false
     }
-  }, [s.riseId, s.updatedAt])
+  }, [s.riseId, auditLen, s.crewPaused])
 
   const joined = consent ? [...consent].reverse().find((c) => c.action === "joined" || c.action === "left")?.action === "joined" : null
+  const trigger = pauseTrigger(s.card)
 
   async function resume() {
+    if (!reason || (needsText && !freeText.trim())) {
+      setError("Pick a reason (and add a note for Other) before returning them to their crew.")
+      return
+    }
     setBusy(true)
     setError(null)
-    const r = await resumeCrew(s.sessionId)
+    const r = await resumeCrew(s.sessionId, reason, freeText.trim() || undefined)
     setBusy(false)
     if (r.ok) toast.success("Returned to their crew.")
     else setError(r.message)
@@ -716,21 +743,55 @@ function CrewPanel({ s }: { s: SessionSnapshot }) {
           <p className="flex items-start gap-2 text-base">
             <PauseCircle aria-hidden className="mt-0.5 size-5 shrink-0 text-status-confirm" />
             <span>
-              <span className="font-semibold">Paused from their crew.</span> Peers no longer see them or can cheer them; they see a
-              resting note. This lifts when you return them or downgrade the card.
+              <span className="font-semibold">On hold from their crew.</span> Peers no longer see them or can cheer them; the
+              patient sees &quot;Crew on hold&quot; and can still leave.{" "}
+              {trigger === "recommendation"
+                ? "This lifts when you return them, or when a downgrade takes the card below Escalate urgent and Confirm with a person."
+                : trigger === "red_flag"
+                  ? "A red flag stays on hold until a person returns them, whatever the card is downgraded to."
+                  : "A red flag the patient retracted stays on hold until a person returns them."}
             </span>
           </p>
+          {decided ? (
+            <div className="grid gap-2">
+              <Label htmlFor={`${id}-reason`} className="text-base font-semibold">
+                Reason to return them
+              </Label>
+              <Select value={reason} onValueChange={setReason}>
+                <SelectTrigger id={`${id}-reason`} className="h-11 text-base">
+                  <SelectValue placeholder="Choose a reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  {protocol.crew.resume_reasons.map((r) => (
+                    <SelectItem key={r.code} value={r.code} className="text-base">
+                      {r.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {needsText ? (
+                <>
+                  <Label htmlFor={`${id}-why`} className="text-base font-semibold">
+                    Note
+                  </Label>
+                  <Textarea id={`${id}-why`} value={freeText} onChange={(e) => setFreeText(e.target.value)} className="text-base" rows={2} />
+                </>
+              ) : null}
+            </div>
+          ) : (
+            <p className="text-base text-cl-muted">Decide the card first. Then you can return them to their crew with a reason.</p>
+          )}
           {error && (
             <p role="alert" className="text-base text-status-escalate">
               {error}
             </p>
           )}
-          <Button type="button" variant="outline" className="h-11 text-base" disabled={busy} onClick={resume}>
+          <Button type="button" variant="outline" className="h-11 text-base" disabled={busy || !decided} onClick={resume}>
             Return to their crew
           </Button>
         </>
       ) : (
-        <p className="text-base text-cl-muted">Not paused by this session.</p>
+        <p className="text-base text-cl-muted">This session does not keep them off their crew.</p>
       )}
       <div className="grid gap-1">
         <Eyebrow>Consent</Eyebrow>
@@ -743,10 +804,12 @@ function CrewPanel({ s }: { s: SessionSnapshot }) {
             <p className="text-base">{joined ? "Currently a member (opted in)." : "Not a member (left)."}</p>
             <ol className="grid gap-0.5">
               {consent.map((c, i) => (
-                <li key={`${c.at}-${i}`} className="flex flex-wrap justify-between gap-x-3 text-base">
-                  <span>{CONSENT_LABEL[c.action]}</span>
+                <li key={`${c.at}-${i}`} className="grid text-base">
+                  <span>
+                    {CONSENT_LABEL[c.action]} <span className="text-cl-muted">({CONSENT_SOURCE[c.source]})</span>
+                  </span>
                   <span className="text-cl-muted tabular-nums">
-                    {formatTime(c.at)} · text v{c.consentVersion}
+                    {formatTime(c.at)} · join text v{c.consentVersion}
                   </span>
                 </li>
               ))}
@@ -759,6 +822,7 @@ function CrewPanel({ s }: { s: SessionSnapshot }) {
 }
 
 const REASON_LABEL = new Map(protocol.downgrade_reasons.map((r) => [r.code, r.label]))
+const RESUME_REASON_LABEL = new Map(protocol.crew.resume_reasons.map((r) => [r.code, r.label]))
 
 function Audit({ s }: { s: SessionSnapshot }) {
   const card = s.card
@@ -793,7 +857,11 @@ function Audit({ s }: { s: SessionSnapshot }) {
                     : `${RECOMMENDATION_LABEL[a.from]} → ${RECOMMENDATION_LABEL[a.to]}`}
                 </p>
               )}
-              {a.reasonCode && <p className="text-base text-cl-muted">Reason: {REASON_LABEL.get(a.reasonCode) ?? a.reasonCode}</p>}
+              {a.reasonCode && (
+                <p className="text-base text-cl-muted">
+                  Reason: {(a.action === "crew_resumed" ? RESUME_REASON_LABEL : REASON_LABEL).get(a.reasonCode) ?? a.reasonCode}
+                </p>
+              )}
               {a.freeText && <p className="text-base text-cl-muted">“{a.freeText}”</p>}
               <p className="text-sm text-cl-muted">{a.user}</p>
             </li>

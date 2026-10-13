@@ -14,7 +14,7 @@ import {
   tokenMatches,
   weekStart,
 } from "../lib/crew"
-import { applyResult, approve, getSession, invite, resetSessions, resumeCrew } from "../lib/sessions"
+import { applyEvent, applyResult, approve, getSession, invite, resetSessions, resumeCrew } from "../lib/sessions"
 import { patients, scriptedResult } from "../lib/seed"
 import { CheerResponse, CREW_CONSENT_VERSION, CrewBoard } from "../lib/types"
 
@@ -25,6 +25,12 @@ const calm = { ...ellen.scripted_today.symptoms, short_of_breath_or_chest_pain: 
 
 /** Opt in as a patient; returns the device token the cookie would carry. */
 const join = (riseId: string, showPhoto = true) => joinCrew({ riseId, showPhoto, consentVersion: CREW_CONSENT_VERSION }, NOW).token
+const RESUME = { action: "resume" as const, reasonCode: "spoke_with_patient", user: "Nurse A" }
+/** A person decides the card, then returns the patient to their crew with a reason. */
+const decideAndResume = (sid: string, at = NOW) => {
+  approve(sid, { action: "approve", user: "Nurse A" }, at)
+  return resumeCrew(sid, RESUME, at + 1)
+}
 const you = (riseId: string, at = NOW) => crewBoard(riseId, at, true).members.find((m) => m.isYou)
 
 beforeEach(() => {
@@ -90,11 +96,13 @@ describe("crew board", () => {
     join("rise-01")
     const sid = invite("rise-01", "play", "A", NOW).sessionId
     applyResult(sid, scriptedResult(ellen, { sessionId: sid }), NOW)
-    resumeCrew(sid, "Nurse A", NOW + 1) // back on the board, so her row is visible to check
+    decideAndResume(sid, NOW + 1) // back on the board, so her row is visible to check
     expect(you("rise-01", NOW + 2)?.activeToday).toBe(false)
     expect(recordSelfStartedSet(scriptedResult(ellen, { protocol: "steadi_30s", symptoms: calm }), NOW)).toBe(false)
-    expect(recordSelfStartedSet(scriptedResult(ellen, { protocol: "play_set", symptoms: calm }), NOW + 3)).toBe(true)
-    expect(you("rise-01", NOW + 4)?.activeToday).toBe(true)
+    // Ellen's set still escalates (new arm use), so it does not count; an on-track set does.
+    expect(recordSelfStartedSet(scriptedResult(ellen, { protocol: "play_set", symptoms: calm }), NOW + 3)).toBe(false)
+    const gary = patients.find((p) => p.rise_id === "rise-04")!
+    expect(recordSelfStartedSet(scriptedResult(gary, { protocol: "play_set" }), NOW + 3)).toBe(true)
   })
 })
 
@@ -106,8 +114,8 @@ describe("opt-in and consent", () => {
     expect(tokenMatches("rise-02", token)).toBe(false)
     expect(crewBoard("rise-02", NOW).members.find((m) => m.id === "rise-01")).toMatchObject({ name: "Ellen M.", avatarSrc: null })
     expect(consentLog("rise-01").map((c) => [c.action, c.source, c.consentVersion])).toEqual([
-      ["joined", "patient_phone", CREW_CONSENT_VERSION],
-      ["photo_hidden", "patient_phone", CREW_CONSENT_VERSION],
+      ["joined", "unverified_phone", CREW_CONSENT_VERSION],
+      ["photo_hidden", "unverified_phone", CREW_CONSENT_VERSION],
     ])
   })
 
@@ -180,7 +188,7 @@ describe("pause while the care team checks in", () => {
     const own = crewBoard("rise-02", NOW, true)
     expect(own).toMatchObject({ status: "paused", members: [], cheersForYou: [] })
     expect(() => cheer({ from: "rise-01", to: "rise-02", cheerId: "keep_going" }, NOW, "x", true)).toThrow(/not on your crew/)
-    expect(() => cheer({ from: "rise-02", to: "rise-08", cheerId: "nice_work" }, NOW, "x", true)).toThrow(/paused/)
+    expect(() => cheer({ from: "rise-02", to: "rise-08", cheerId: "nice_work" }, NOW, "x", true)).toThrow(/on hold/)
     expect(getSession(sid)?.card?.recommendation).toBe("escalate_urgent")
   })
 
@@ -195,10 +203,14 @@ describe("pause while the care team checks in", () => {
 
   it("a person returns them to the crew (audited); a downgrade to continue plan also lifts it", () => {
     const sid = escalateJudith()
-    const s = resumeCrew(sid, "Nurse A", NOW + 5)
-    expect(s.audit.at(-1)).toMatchObject({ action: "crew_resumed", user: "Nurse A" })
+    expect(() => resumeCrew(sid, RESUME, NOW + 2)).toThrow(/decide the card first/)
+    approve(sid, { action: "approve", user: "Nurse A" }, NOW + 3)
+    expect(() => resumeCrew(sid, { ...RESUME, reasonCode: "made_up" }, NOW + 4)).toThrow(/reason/)
+    expect(() => resumeCrew(sid, { ...RESUME, reasonCode: "other" }, NOW + 4)).toThrow(/needs a note/)
+    const s = resumeCrew(sid, RESUME, NOW + 5)
+    expect(s.audit.at(-1)).toMatchObject({ action: "crew_resumed", user: "Nurse A", reasonCode: "spoke_with_patient" })
     expect(isPaused("rise-02")).toBe(false)
-    expect(() => resumeCrew(sid, "Nurse A")).toThrow(/not paused/)
+    expect(() => resumeCrew(sid, RESUME)).toThrow(/not paused/)
 
     const sid2 = invite("rise-02", "play", "A", NOW + 100).sessionId
     applyResult(sid2, scriptedResult(judith, { sessionId: sid2 }), NOW + 110)
@@ -218,3 +230,80 @@ describe("pause while the care team checks in", () => {
     expect(crewBoard("rise-01", NOW).status).toBe("not_joined")
   })
 })
+
+describe("review round 3", () => {
+  it("new answers after a resume always pause again, even a red flag on the same session", () => {
+    join("rise-02")
+    const sid = invite("rise-02", "play", "A", NOW).sessionId
+    applyResult(sid, scriptedResult(judith, { sessionId: sid }), NOW)
+    decideAndResume(sid, NOW + 1)
+    expect(isPaused("rise-02")).toBe(false)
+    const redFlag = { ...judith.scripted_today.symptoms, short_of_breath_or_chest_pain: true }
+    applyResult(sid, scriptedResult(judith, { sessionId: sid, symptoms: redFlag }), NOW + 10)
+    expect(isPaused("rise-02")).toBe(true)
+    expect(crewBoard("rise-01", NOW + 11).members.some((m) => m.id === "rise-02")).toBe(false)
+  })
+
+  it("pause shows only to the patient's own phone; others see a non-member", () => {
+    escalate("rise-02")
+    expect(crewBoard("rise-02", NOW, false).status).toBe("joined_elsewhere")
+    expect(crewBoard("rise-02", NOW, true).status).toBe("paused")
+    expect(JSON.stringify(crewBoard("rise-01", NOW, false))).not.toMatch(/paused|rise-02/)
+  })
+
+  it("a demo Restart cannot clear a pause", () => {
+    const sid = escalate("rise-02")
+    applyEvent(sid, { type: "status", sessionId: sid, status: "setting_up", at: 1 }, NOW + 5)
+    expect(isPaused("rise-02")).toBe(true)
+    expect(getSession(sid)?.card).toBeDefined()
+  })
+
+  it("any of a patient's sessions keeps them paused; resuming one does not lift another", () => {
+    const a = escalate("rise-02")
+    const b = invite("rise-02", "play", "A", NOW + 50).sessionId
+    applyResult(b, scriptedResult(judith, { sessionId: b }), NOW + 60)
+    decideAndResume(b, NOW + 70)
+    expect(isPaused("rise-02")).toBe(true)
+    decideAndResume(a, NOW + 80)
+    expect(isPaused("rise-02")).toBe(false)
+  })
+
+  it("people who left or are paused drop out of everyone's cheers feed", () => {
+    join("rise-01")
+    join("rise-02")
+    cheer({ from: "rise-02", to: "rise-01", cheerId: "nice_work" }, NOW, "x", true)
+    expect(crewBoard("rise-01", NOW + 1, true).cheersForYou[0]?.fromName).toBe("Judith K.")
+    leaveCrew("rise-02", NOW + 2)
+    expect(crewBoard("rise-01", NOW + 3, true).cheersForYou.some((c) => c.fromName === "Judith K.")).toBe(false)
+  })
+
+  it("only an on-track self-started set counts as active", () => {
+    const calf = { ...judith.scripted_today.symptoms } // calf signal -> escalate_urgent
+    expect(recordSelfStartedSet(scriptedResult(judith, { protocol: "play_set", symptoms: calf }), NOW)).toBe(false)
+  })
+
+  it("a re-join from another phone keeps the photo choice and logs nothing new; tokens are capped", () => {
+    joinCrew({ riseId: "rise-01", showPhoto: true, consentVersion: CREW_CONSENT_VERSION }, NOW)
+    const before = consentLog("rise-01").length
+    const tokens = Array.from({ length: 7 }, (_, i) => joinCrew({ riseId: "rise-01", consentVersion: CREW_CONSENT_VERSION }, NOW + i).token)
+    expect(consentLog("rise-01")).toHaveLength(before)
+    expect(you("rise-01")?.avatarSrc).toBe("/play/avatars/rise-01.jpg")
+    expect(tokens.filter((t) => tokenMatches("rise-01", t))).toHaveLength(5)
+    expect(tokenMatches("rise-01", tokens[6])).toBe(true)
+  })
+
+  it("consent records whether the join came from the invite link", () => {
+    joinCrew({ riseId: "rise-01", showPhoto: false, consentVersion: CREW_CONSENT_VERSION }, NOW, true)
+    joinCrew({ riseId: "rise-02", showPhoto: false, consentVersion: CREW_CONSENT_VERSION }, NOW, false)
+    expect(consentLog("rise-01")[0].source).toBe("invited_link")
+    expect(consentLog("rise-02")[0].source).toBe("unverified_phone")
+  })
+})
+
+function escalate(riseId: "rise-02") {
+  join(riseId)
+  const sid = invite(riseId, "play", "A", NOW).sessionId
+  applyResult(sid, scriptedResult(judith, { sessionId: sid }), NOW)
+  return sid
+}
+

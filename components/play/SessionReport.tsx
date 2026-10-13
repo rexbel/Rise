@@ -17,6 +17,7 @@ import { playClose } from "@/lib/play/playResult"
 import { exerciseById } from "@/lib/play/programs"
 import { cancel, speakLines } from "@/lib/play/speak"
 import type { SeedPatient } from "@/lib/types"
+import { weekHref } from "@/lib/play/crewView"
 import { cn } from "@/lib/utils"
 
 type Step = "tip" | "today" | "nurse"
@@ -26,7 +27,7 @@ type Step = "tip" | "today" | "nurse"
  * note to the nurse. Each step speaks only its own lines; the closure line comes last, after the note.
  */
 export function SessionReport({ patient }: { patient: SeedPatient }) {
-  const { session, dispatch, result, clinicName } = usePlay()
+  const { session, dispatch, result, clinicName, sessionId } = usePlay()
   const finishedSet = session.finishedSet
   const workout = exerciseById(finishedSet?.exerciseId ?? session.exerciseId)
   const close = useMemo(
@@ -127,7 +128,7 @@ export function SessionReport({ patient }: { patient: SeedPatient }) {
         ) : noteDone ? (
           <>
             <Button asChild className={ptCta}>
-              <Link href="/play">{ui.close.change_profile}</Link>
+              <Link href={weekHref(sessionId)}>{ui.close.change_profile}</Link>
             </Button>
             {session.demo ? (
               <Button type="button" className={ptSecondary} onClick={() => dispatch({ type: "BACK_TO_QUESTIONS" })}>

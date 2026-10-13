@@ -24,6 +24,7 @@ import {
   cheerPhrase,
   cheersCountLabel,
   crewPanels,
+  inviteSessionId,
   fetchCrewBoard,
   goalView,
   joinCrewCall,
@@ -219,13 +220,30 @@ function CrewReady({
     [announce, board, refresh, setBoard, setNotice],
   )
 
-  if (panels.pauseNote) return <PauseNote />
+  if (panels.pauseNote) {
+    return (
+      <>
+        <PauseNote />
+        {panels.settings ? (
+          <CrewSettings
+            board={board}
+            setBoard={setBoard}
+            refresh={refresh}
+            announce={announce}
+            onLeft={() => toJoinCard(C.leave_done)}
+            onSignedOut={() => toJoinCard(C.join_again)}
+          />
+        ) : null}
+      </>
+    )
+  }
 
   return (
     <>
       {panels.joinCard ? (
         <JoinCard
           riseId={board.riseId}
+          elsewhere={board.status === "joined_elsewhere"}
           notice={notice}
           onJoined={(next) => {
             setNotice(null)
@@ -302,6 +320,7 @@ function PauseNote() {
 
 function JoinCard({
   riseId,
+  elsewhere,
   notice,
   onJoined,
   onChanged,
@@ -309,6 +328,8 @@ function JoinCard({
   onFailed,
 }: {
   riseId: string
+  /** Already a member, but this phone has no token (new phone, cleared cookies). */
+  elsewhere: boolean
   notice: string | null
   onJoined: (b: CrewBoardData) => void
   onChanged: () => Promise<void>
@@ -316,6 +337,8 @@ function JoinCard({
   onFailed: () => void
 }) {
   const [showPhoto, setShowPhoto] = useState(false)
+  const [photoTouched, setPhotoTouched] = useState(false)
+  const [inviteNeeded, setInviteNeeded] = useState(false)
   const [sending, setSending] = useState(false)
   const headingRef = useRef<HTMLHeadingElement>(null)
 
@@ -328,11 +351,13 @@ function JoinCard({
 
   const join = async () => {
     setSending(true)
-    const out = await joinCrewCall({ riseId, showPhoto })
+    // A member re-joining from another phone keeps their photo choice unless they touched the switch.
+    const out = await joinCrewCall({ riseId, showPhoto: elsewhere && !photoTouched ? undefined : showPhoto, sessionId: inviteSessionId() })
     if (out.kind === "ok") return onJoined(out.board)
     setSending(false)
     if (out.kind === "changed") await onChanged()
     else if (out.kind === "refresh") onPaused()
+    else if (out.kind === "need_invite") setInviteNeeded(true)
     else onFailed()
   }
 
@@ -349,10 +374,17 @@ function JoinCard({
           tabIndex={-1}
           className={cn(ptFocus, `${playDisplay.className} rounded-md text-2xl font-bold leading-snug text-pt-ink sm:text-3xl`)}
         >
-          {C.join_heading}
+          {elsewhere ? C.elsewhere_heading : C.join_heading}
         </h3>
-        <p className="mt-2 text-xl leading-snug text-pt-ink">{C.join_body}</p>
+        <p className="mt-2 text-xl leading-snug text-pt-ink">{elsewhere ? C.elsewhere_body : C.join_body}</p>
       </div>
+
+      {inviteNeeded ? (
+        <p role="alert" className="flex items-start gap-3 rounded-xl border border-pt-line bg-pt-surface-2 px-4 py-3 text-xl leading-snug text-pt-ink">
+          <Info className="mt-0.5 size-6 shrink-0 text-pt-accent" aria-hidden />
+          {C.join_need_invite}
+        </p>
+      ) : null}
 
       {notice ? (
         <p className="flex items-start gap-3 rounded-xl border border-pt-line bg-pt-surface-2 px-4 py-3 text-xl leading-snug text-pt-ink">
@@ -366,13 +398,23 @@ function JoinCard({
         <ShareList label={C.join_private_label} items={C.join_private} icon="private" />
       </div>
 
-      <PhotoSwitch checked={showPhoto} disabled={sending} onChange={setShowPhoto} />
+      {elsewhere ? null : (
+        <PhotoSwitch
+          checked={showPhoto}
+          disabled={sending}
+          onChange={(v) => {
+            setPhotoTouched(true)
+            setShowPhoto(v)
+          }}
+        />
+      )}
 
       <div className="flex flex-col gap-3">
         <Button type="button" disabled={sending} onClick={() => void join()} className={cn(ptCta, playDisplay.className, "text-2xl disabled:opacity-70")}>
-          {sending ? C.join_sending : C.join_button}
+          {sending ? C.join_sending : elsewhere ? C.elsewhere_button : C.join_button}
         </Button>
         <p className="text-xl leading-snug text-pt-muted">{C.join_note}</p>
+        <p className="text-xl leading-snug text-pt-muted">{C.join_hold_note}</p>
       </div>
     </section>
   )

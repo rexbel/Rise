@@ -187,6 +187,8 @@ export function auditActionLabel(a: AuditEntry): string {
       return "Red flag tapped, then retracted by the patient"
     case "crew_resumed":
       return "Returned to their crew"
+    case "answers_changed":
+      return "Patient answers changed"
     case "reset":
       return "Reset"
   }
