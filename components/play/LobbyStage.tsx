@@ -114,8 +114,8 @@ export function LobbyStage({
     const sinus = (deg: number) => Math.sin((deg / 180) * Math.PI)
 
     function generatePlatform() {
-      const prev = last(platforms)
-      const furthest = prev.x + prev.w
+      const prev = platforms[platforms.length - 1]
+      const furthest = prev ? prev.x + prev.w : sceneOffset + 50
       // Tight gaps so the ninja keeps hopping across several blocks
       const gap = 36 + Math.floor(Math.random() * 55)
       const w = 36 + Math.floor(Math.random() * 40)
@@ -155,7 +155,7 @@ export function LobbyStage({
 
     /** Next platform to the right of the current stick anchor. */
     function nextPlatformAfterStick(): Platform | undefined {
-      const stickX = last(sticks).x
+      const stickX = sticks[sticks.length - 1]?.x ?? sceneOffset
       return platforms.find((p) => p.x >= stickX - 0.5)
     }
 
@@ -496,7 +496,9 @@ export function LobbyStage({
         raf = requestAnimationFrame(animate)
         return
       }
-      const dt = ts - lastTs
+      // Clamp the step: after a backgrounded tab or a hot reload one giant frame would scroll the camera past
+      // every platform, the prune below would empty the world, and the loop would crash.
+      const dt = Math.min(50, ts - lastTs)
 
       switch (phase) {
         case "waiting": {
