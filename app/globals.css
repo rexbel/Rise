@@ -30,6 +30,11 @@
   --status-confirm: oklch(0.666 0.179 58.318);
   --status-callback: oklch(0.546 0.245 262.881);
   --status-ok: oklch(0.527 0.154 150.069);
+
+  /* RehabNinja journey tokens */
+  --rn-cream: #fef1e1;
+  --rn-ink: #18181b;
+  --rn-orange: #f97316;
 }
 
 .dark {
@@ -97,3 +102,27 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Keep the Line phone column stays portrait-shaped; clinic strip hides below lg. */
+.portrait-phone {
+  min-height: 100%;
+}
+
+/* Player home: one-shot entrance (opacity only on the block, not a looping pulse). */
+@keyframes rn-home-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .rn-home-enter {
+    animation: rn-home-enter 0.35s ease-out both;
+  }
+}
+

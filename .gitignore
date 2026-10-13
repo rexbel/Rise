@@ -46,5 +46,6 @@ next-env.d.ts
 .venv/
 __pycache__/
 public/models/*.onnx
+/*.onnx
 *.pt
 !.env.example

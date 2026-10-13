@@ -1,0 +1,118 @@
+{
+  "$comment": "Locked RehabNinja chrome. No STEADI, stand counts, or clinical labels.",
+  "brand": "Rise · RehabNinja",
+  "lobby": {
+    "play": "Play",
+    "choose_profile": "Your board",
+    "pitch_demo": "Try a demo",
+    "tagline": "Stand in front of your camera. Good moves slice fruit."
+  },
+  "picker": {
+    "title": "Your board",
+    "body": "You’re on the knee track with your cohort. Only you can play — peers are here for the board.",
+    "cta": "Sign up or sign in",
+    "continue": "Continue as {name} →",
+    "roster": "Received hits"
+  },
+  "home": {
+    "eyebrow": "Your home",
+    "you_badge": "You",
+    "missions_label": "Missions today",
+    "mission_badge_today": "Today",
+    "mission_badge_selected": "Selected",
+    "hint": "Fruit on your joints = good form. Bombs when knees drift or hands push off.",
+    "begin": "Begin",
+    "back_board": "Back to your board",
+    "demo_chip": "Demo data",
+    "meta_checkins": "{n} check-ins",
+    "chips": {
+      "rank": "Board place",
+      "hits": "Board hits"
+    },
+    "recovery": {
+      "tka": "Knee recovery",
+      "tha": "Hip recovery",
+      "hip_fracture": "Fracture recovery"
+    },
+    "trend": {
+      "harder": "Felt harder than last time",
+      "same": "About the same as last time",
+      "better": "Felt easier than last time"
+    },
+    "next_today": "Today",
+    "next_tomorrow": "Tomorrow",
+    "next_in_days": "In {days} days",
+    "next_prefix": "Next"
+  },
+  "program": {
+    "pick_hint": "Tap a mission, then Begin.",
+    "sets_reps": "{sets} × {reps}",
+    "hold": "Hold {sec}s"
+  },
+  "loading": {
+    "camera": "Get ready — stand in frame",
+    "tip": "We’ll open the camera next."
+  },
+  "ready": {
+    "title": "Before you start",
+    "body": "Sturdy chair behind you? Feeling OK to start?",
+    "continue": "I am ready",
+    "not_now": "Not now"
+  },
+  "frame": {
+    "title": "We need to see you",
+    "body": "Stand so your hips, knees, and feet are in the outline.",
+    "continue": "Continue",
+    "demo_badge": "Demo replay"
+  },
+  "countdown": ["Three", "Two", "One", "Go"],
+  "live": {
+    "prompt": "RehabNinja",
+    "how": "Clean reps slice fruit. Bombs = knees in or hands pushing off.",
+    "coach": {
+      "sit_to_stand": "Stand up — fruit slices when knees stay over your feet.",
+      "mini_squat": "Squat and rise — slice when you come up with knees out.",
+      "single_leg_balance": "Hold steady — fruit fills when you stay balanced."
+    },
+    "tracking_soft": "We need a clearer view — step back a little.",
+    "step_back": "Step back so we can see your knees — then keep playing.",
+    "stop": "Stop",
+    "pause": "Pause",
+    "demo_badge": "Demo replay",
+    "reps_label": "Reps",
+    "hold_label": "Hold"
+  },
+  "paused": {
+    "title": "It is okay to pause.",
+    "keep_going": "Keep going",
+    "finish_here": "Finish here"
+  },
+  "status": {
+    "stable": "Safe and controlled",
+    "compensating": "Some form changes",
+    "overloaded": "Your knee needs a break",
+    "unsafe": "Stop and adjust",
+    "recovery": "Recovery focus"
+  },
+  "questions": {
+    "yes": "Yes",
+    "no": "No",
+    "next": "Next"
+  },
+  "emergency": {
+    "yes_i_meant_that": "Yes, I meant that",
+    "mistap": "No, go back",
+    "call": "Call now"
+  },
+  "close": {
+    "title": "Your session",
+    "workout_label": "Workout",
+    "hits_label": "Hits",
+    "timeline_label": "Hit timeline",
+    "care_team": "Your care team can review this session on the clinic board.",
+    "done": "Done",
+    "back_to_questions": "Answer questions again",
+    "change_profile": "Back to your board"
+  },
+  "synthetic": "Synthetic data"
+}

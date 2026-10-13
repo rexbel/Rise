@@ -1,0 +1,53 @@
+{
+  "$comment": "Display-only RehabNinja board peers (same track as you). Not playable seed patients.",
+  "peers": [
+    {
+      "id": "rise-08",
+      "display_name": "Margaret Chen",
+      "family": "tka",
+      "procedure": "Right total knee arthroplasty",
+      "post_op_day": 5,
+      "hits": 14
+    },
+    {
+      "id": "rise-09",
+      "display_name": "Robert Hayes",
+      "family": "tka",
+      "procedure": "Left total knee arthroplasty",
+      "post_op_day": 12,
+      "hits": 9
+    },
+    {
+      "id": "rise-10",
+      "display_name": "Patricia Novak",
+      "family": "tka",
+      "procedure": "Right total knee arthroplasty",
+      "post_op_day": 4,
+      "hits": 5
+    },
+    {
+      "id": "rise-11",
+      "display_name": "Frank Delgado",
+      "family": "tka",
+      "procedure": "Left total knee arthroplasty",
+      "post_op_day": 18,
+      "hits": 16
+    },
+    {
+      "id": "rise-12",
+      "display_name": "Helen Okonkwo",
+      "family": "tka",
+      "procedure": "Right total knee arthroplasty",
+      "post_op_day": 9,
+      "hits": 7
+    },
+    {
+      "id": "rise-13",
+      "display_name": "Arthur Kim",
+      "family": "tka",
+      "procedure": "Left total knee arthroplasty",
+      "post_op_day": 2,
+      "hits": 2
+    }
+  ]
+}
