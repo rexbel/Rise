@@ -69,6 +69,11 @@
     { "code": "caregiver", "label": "Caregiver or helper availability" },
     { "code": "other", "label": "Other", "requires_free_text": true }
   ],
+  "crew": {
+    "$comment": "Rise defaults for the RehabNinja crew board. Engagement only: never reps, hits, or scores.",
+    "weekly_goal_days_per_member": 3,
+    "max_cheers_per_sender_per_day": 20
+  },
   "downgrade_reasons": [
     { "code": "spoke_with_patient", "label": "Spoke with the patient; lower priority is appropriate" },
     { "code": "known_finding", "label": "Finding already known and managed by the care team" },

@@ -5,6 +5,7 @@
  * are never copied into the audit log.
  */
 import protocol from "@/config/protocol.default.json"
+import { markActive, resetCrew } from "@/lib/crew"
 import { triage } from "@/lib/rules"
 import { getPatient, lastCheckIn } from "@/lib/seed"
 import { belowAverageCutoff } from "@/lib/steadi"
@@ -229,6 +230,8 @@ export function applyResult(sessionId: string, result: SessionResult, now = Date
   if (riseIdOf(sessionId) !== result.riseId) throw new SessionError("session does not match patient", 400)
   const s = ensure(sessionId, now)
   const prev = s.card
+  // A finished check-in makes today an active day on the patient's crew board (engagement only).
+  if (!prev) markActive(result.riseId, now)
   // Re-answering resends the result without the note the patient already sent; keep it.
   const fresh = buildCard(prev?.patientNote && !result.patientNote ? { ...result, patientNote: prev.patientNote } : result)
   let card: TriageCard = fresh
@@ -350,5 +353,6 @@ export function finalRecommendation(s: Pick<SessionSnapshot, "card" | "audit">):
 
 export function resetSessions() {
   store.sessions.clear()
+  resetCrew()
   emit({ type: "reset" })
 }

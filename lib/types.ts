@@ -436,3 +436,63 @@ export interface OverrideLogEntry {
   user: string
   at: string
 }
+
+/* ---------- Crew board (RehabNinja socialization) ----------
+ * Social motivation without clinical comparison. These shapes carry no reps, hits, stands, scores, symptoms,
+ * procedures, post-op days, or triage: only engagement (days active this week) and fixed-phrase cheers.
+ *
+ *   Phone -> GET  /api/crew/[riseId]   -> CrewBoard
+ *   Phone -> POST /api/crew/cheers      CheerRequest -> CheerResponse (one cheer per sender, recipient and day)
+ */
+
+export const ProcedureFamily = z.enum(["tka", "tha", "hip_fracture"])
+
+/** Fixed cheer phrases (copy in content/play-ui.json crew.cheers). No free text, so nothing needs moderation. */
+export const CheerId = z.enum(["nice_work", "keep_going", "proud_of_you"])
+export type CheerId = z.infer<typeof CheerId>
+
+const RiseIdLike = z.string().regex(/^rise-\d{2}$/)
+
+export const CrewMember = z.object({
+  id: RiseIdLike,
+  /** First name, plus last initial for everyone but you ("Margaret C."). */
+  name: z.string(),
+  /** Photo, or null to show initials. */
+  avatarSrc: z.string().nullable(),
+  initials: z.string().max(3),
+  isYou: z.boolean(),
+  /** Distinct days with a finished check-in this week (0-7). Engagement only, never performance. */
+  activeDays: z.number().int().min(0).max(7),
+  activeToday: z.boolean(),
+  cheersReceived: z.number().int().min(0),
+  /** Whether you already cheered this member today (the button is spent until tomorrow). */
+  cheeredByYouToday: z.boolean(),
+})
+export type CrewMember = z.infer<typeof CrewMember>
+
+export const CrewBoard = z.object({
+  riseId: RiseIdLike,
+  track: ProcedureFamily,
+  /** Week start, epoch ms (Monday 00:00 server time). */
+  weekStart: At,
+  /** Sorted by activeDays, then name. No ordinal places are shown. */
+  members: z.array(CrewMember),
+  /** Shared goal: everyone's active days count toward one target. */
+  goal: z.object({ done: z.number().int().min(0), target: z.number().int().min(1) }),
+  /** Latest cheers you received, newest first. */
+  cheersForYou: z.array(z.object({ fromName: z.string(), cheerId: CheerId, at: At })).max(10),
+  /** Peers and their cheers are synthetic. */
+  demoData: z.boolean(),
+})
+export type CrewBoard = z.infer<typeof CrewBoard>
+
+export const CheerRequest = z.object({ from: RiseIdLike, to: RiseIdLike, cheerId: CheerId })
+export type CheerRequest = z.infer<typeof CheerRequest>
+
+export const CheerResponse = z.object({
+  /** False when you had already cheered this member today (idempotent; nothing new recorded). */
+  recorded: z.boolean(),
+  member: CrewMember,
+})
+export type CheerResponse = z.infer<typeof CheerResponse>
+

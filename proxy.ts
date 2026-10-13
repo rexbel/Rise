@@ -70,5 +70,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/clinic", "/clinic/:path*", "/api/sessions", "/api/sessions/:path*", "/api/debug/:path*", "/api/cosmos/:path*"],
+  matcher: ["/clinic", "/clinic/:path*", "/api/sessions", "/api/sessions/:path*", "/api/crew/:path*", "/api/debug/:path*", "/api/cosmos/:path*"],
 }
