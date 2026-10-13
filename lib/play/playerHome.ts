@@ -2,7 +2,7 @@
  * Player home and "Your week" model: the patient compared only with their own history.
  *
  * Safe to show: avatar, first name, plain day/track labels, check-ins done, how last time felt (trend words),
- * next-session cadence, today's missions.
+ * next-session cadence, today's missions, and (from the crew board) your own days active and cheers received.
  * Never expose: STEADI, raw stands, ranks, peers, norms, "below average", ACL/graft jargon.
  */
 
@@ -14,7 +14,7 @@ import {
   type ProcedureFamily,
   type ProgramExercise,
 } from "@/lib/play/programs"
-import type { SeedPatient, Trend } from "@/lib/types"
+import type { CrewMember, SeedPatient, Trend } from "@/lib/types"
 
 export type PlayerHomeModel = {
   riseId: string
@@ -52,6 +52,22 @@ export function missionDose(w: ProgramExercise): string {
   return w.endRule === "hold"
     ? ui.program.hold.replace("{sec}", String(w.holdSec ?? 20))
     : ui.program.sets_reps.replace("{sets}", String(w.sets)).replace("{reps}", String(w.reps))
+}
+
+export type HomeChip = { key: "days" | "cheers"; label: string; value: string }
+
+/**
+ * "Days active" and "Cheers" chips from your own crew row. Only positives: a zero hides its chip, and no row
+ * (crew still loading or unavailable) hides both, so Begin never waits on the crew.
+ */
+export function crewChips(you: Pick<CrewMember, "activeDays" | "cheersReceived"> | undefined): HomeChip[] {
+  if (!you) return []
+  const chips: HomeChip[] = []
+  if (you.activeDays > 0) {
+    chips.push({ key: "days", label: ui.crew.chip_days, value: ui.crew.chip_days_value.replace("{n}", String(you.activeDays)) })
+  }
+  if (you.cheersReceived > 0) chips.push({ key: "cheers", label: ui.crew.chip_cheers, value: String(you.cheersReceived) })
+  return chips
 }
 
 export function recoveryLabel(family: ProcedureFamily): string {

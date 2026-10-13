@@ -4,13 +4,18 @@ import type { ReactNode } from "react"
 import Image from "next/image"
 import { Check } from "lucide-react"
 import ui from "@/content/play-ui.json"
+import { useCrewBoard } from "@/components/play/CrewBoard"
 import { playDisplay, ptFocus } from "@/components/play/playTheme"
-import { missionDose, playerHome } from "@/lib/play/playerHome"
+import { yourRow } from "@/lib/play/crewView"
+import { crewChips, missionDose, playerHome } from "@/lib/play/playerHome"
 import type { ProgramExercise } from "@/lib/play/programs"
 import type { SeedPatient } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
-/** Pre-game player home: the patient's own progress only. Web-first layout, stacks on small screens. */
+/**
+ * Pre-game player home: the patient's own progress, plus their own crew chips (days active, cheers) once the crew
+ * loads. The chips never block Begin and simply stay hidden if the crew is unavailable. Web-first, stacks on mobile.
+ */
 export function PlayerHome({
   patient,
   selectedId,
@@ -26,6 +31,8 @@ export function PlayerHome({
   actions?: ReactNode
 }) {
   const home = playerHome(patient)
+  const { state: crew } = useCrewBoard(patient.rise_id)
+  const chips = crewChips(crew.status === "ready" ? yourRow(crew.board) : undefined)
 
   return (
     <div className="rn-home-enter grid gap-6 motion-reduce:animate-none lg:grid-cols-12 lg:gap-8">
@@ -60,6 +67,9 @@ export function PlayerHome({
         <dl className="mt-6 grid grid-cols-2 gap-3">
           <Fact label={ui.week.checkins_label} value={String(home.checkInsDone)} />
           <Fact label={ui.week.next_label} value={home.nextSessionLabel} />
+          {chips.map((c) => (
+            <Fact key={c.key} label={c.label} value={c.value} />
+          ))}
         </dl>
 
         <div className="mt-4">
