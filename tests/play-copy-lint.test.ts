@@ -96,4 +96,30 @@ describe("crew copy", () => {
       expect(text, text).not.toMatch(/\d/)
     }
   })
+
+  it("never names a procedure or body region (crew membership must not reveal a diagnosis)", () => {
+    const BODY = /\b(knees?|hips?|fractures?|surgery|surgeries|surgical|operations?|procedures?|post-?op|ACL|TKA|THA|joint replacement)\b/i
+    for (const text of stringsOf(playUi.crew)) {
+      expect(text, text).not.toMatch(BODY)
+    }
+  })
+
+  it("join card names what is shared and what is never shared, and offers a way out", () => {
+    const shared = playUi.crew.join_shared.join(" ").toLowerCase()
+    expect(shared).toMatch(/name/)
+    expect(shared).toMatch(/initial/)
+    expect(shared).toMatch(/days/)
+    expect(shared).toMatch(/cheers/)
+    expect(playUi.crew.join_private).toEqual(["How you did", "Your answers", "Your health"])
+    expect(playUi.crew.join_button).toBe("Join my crew")
+    expect(playUi.crew.join_note).toBe("You can leave any time.")
+    expect(playUi.crew.photo_label).toBe("Show my photo")
+    expect(playUi.crew.leave_confirm).toBe("Leave your crew? You can join again later.")
+  })
+
+  it("pause copy does not nudge toward play or mention progress", () => {
+    for (const text of [playUi.crew.paused_heading, playUi.crew.paused_body]) {
+      expect(text, text).not.toMatch(/\b(play|goal|cheer\w*|active|days?|keep going|come back|don't|should|need to)\b/i)
+    }
+  })
 })

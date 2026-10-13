@@ -2,14 +2,20 @@ import { beforeEach, describe, expect, it } from "vitest"
 import { crewBoard, joinCrew, resetCrew } from "@/lib/crew"
 import {
   activeDaysLabel,
+  asNotJoined,
   CHEER_IDS,
   cheerForYouLine,
   cheersCountLabel,
+  crewPanels,
   fetchCrewBoard,
   goalView,
+  homeChipsRow,
+  joinCrewCall,
+  leaveCrewCall,
   postCheer,
   relativeTime,
   replaceMember,
+  setCrewPhotoCall,
   yourRow,
 } from "@/lib/play/crewView"
 import * as crewView from "@/lib/play/crewView"
@@ -147,6 +153,120 @@ describe("crew client calls", () => {
     expect(
       await postCheer({ from: "rise-01", to: member.id, cheerId: "nice_work" }, { fetchImpl: async () => Promise.reject(new TypeError("offline")) }),
     ).toEqual({ kind: "failed" })
+  })
+})
+
+describe("crew panels by membership status", () => {
+  it("not joined: join card above a read-only member list, no goal, cheers, settings, or chips", () => {
+    expect(crewPanels("not_joined")).toEqual({
+      joinCard: true,
+      members: "readonly",
+      intro: false,
+      goal: false,
+      cheersForYou: false,
+      settings: false,
+      pauseNote: false,
+      homeChips: false,
+    })
+  })
+
+  it("joined: the live board with cheers, settings, and home chips", () => {
+    const p = crewPanels("joined")
+    expect(p.joinCard).toBe(false)
+    expect(p.members).toBe("cheer")
+    expect(p.goal && p.cheersForYou && p.settings && p.homeChips).toBe(true)
+    expect(p.pauseNote).toBe(false)
+  })
+
+  it("paused: only the pause note (no goal, members, cheers, counts, or chips)", () => {
+    expect(crewPanels("paused")).toEqual({
+      joinCard: false,
+      members: "none",
+      intro: false,
+      goal: false,
+      cheersForYou: false,
+      settings: false,
+      pauseNote: true,
+      homeChips: false,
+    })
+  })
+
+  it("home chips come only from a joined board", () => {
+    const outside = crewBoard("rise-01", NOW)
+    expect(outside.status).toBe("not_joined")
+    expect(homeChipsRow(outside)).toBeUndefined()
+    expect(homeChipsRow(undefined)).toBeUndefined()
+    const joined = joinCrew({ riseId: "rise-01", showPhoto: false, consentVersion: CREW_CONSENT_VERSION }, NOW).board
+    expect(homeChipsRow(joined)?.id).toBe("rise-01")
+    expect(homeChipsRow({ ...joined, status: "paused" })).toBeUndefined()
+  })
+
+  it("asNotJoined drops your row and your cheers and shows the join card", () => {
+    const joined = joinCrew({ riseId: "rise-01", showPhoto: true, consentVersion: CREW_CONSENT_VERSION }, NOW).board
+    const out = asNotJoined(joined)
+    expect(out.status).toBe("not_joined")
+    expect(out.showPhoto).toBe(false)
+    expect(out.members.some((m) => m.isYou)).toBe(false)
+    expect(out.cheersForYou).toEqual([])
+    expect(out.crewName).toBe(joined.crewName)
+  })
+})
+
+describe("crew membership calls", () => {
+  it("join posts the current consent version with the photo choice and sends cookies", async () => {
+    const board = joinCrew({ riseId: "rise-01", showPhoto: true, consentVersion: CREW_CONSENT_VERSION }, NOW).board
+    let seen: { url: string; init?: RequestInit } | null = null
+    const out = await joinCrewCall(
+      { riseId: "rise-01", showPhoto: true },
+      {
+        fetchImpl: async (url, init) => {
+          seen = { url, init }
+          return json(board)
+        },
+      },
+    )
+    expect(out).toEqual({ kind: "ok", board })
+    expect(seen!.url).toBe("/api/crew/join")
+    expect(seen!.init?.method).toBe("POST")
+    expect(seen!.init?.credentials).toBe("same-origin")
+    expect(JSON.parse(String(seen!.init?.body))).toEqual({ riseId: "rise-01", showPhoto: true, consentVersion: CREW_CONSENT_VERSION })
+  })
+
+  it("join maps 409 to a changed card, 403 to a refresh, and anything else to failed", async () => {
+    const req = { riseId: "rise-01", showPhoto: false }
+    expect(await joinCrewCall(req, { fetchImpl: async () => json({ error: "x" }, 409) })).toEqual({ kind: "changed" })
+    expect(await joinCrewCall(req, { fetchImpl: async () => json({ error: "x" }, 403) })).toEqual({ kind: "refresh" })
+    expect(await joinCrewCall(req, { fetchImpl: async () => json({ error: "x" }, 500) })).toEqual({ kind: "failed" })
+    expect(await joinCrewCall(req, { fetchImpl: async () => json({ not: "a board" }) })).toEqual({ kind: "failed" })
+    expect(await joinCrewCall(req, { fetchImpl: () => Promise.reject(new TypeError("offline")) })).toEqual({ kind: "failed" })
+  })
+
+  it("photo returns the new board, or signed_out on 401", async () => {
+    const board = joinCrew({ riseId: "rise-01", showPhoto: false, consentVersion: CREW_CONSENT_VERSION }, NOW).board
+    const req = { riseId: "rise-01", showPhoto: true }
+    const ok = await setCrewPhotoCall(req, {
+      fetchImpl: async (url, init) => {
+        expect(url).toBe("/api/crew/photo")
+        expect(JSON.parse(String(init?.body))).toEqual(req)
+        return json({ ...board, showPhoto: true })
+      },
+    })
+    expect(ok.kind === "ok" && ok.board.showPhoto).toBe(true)
+    expect(await setCrewPhotoCall(req, { fetchImpl: async () => json({ error: "x" }, 401) })).toEqual({ kind: "signed_out" })
+    expect(await setCrewPhotoCall(req, { fetchImpl: async () => json({ error: "x" }, 403) })).toEqual({ kind: "refresh" })
+    expect(await setCrewPhotoCall(req, { fetchImpl: async () => json({ error: "x" }, 500) })).toEqual({ kind: "failed" })
+  })
+
+  it("leave treats 204 as ok and 401 as already out on this phone", async () => {
+    expect(await leaveCrewCall("rise-01", { fetchImpl: async () => new Response(null, { status: 204 }) })).toEqual({ kind: "ok" })
+    expect(await leaveCrewCall("rise-01", { fetchImpl: async () => json({ error: "x" }, 401) })).toEqual({ kind: "signed_out" })
+    expect(await leaveCrewCall("rise-01", { fetchImpl: async () => json({ error: "x" }, 500) })).toEqual({ kind: "failed" })
+  })
+
+  it("cheer maps 401 to the join card and 403 to a refresh", async () => {
+    const req = { from: "rise-01", to: "rise-02", cheerId: "nice_work" as const }
+    expect(await postCheer(req, { fetchImpl: async () => json({ error: "x" }, 401) })).toEqual({ kind: "signed_out" })
+    expect(await postCheer(req, { fetchImpl: async () => json({ error: "x" }, 403) })).toEqual({ kind: "refresh" })
   })
 })
 

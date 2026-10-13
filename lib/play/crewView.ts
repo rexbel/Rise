@@ -6,7 +6,7 @@
  */
 
 import ui from "@/content/play-ui.json"
-import { CheerResponse, CrewBoard, type CheerId, type CrewMember } from "@/lib/types"
+import { CheerResponse, CREW_CONSENT_VERSION, CrewBoard, type CheerId, type CrewMember, type CrewStatus } from "@/lib/types"
 
 const C = ui.crew
 
@@ -87,6 +87,47 @@ export function yourRow(board: CrewBoard): CrewMember | undefined {
   return board.members.find((m) => m.isYou)
 }
 
+/** Which parts of the crew section render for each membership state. */
+export type CrewPanels = {
+  /** Opt-in card with what is and is never shared. */
+  joinCard: boolean
+  /** "readonly": a preview of who you would join (no Cheer buttons). "cheer": the live board. */
+  members: "none" | "readonly" | "cheer"
+  intro: boolean
+  goal: boolean
+  cheersForYou: boolean
+  /** Show-my-photo and Leave. */
+  settings: boolean
+  /** The calm note shown instead of everything else while the care team checks in. */
+  pauseNote: boolean
+  /** Own crew chips on the player home. */
+  homeChips: boolean
+}
+
+export function crewPanels(status: CrewStatus): CrewPanels {
+  switch (status) {
+    case "joined":
+      return { joinCard: false, members: "cheer", intro: true, goal: true, cheersForYou: true, settings: true, pauseNote: false, homeChips: true }
+    case "paused":
+      return { joinCard: false, members: "none", intro: false, goal: false, cheersForYou: false, settings: false, pauseNote: true, homeChips: false }
+    default:
+      return { joinCard: true, members: "readonly", intro: false, goal: false, cheersForYou: false, settings: false, pauseNote: false, homeChips: false }
+  }
+}
+
+/** Your own row for the home chips, only while you are on the crew (never when paused or not joined). */
+export function homeChipsRow(board: CrewBoard | undefined): CrewMember | undefined {
+  return board && crewPanels(board.status).homeChips ? yourRow(board) : undefined
+}
+
+/**
+ * Local view right after leaving (or when this phone has no token): your row and your cheers drop out and the
+ * join card returns. A quiet refetch then replaces it with the server's board.
+ */
+export function asNotJoined(board: CrewBoard): CrewBoard {
+  return { ...board, status: "not_joined", showPhoto: false, members: board.members.filter((m) => !m.isYou), cheersForYou: [] }
+}
+
 /** Replace one member (after a cheer) without reordering the list. */
 export function replaceMember(board: CrewBoard, next: CrewMember): CrewBoard {
   return { ...board, members: board.members.map((m) => (m.id === next.id ? next : m)) }
@@ -135,6 +176,7 @@ export async function fetchCrewBoard(
     try {
       const res = await doFetch(`/api/crew/${encodeURIComponent(riseId)}`, {
         cache: "no-store",
+        credentials: "same-origin",
         signal: timeoutSignal(opts.timeoutMs ?? CREW_TIMEOUT_MS, opts.signal),
       })
       if (!res.ok) throw new CrewLoadError(`crew ${res.status}`, res.status >= 500)
@@ -153,6 +195,10 @@ export async function fetchCrewBoard(
 export type CheerOutcome =
   | { kind: "ok"; recorded: boolean; member: CrewMember }
   | { kind: "limit" }
+  /** 401: this phone has no crew token (show the join card). */
+  | { kind: "signed_out" }
+  /** 403: not on the crew or paused right now (refetch the board). */
+  | { kind: "refresh" }
   | { kind: "failed" }
 
 /** POST /api/crew/cheers. recorded:false (already cheered today) is a success, not an error. */
@@ -166,12 +212,98 @@ export async function postCheer(
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(req),
+      credentials: "same-origin",
       signal: timeoutSignal(opts.timeoutMs ?? CREW_TIMEOUT_MS),
     })
     if (res.status === 429) return { kind: "limit" }
+    if (res.status === 401) return { kind: "signed_out" }
+    if (res.status === 403) return { kind: "refresh" }
     if (!res.ok) return { kind: "failed" }
     const parsed = CheerResponse.safeParse(await res.json())
     return parsed.success ? { kind: "ok", recorded: parsed.data.recorded, member: parsed.data.member } : { kind: "failed" }
+  } catch {
+    return { kind: "failed" }
+  }
+}
+
+/* ---------- Membership calls (join, photo, leave) ---------- */
+
+function postJson(doFetch: FetchLike, url: string, body: unknown, timeoutMs: number): Promise<Response> {
+  return doFetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+    // The device token is an httpOnly same-origin cookie: join sets it and every other write needs it.
+    credentials: "same-origin",
+    signal: timeoutSignal(timeoutMs),
+  })
+}
+
+async function boardFrom(res: Response): Promise<CrewBoard | null> {
+  const parsed = CrewBoard.safeParse(await res.json())
+  return parsed.success ? parsed.data : null
+}
+
+export type JoinOutcome =
+  | { kind: "ok"; board: CrewBoard }
+  /** 409: the join card text changed since this page loaded. */
+  | { kind: "changed" }
+  /** 403: paused while the care team checks in. */
+  | { kind: "refresh" }
+  | { kind: "failed" }
+
+/** POST /api/crew/join with the consent version of the card the patient read. Not retried: it is a consent act. */
+export async function joinCrewCall(
+  req: { riseId: string; showPhoto: boolean },
+  opts: { fetchImpl?: FetchLike; timeoutMs?: number; consentVersion?: string } = {},
+): Promise<JoinOutcome> {
+  const doFetch = opts.fetchImpl ?? ((input, init) => fetch(input, init))
+  try {
+    const res = await postJson(
+      doFetch,
+      "/api/crew/join",
+      { riseId: req.riseId, showPhoto: req.showPhoto, consentVersion: opts.consentVersion ?? CREW_CONSENT_VERSION },
+      opts.timeoutMs ?? CREW_TIMEOUT_MS,
+    )
+    if (res.status === 409) return { kind: "changed" }
+    if (res.status === 403) return { kind: "refresh" }
+    if (!res.ok) return { kind: "failed" }
+    const board = await boardFrom(res)
+    return board ? { kind: "ok", board } : { kind: "failed" }
+  } catch {
+    return { kind: "failed" }
+  }
+}
+
+export type PhotoOutcome = { kind: "ok"; board: CrewBoard } | { kind: "signed_out" } | { kind: "refresh" } | { kind: "failed" }
+
+/** POST /api/crew/photo. */
+export async function setCrewPhotoCall(
+  req: { riseId: string; showPhoto: boolean },
+  opts: { fetchImpl?: FetchLike; timeoutMs?: number } = {},
+): Promise<PhotoOutcome> {
+  const doFetch = opts.fetchImpl ?? ((input, init) => fetch(input, init))
+  try {
+    const res = await postJson(doFetch, "/api/crew/photo", req, opts.timeoutMs ?? CREW_TIMEOUT_MS)
+    if (res.status === 401) return { kind: "signed_out" }
+    if (res.status === 403) return { kind: "refresh" }
+    if (!res.ok) return { kind: "failed" }
+    const board = await boardFrom(res)
+    return board ? { kind: "ok", board } : { kind: "failed" }
+  } catch {
+    return { kind: "failed" }
+  }
+}
+
+export type LeaveOutcome = { kind: "ok" } | { kind: "signed_out" } | { kind: "failed" }
+
+/** POST /api/crew/leave -> 204. A 401 means this phone holds no token, so the patient is already out here. */
+export async function leaveCrewCall(riseId: string, opts: { fetchImpl?: FetchLike; timeoutMs?: number } = {}): Promise<LeaveOutcome> {
+  const doFetch = opts.fetchImpl ?? ((input, init) => fetch(input, init))
+  try {
+    const res = await postJson(doFetch, "/api/crew/leave", { riseId }, opts.timeoutMs ?? CREW_TIMEOUT_MS)
+    if (res.status === 401) return { kind: "signed_out" }
+    return res.ok ? { kind: "ok" } : { kind: "failed" }
   } catch {
     return { kind: "failed" }
   }
