@@ -37,4 +37,27 @@ describe("play patient copy", () => {
       expect(text, text).not.toMatch(BANNED)
     }
   })
+
+  it("all RehabNinja chrome has no banned terms, ranks, places, or peers", () => {
+    const { $comment, ...rest } = playUi
+    void $comment
+    for (const text of stringsOf(rest)) {
+      expect(text, text).not.toMatch(BANNED)
+      expect(text, text).not.toMatch(/\b(rank|place|peer|cohort|leaderboard|board place)\b/i)
+    }
+  })
+
+  it("your-week, note, emergency, and question copy carry no counts", () => {
+    const { pain_value, ...questions } = playUi.questions
+    expect(pain_value).toContain("{n}")
+    for (const text of stringsOf([playUi.week, playUi.note, playUi.emergency, questions])) {
+      expect(text.replace(/\{\w+\}/g, "N"), text).not.toMatch(/\d/)
+    }
+  })
+
+  it("new patient lines stay short (under 20 words)", () => {
+    for (const text of stringsOf([playUi.week, playUi.note, playUi.emergency, playUi.close.tip_label, playUi.close.how_it_went])) {
+      expect(text.split(/\s+/).length, text).toBeLessThan(20)
+    }
+  })
 })

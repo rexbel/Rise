@@ -1,106 +1,153 @@
 "use client"
 
-import Link from "next/link"
-import { useEffect, useRef } from "react"
-import { Button } from "@/components/ui/button"
-import { usePlay, type HitLogKind } from "@/components/play/PlayProvider"
-import { playDisplay } from "@/components/play/playTheme"
-import ui from "@/content/play-ui.json"
-import { formatPlayClose } from "@/lib/play/formatPatient"
-import { exerciseById } from "@/lib/play/programs"
-import { speak } from "@/lib/play/speak"
-import type { SeedPatient } from "@/lib/types"
+/**
+ * Closing screen after a RehabNinja set. The lines come from the same deterministic rules the server runs
+ * (lib/rules.ts via lib/play/playResult.playClose) on the exact result that was sent, never the seed's
+ * expected_triage. Shows no hit count, rep count, rank, or score. Everything shown is also spoken and captioned.
+ */
 
-/** Journey step 4 — game results (hits), not clinical chart. */
+import Link from "next/link"
+import { useEffect, useId, useMemo, useState } from "react"
+import { Button } from "@/components/ui/button"
+import { HitTimeline } from "@/components/play/HitTimeline"
+import { usePlay } from "@/components/play/PlayProvider"
+import { playDisplay, ptCta, ptFocus, ptSecondary } from "@/components/play/playTheme"
+import lines from "@/content/patient-lines.json"
+import ui from "@/content/play-ui.json"
+import { playClose } from "@/lib/play/playResult"
+import { exerciseById } from "@/lib/play/programs"
+import { cancel, speakLines } from "@/lib/play/speak"
+import type { SeedPatient } from "@/lib/types"
+import { cn } from "@/lib/utils"
+
 export function SessionReport({ patient }: { patient: SeedPatient }) {
-  const { session, dispatch, hitCount, hitLog } = usePlay()
-  const spokenRef = useRef(false)
-  const exerciseId = session.finishedSet?.exerciseId ?? session.exerciseId
-  const workout = exerciseById(exerciseId)
-  const out = formatPlayClose(
-    session.finishedSet?.findings ?? session.findings,
-    session.answers,
-    {
-      trend: patient.patient_feedback.trend_vs_previous,
-      recommendation: patient.expected_triage.recommendation,
-      redFlag: false,
-      clinicName: "Riverside Ortho",
-    },
-    [],
-    exerciseId,
+  const { session, dispatch, hitLog, result, clinicName } = usePlay()
+  const finishedSet = session.finishedSet
+  const workout = exerciseById(finishedSet?.exerciseId ?? session.exerciseId)
+  const close = useMemo(
+    () => (result && finishedSet ? playClose(result, patient, finishedSet, clinicName) : null),
+    [result, finishedSet, patient, clinicName],
   )
-  const firstLine = out.correction?.what ?? out.closingLines[0]
+
+  const spoken = useMemo(() => {
+    if (!close) return []
+    const c = close.correction
+    return [...(c ? [c.what, c.action] : []), ...close.lines, lines.note_prompt]
+  }, [close])
+  const spokenKey = spoken.join("\n")
 
   useEffect(() => {
-    if (session.phase !== "close") {
-      spokenRef.current = false
-      return
-    }
-    if (spokenRef.current || !firstLine) return
-    spokenRef.current = true
-    speak(firstLine)
-  }, [session.phase, firstLine])
+    if (!spokenKey) return
+    void speakLines(spokenKey.split("\n"))
+  }, [spokenKey])
+
+  if (!close) {
+    return (
+      <p className="text-xl text-pt-muted" role="status">
+        {lines.closure}
+      </p>
+    )
+  }
+
+  const [trendLine, nextLine, closureLine] = close.lines
 
   return (
-    <div className="flex flex-1 flex-col justify-center gap-5 overflow-y-auto">
+    <div className="flex flex-1 flex-col gap-6 overflow-y-auto">
       <div>
-        <p className="text-xs font-semibold tracking-wide text-orange-400">{ui.close.title}</p>
-        <h2 className={`${playDisplay.className} mt-1 text-3xl font-extrabold text-zinc-50`}>
-          {workout.name}
-        </h2>
+        <p className="text-xl font-semibold text-pt-accent">{ui.close.title}</p>
+        <h2 className={`${playDisplay.className} mt-1 text-3xl font-extrabold text-pt-ink`}>{workout.name}</h2>
       </div>
 
-      <div className="rounded-2xl border border-orange-500/30 bg-orange-500/10 p-5 text-center">
-        <p className="text-sm text-orange-200/80">{ui.close.hits_label}</p>
-        <p className={`${playDisplay.className} text-6xl font-extrabold text-orange-400`}>{hitCount}</p>
-        <p className="mt-3 text-xs text-zinc-500">{ui.close.timeline_label}</p>
-        <HitTimeline hitLog={hitLog} />
-      </div>
+      <HitTimeline hitLog={hitLog} label={ui.close.how_it_went} className="rounded-2xl border border-pt-line bg-pt-bg/60 p-4" />
 
-      <p className="text-xl leading-snug text-zinc-200">
-        {out.correction?.what ?? out.closingLines[0]}
-      </p>
-      {out.correction ? (
-        <>
-          <p className="text-lg text-zinc-400">{out.correction.why}</p>
-          <p className="text-lg text-zinc-300">{out.correction.action}</p>
-        </>
+      {close.correction ? (
+        <section aria-labelledby="tip-heading" className="rounded-2xl border border-pt-line bg-pt-surface-2 p-5">
+          <h3 id="tip-heading" className="text-xl font-semibold text-pt-accent">
+            {ui.close.tip_label}
+          </h3>
+          <p className="mt-2 text-2xl font-semibold leading-snug text-pt-ink">{close.correction.what}</p>
+          <p className="mt-2 text-xl leading-snug text-pt-muted">{close.correction.why}</p>
+          <p className="mt-2 text-xl leading-snug text-pt-ink">{close.correction.action}</p>
+        </section>
       ) : null}
 
-      {session.demo ? (
-        <Button
-          type="button"
-          variant="outline"
-          className="h-14 min-h-14 w-full border-zinc-700 bg-transparent text-lg text-zinc-100"
-          onClick={() => dispatch({ type: "BACK_TO_QUESTIONS" })}
-        >
-          {ui.close.back_to_questions}
+      <section className="flex flex-col gap-3">
+        <p className={`${playDisplay.className} text-2xl font-bold leading-snug text-pt-ink`}>{trendLine}</p>
+        {nextLine ? <p className="text-xl leading-snug text-pt-ink">{nextLine}</p> : null}
+        {closureLine ? <p className="text-xl leading-snug text-pt-muted">{closureLine}</p> : null}
+      </section>
+
+      <NoteBox />
+
+      <div className="flex flex-col gap-3">
+        {session.demo ? (
+          <Button type="button" className={ptSecondary} onClick={() => dispatch({ type: "BACK_TO_QUESTIONS" })}>
+            {ui.close.back_to_questions}
+          </Button>
+        ) : null}
+        <Button asChild className={ptSecondary}>
+          <Link href="/play">{ui.close.change_profile}</Link>
         </Button>
-      ) : null}
-      <Button
-        asChild
-        className="h-14 min-h-14 w-full bg-orange-500 text-lg font-bold text-white hover:bg-orange-400"
-      >
-        <Link href="/play">{ui.close.change_profile}</Link>
-      </Button>
+      </div>
     </div>
   )
 }
 
-function HitTimeline({ hitLog }: { hitLog: HitLogKind[] }) {
+/** Optional note to the nurse. Sending re-posts the same result with patientNote. */
+function NoteBox() {
+  const { sendNote } = usePlay()
+  const [note, setNote] = useState("")
+  const [state, setState] = useState<"open" | "sent" | "skipped">("open")
+  const fieldId = useId()
+
+  if (state !== "open") {
+    return (
+      <p className="rounded-2xl bg-pt-surface-2 px-4 py-3 text-xl text-pt-ink" role="status">
+        {state === "sent" ? ui.note.sent : ui.note.skipped}
+      </p>
+    )
+  }
+
   return (
-    <div className="mt-2 flex h-10 gap-0.5 overflow-hidden rounded-xl bg-zinc-950">
-      {hitLog.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center text-xs text-zinc-600">No hits yet</div>
-      ) : (
-        hitLog.map((kind, i) => (
-          <div
-            key={`${kind}-${i}`}
-            className={kind === "hit" ? "min-w-1.5 flex-1 bg-emerald-500" : "min-w-1.5 flex-1 bg-orange-500"}
-            title={kind}
-          />
-        ))
-      )}
+    <div className="flex flex-col gap-3 rounded-2xl border border-pt-line p-4">
+      <label htmlFor={fieldId} className="text-xl leading-snug text-pt-ink">
+        {lines.note_prompt}
+      </label>
+      <textarea
+        id={fieldId}
+        rows={3}
+        maxLength={2000}
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder={ui.note.placeholder}
+        className={cn(
+          ptFocus,
+          "min-h-28 w-full rounded-xl border border-pt-line bg-pt-bg px-4 py-3 text-xl text-pt-ink placeholder:text-pt-muted",
+        )}
+      />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Button
+          type="button"
+          className={ptCta}
+          disabled={!note.trim()}
+          onClick={() => {
+            cancel()
+            setState(sendNote(note) ? "sent" : "skipped")
+          }}
+        >
+          {ui.note.send}
+        </Button>
+        <Button
+          type="button"
+          className={ptSecondary}
+          onClick={() => {
+            cancel()
+            setState("skipped")
+          }}
+        >
+          {ui.note.skip}
+        </Button>
+      </div>
     </div>
   )
 }

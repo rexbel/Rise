@@ -11,10 +11,5 @@ export const playBody = Nunito({
   weight: ["500", "600", "700", "800"],
 })
 
-export const playShell =
-  "bg-[var(--rn-cream,#FEF1E1)] text-[var(--rn-ink,#18181b)]"
-export const playShellDark =
-  "bg-[#0c0a09] text-zinc-50"
-export const playAccent = "text-orange-500"
-export const playCta =
-  "bg-orange-500 text-white hover:bg-orange-400"
+/** Patient-surface classes live in ./ptClasses (no font import) so /p can share them. */
+export { ptButton, ptCta, ptFocus, ptLink, ptSecondary, ptStop } from "@/components/play/ptClasses"

@@ -7,12 +7,26 @@ import { PhoneColumn } from "@/components/play/PhoneColumn"
 import { PlayProvider, usePlay } from "@/components/play/PlayProvider"
 import { PresenterBar } from "@/components/play/PresenterBar"
 import { isLiveShell } from "@/lib/play/phaseView"
+import { resolvePlaySessionId } from "@/lib/play/playResult"
 import type { SeedPatient } from "@/lib/types"
 
-export function PlaySessionView({ patient, demo }: { patient: SeedPatient; demo: boolean }) {
+export function PlaySessionView({
+  patient,
+  demo,
+  sessionParam,
+  clinicName,
+}: {
+  patient: SeedPatient
+  demo: boolean
+  /** `?s=` from the invite link; validated here, otherwise a fresh id. */
+  sessionParam?: string
+  clinicName: string
+}) {
   const [restartKey, setRestartKey] = useState(0)
+  // One id per page load: an invite's id when valid, else `<riseId>-<base36 time>`. Restart keeps it.
+  const [sessionId] = useState(() => resolvePlaySessionId(patient.rise_id, sessionParam, Date.now()))
   return (
-    <PlayProvider key={restartKey} riseId={patient.rise_id} demo={demo}>
+    <PlayProvider key={restartKey} patient={patient} sessionId={sessionId} clinicName={clinicName} demo={demo}>
       <PlayShell patient={patient} demo={demo} onRestart={() => setRestartKey((k) => k + 1)} />
     </PlayProvider>
   )
@@ -47,7 +61,7 @@ function PlayShell({
   }
 
   return (
-    <div className="flex min-h-full flex-1 flex-col bg-[#0a0a0c]">
+    <div className="flex min-h-full flex-1 flex-col bg-pt-bg">
       <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-6 sm:px-6 lg:flex-row lg:items-stretch lg:gap-6 lg:px-8 lg:py-8">
         <div className="min-w-0 flex-1">
           <PhoneColumn patient={patient} />

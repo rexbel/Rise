@@ -5,9 +5,10 @@
  */
 
 import { useEffect, useRef, useState } from "react"
+import { Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { FrameSilhouette } from "@/components/play/FrameSilhouette"
-import { playDisplay } from "@/components/play/playTheme"
+import { playDisplay, ptCta } from "@/components/play/playTheme"
 import ui from "@/content/play-ui.json"
 import { createFindingTracker } from "@/lib/play/findings"
 import { usePlayCamera } from "@/lib/play/usePlayCamera"
@@ -59,38 +60,32 @@ export function FrameGate({
 
   return (
     <div className="flex flex-1 flex-col justify-center gap-4">
-      <h2 className={`${playDisplay.className} text-2xl font-bold leading-snug text-zinc-50`}>
-        {ui.frame.title}
-      </h2>
-      <p className="text-xl text-zinc-400">{ui.frame.body}</p>
-      <div className="relative mx-auto aspect-[3/4] w-full max-w-[240px] overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-900">
-        <video
-          ref={videoRef}
-          playsInline
-          muted
-          className="absolute inset-0 h-full w-full object-cover -scale-x-100"
-        />
+      <h2 className={`${playDisplay.className} text-3xl font-bold leading-snug text-pt-ink`}>{ui.frame.title}</h2>
+      <p className="text-xl text-pt-muted">{ui.frame.body}</p>
+      <div className="relative mx-auto aspect-[3/4] w-full max-w-[240px] overflow-hidden rounded-2xl border border-pt-line bg-pt-bg">
+        <video ref={videoRef} playsInline muted className="absolute inset-0 h-full w-full object-cover -scale-x-100" />
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <FrameSilhouette />
         </div>
         {status === "loading" || status === "requesting" ? (
-          <p className="absolute inset-x-0 bottom-2 text-center text-sm text-zinc-300">
+          <p className="absolute inset-x-0 bottom-0 bg-pt-bg/80 px-2 py-1 text-center text-xl text-pt-ink" role="status">
             {ui.loading.camera}
           </p>
         ) : null}
       </div>
       {fallbackHint ? (
-        <p className="rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-sm text-orange-200">
-          {fallbackHint} — continue to play with demo replay.
+        <p className="rounded-lg border border-pt-accent/40 bg-pt-surface-2 px-3 py-2 text-xl text-pt-ink" role="status">
+          {ui.frame.fallback}
         </p>
       ) : (
-        <p className="text-sm text-zinc-500">
-          {ready ? "Looking good." : "Step back until hips and knees are in the outline."}
+        <p className="flex items-center gap-2 text-xl text-pt-muted" role="status">
+          {ready ? <Check className="size-6 text-pt-hit" aria-hidden /> : null}
+          {ready ? ui.frame.looking_good : ui.frame.step_back}
         </p>
       )}
       <Button
         type="button"
-        className="h-14 min-h-14 w-full text-lg"
+        className={ptCta}
         disabled={!ready}
         onClick={() => {
           speak(ui.frame.continue)
