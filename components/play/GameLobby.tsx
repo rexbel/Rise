@@ -37,15 +37,17 @@ const CHROME: Record<LobbyScene, { main: string; ink: string; demo: string; ring
   },
 }
 
-/** Surgeon ninja mark: teal scrub cap with the orange tie, mask. Same art as app/icon.svg. */
+/** Medic ninja mark: black hood, green band with a white cross, blue mask, white coat collar. Same art as app/icon.svg. */
 function NinjaMark({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 40 40" fill="none" aria-hidden>
-      <circle cx="20" cy="20" r="20" fill="#111111" />
-      <path d="M2 18 Q2 1 20 1 Q38 1 38 18 Z" fill="#1D9E75" />
-      <path d="M5 13 L0 10 L2 19 Z" fill="var(--rn-orange)" />
-      <circle cx="26" cy="22" r="2.6" fill="white" />
-      <path d="M8 26 H34 Q33 34 20 35 Q8 34 8 26 Z" fill="#85B7EB" />
+      <circle cx="20" cy="20" r="19.5" fill="#ffffff" stroke="#111111" />
+      <path d="M3 26 Q3 4 20 4 Q37 4 37 26 Z" fill="#111111" />
+      <rect x="3" y="11" width="34" height="5" fill="#1D9E75" />
+      <path d="M18 13.5 H22 M20 11.6 V15.4" stroke="#ffffff" strokeWidth="1.4" />
+      <circle cx="26" cy="20" r="2.6" fill="#ffffff" />
+      <path d="M9 23 H33 Q32 30 20 30 Q10 30 9 23 Z" fill="#85B7EB" />
+      <path d="M12 32 L20 38 L28 32" stroke="#D3D1C7" strokeWidth="1.2" />
     </svg>
   )
 }
