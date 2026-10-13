@@ -50,11 +50,19 @@ function playLines(): string[] {
   add(playUi.live.stop)
   protocol.symptom_questions.forEach((q) => add(q.text))
   Object.values(patientLines.trend).forEach(add)
+  // Closing screen: trend + next step + closure, then the note prompt (components/play/SessionReport.tsx).
+  Object.values(patientLines.next_step).forEach(add)
+  add(patientLines.closure)
+  add(patientLines.note_prompt)
+  // Emergency screen (components/play/PhoneColumn.tsx).
   add(patientLines.emergency.line)
+  add(patientLines.emergency.care_team_told)
+  add(patientLines.emergency.follow_up)
+  // The closing tip speaks the correction's "what" and "action".
   const walk = (o: unknown) => {
     if (!o || typeof o !== "object") return
     for (const [k, v] of Object.entries(o)) {
-      if (k === "what") add(v)
+      if (k === "what" || k === "action") add(v)
       else walk(v)
     }
   }
