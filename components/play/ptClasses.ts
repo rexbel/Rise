@@ -17,10 +17,9 @@ export const ptCta = `${ptFocus} ${ptButton} bg-pt-cta text-pt-cta-ink hover:bg-
 export const ptSecondary = `${ptFocus} ${ptButton} border border-pt-line bg-pt-surface text-pt-ink hover:bg-pt-surface-2`
 
 /**
- * Stop: always red with a square glyph and the word. There is no filled danger token yet
- * (pt-danger is a text color), so this uses red-700 (white text 6.5:1).
+ * Stop: always red with a square glyph and the word. pt-danger-fill keeps white text at 6.5:1.
  */
-export const ptStop = `${ptFocus} ${ptButton} bg-red-700 text-white hover:bg-red-800`
+export const ptStop = `${ptFocus} ${ptButton} bg-pt-danger-fill text-white hover:bg-pt-danger-fill-hover`
 
 /** Text link on dark patient surfaces, still 20px. */
 export const ptLink = `${ptFocus} rounded-md text-xl text-pt-muted underline underline-offset-4 hover:text-pt-ink`

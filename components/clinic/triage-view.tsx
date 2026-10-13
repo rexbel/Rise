@@ -255,8 +255,9 @@ function Metrics({ card }: { card: TriageCard }) {
             value={m.armsUsed ? "Yes" : "No"}
             note={m.armsUsed && m.armsFromRep ? `From rep ${m.armsFromRep}` : undefined}
           />
-          <Small label="Asymmetry" value={`${m.asymmetryPct}%`} />
-          <Small label="Pauses over 3 s" value={String(m.pausesOver3s)} />
+          {/* The game does not measure these; showing 0 would read as a normal finding. */}
+          <Small label="Asymmetry" value="Not measured" />
+          <Small label="Pauses over 3 s" value="Not measured" />
           {m.tandemHoldS !== undefined && <Small label="Tandem hold" value={`${m.tandemHoldS} s`} />}
           <p className="col-span-full text-base text-cl-muted">
             A fixed rep target with no 30-second clock, so it is not compared to CDC norms or to past 30-second counts.

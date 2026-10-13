@@ -156,14 +156,14 @@ function Emergency() {
 
   return (
     <div className="flex flex-1 flex-col justify-center gap-5">
-      <section role="alert" className="flex flex-col gap-4 rounded-2xl bg-red-800 p-5 text-white sm:p-6">
+      <section role="alert" className="flex flex-col gap-4 rounded-2xl bg-pt-danger-fill p-5 text-white sm:p-6">
         <TriangleAlert className="size-12" aria-hidden />
         <h2 className={`${playDisplay.className} text-3xl font-bold leading-snug`}>{lines.emergency.line}</h2>
         <p className="text-xl leading-snug">{lines.emergency.care_team_told}</p>
         <p className="text-xl leading-snug">{lines.emergency.follow_up}</p>
         <Button
           asChild
-          className="h-16 min-h-16 w-full rounded-xl bg-white text-2xl font-bold text-red-800 outline-none hover:bg-white/90 focus-visible:ring-[3px] focus-visible:ring-pt-focus focus-visible:ring-offset-2 focus-visible:ring-offset-red-800"
+          className="h-16 min-h-16 w-full rounded-xl bg-white text-2xl font-bold text-pt-danger-fill outline-none hover:bg-white/90 focus-visible:ring-[3px] focus-visible:ring-pt-focus focus-visible:ring-offset-2 focus-visible:ring-offset-pt-danger-fill"
         >
           <a href="tel:911">
             <Phone className="size-7" aria-hidden />

@@ -50,7 +50,9 @@
   --pt-cta-ink: #ffffff;
   --pt-hit: #34d399;
   --pt-miss: #fb923c;
-  --pt-danger: #f87171;
+  --pt-danger: #f87171; /* danger text on dark */
+  --pt-danger-fill: #b91c1c; /* Stop and emergency panels; white text 6.5:1 */
+  --pt-danger-fill-hover: #991b1b;
   --pt-focus: #fdba74;
 
   /* Clinic console (/clinic): light editorial workbench, legible on a 1280x720 projector. */
@@ -127,6 +129,8 @@
   --color-pt-hit: var(--pt-hit);
   --color-pt-miss: var(--pt-miss);
   --color-pt-danger: var(--pt-danger);
+  --color-pt-danger-fill: var(--pt-danger-fill);
+  --color-pt-danger-fill-hover: var(--pt-danger-fill-hover);
   --color-pt-focus: var(--pt-focus);
   --color-cl-paper: var(--cl-paper);
   --color-cl-surface: var(--cl-surface);
