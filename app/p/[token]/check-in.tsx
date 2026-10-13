@@ -20,6 +20,7 @@ import { closingLines } from "@/lib/feedback"
 import { StandCounter, type CounterSummary } from "@/lib/pose/counter"
 import { triage } from "@/lib/rules"
 import { resolvePlaySessionId } from "@/lib/play/playResult"
+import { guideStepFor, SetupGuide } from "./setup-guide"
 import { sendEvent, sendResult } from "@/lib/session-client"
 import { steadiScore } from "@/lib/steadi"
 import type { CheckIn as PriorCheckIn, Recommendation, SeedPatient, SessionResult, SessionStatus, Symptoms, Trend } from "@/lib/types"
@@ -374,6 +375,8 @@ export function CheckIn({
       <div className={cn("relative overflow-hidden rounded-xl bg-black", showCamera ? "block" : "hidden", step === "test" || step === "paused" ? "aspect-[3/4]" : "aspect-[4/3]")}>
         <video ref={videoRef} playsInline muted className={cn("h-full w-full object-cover", demo && "hidden", facing === "user" && "-scale-x-100")} />
         <canvas ref={canvasRef} className={cn("pointer-events-none absolute inset-0 h-full w-full", facing === "user" && !demo && "-scale-x-100")} />
+        {/* Until the camera is on, show what each safety check looks like (follows the first unticked check). */}
+        {step === "setup" && !ready && !demo && <SetupGuide step={guideStepFor(checks)} />}
         {step === "setup" && ready && (
           <div className={cn("absolute inset-x-3 bottom-3 flex items-center gap-2 rounded-lg px-3 py-2 text-xl font-medium", framed ? "bg-emerald-800 text-white" : "bg-amber-300 text-black")} aria-live="polite">
             {framed ? <Check aria-hidden className="size-5" /> : <AlertTriangle aria-hidden className="size-5" />}
