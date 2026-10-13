@@ -148,3 +148,11 @@ describe("crew client calls", () => {
     ).toEqual({ kind: "failed" })
   })
 })
+
+describe("withName", () => {
+  it("never doubles the period after an initial", async () => {
+    const { withName } = await import("../lib/play/crewView")
+    expect(withName("Your cheer went to {name}.", "Frank D.")).toBe("Your cheer went to Frank D.")
+    expect(withName("Your cheer went to {name}.", "Ellen")).toBe("Your cheer went to Ellen.")
+  })
+})

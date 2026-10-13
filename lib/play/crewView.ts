@@ -78,7 +78,8 @@ export function relativeTime(at: number, now: number): string {
 }
 
 export function withName(template: string, name: string): string {
-  return fill(template, { name })
+  // "Frank D." at the end of a sentence must not read "Frank D..".
+  return fill(template, { name }).replace(/\.\.$/, ".")
 }
 
 /** The viewer's own row, for the home chips. */
@@ -110,7 +111,13 @@ function timeoutSignal(ms: number, outer?: AbortSignal): AbortSignal {
   const timer = AbortSignal.timeout(ms)
   if (!outer) return timer
   if (typeof AbortSignal.any === "function") return AbortSignal.any([timer, outer])
-  return outer
+  // Older Safari has no AbortSignal.any: forward whichever fires first so the timeout still applies.
+  const both = new AbortController()
+  const forward = (s: AbortSignal) => () => both.abort(s.reason)
+  if (timer.aborted || outer.aborted) both.abort()
+  timer.addEventListener("abort", forward(timer), { once: true })
+  outer.addEventListener("abort", forward(outer), { once: true })
+  return both.signal
 }
 
 /**
