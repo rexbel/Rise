@@ -9,7 +9,7 @@ export function CoachOrb() {
   return (
     <div
       className={cn(
-        "size-6 rounded-full border border-foreground/40 bg-foreground/80",
+        "size-6 rounded-full border border-pt-ink/40 bg-pt-ink/80",
         active && "animate-pulse",
       )}
       aria-hidden

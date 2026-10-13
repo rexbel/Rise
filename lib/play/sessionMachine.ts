@@ -1,6 +1,8 @@
 /**
  * Pure RehabNinja reducer. No timers, I/O, or React.
  * finishedSet is written once and never cleared.
+ * A Yes to the breath/chest question goes straight to the emergency screen (no confirm step first);
+ * EMERGENCY_MISTAP is the undo that returns to that question.
  */
 
 import type { ExerciseId } from "@/lib/play/programs"
@@ -78,17 +80,16 @@ export function reducePlaySession(state: PlaySession, action: PlayAction): PlayS
       }
     case "ANSWER":
       return applyAnswer(state, action.id, action.value)
-    case "CONFIRM_EMERGENCY":
-      return state.phase === "emergencyConfirm" ? { ...state, phase: "emergency" } : state
     case "EMERGENCY_MISTAP":
-      if (state.phase === "emergencyConfirm" || state.phase === "emergency") {
-        const { breath_chest: _drop, ...rest } = state.answers
+      if (state.phase === "emergency") {
+        const rest = { ...state.answers }
+        delete rest.breath_chest
         return { ...state, phase: "questions", answers: rest }
       }
       return state
     case "BACK_TO_QUESTIONS":
       if (!state.finishedSet) return state
-      if (state.phase === "close" || state.phase === "emergency" || state.phase === "emergencyConfirm") {
+      if (state.phase === "close" || state.phase === "emergency") {
         return { ...state, phase: "questions", answers: {} }
       }
       return state
@@ -130,19 +131,11 @@ function endSet(state: PlaySession, durationMs: number, endedBy: "script" | "fin
 
 function applyAnswer(state: PlaySession, id: QuestionId, value: number | boolean): PlaySession {
   if (!state.finishedSet) return state
-  const onQuestions =
-    state.phase === "questions" ||
-    state.phase === "close" ||
-    state.phase === "emergencyConfirm" ||
-    state.phase === "emergency"
-  if (!onQuestions) return state
+  if (state.phase !== "questions") return state
 
   const answers: QuestionAnswers = { ...state.answers, [id]: value }
   if (id === "breath_chest" && value === true) {
-    return { ...state, answers, phase: "emergencyConfirm" }
-  }
-  if (id === "breath_chest" && value === false && allAnswered(answers) && answers.breath_chest !== true) {
-    return { ...state, answers, phase: "close" }
+    return { ...state, answers, phase: "emergency" }
   }
   if (allAnswered(answers) && answers.breath_chest !== true) {
     return { ...state, answers, phase: "close" }

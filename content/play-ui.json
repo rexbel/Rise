@@ -1,18 +1,22 @@
 {
-  "$comment": "Locked RehabNinja chrome. No STEADI, stand counts, or clinical labels.",
+  "$comment": "Locked RehabNinja chrome. No STEADI, stand counts, ranks, peers, or clinical labels. Patient lines follow content/patient-lines.json rules.",
   "brand": "Rise · RehabNinja",
   "lobby": {
     "play": "Play",
-    "choose_profile": "Your board",
+    "choose_profile": "Your week",
     "pitch_demo": "Try a demo",
     "tagline": "Stand in front of your camera. Good moves slice fruit."
   },
-  "picker": {
-    "title": "Your board",
-    "body": "You’re on the knee track with your cohort. Only you can play — peers are here for the board.",
-    "cta": "Sign up or sign in",
-    "continue": "Continue as {name} →",
-    "roster": "Received hits"
+  "week": {
+    "title": "Your week",
+    "body": "Your own progress, just for you. No one else is shown here.",
+    "since_surgery": "Day {n} since surgery",
+    "checkins_label": "Check-ins done",
+    "last_time_label": "How last time felt",
+    "next_label": "Next check-in",
+    "missions_label": "Today's missions",
+    "continue": "Continue",
+    "back_lobby": "Back to start"
   },
   "home": {
     "eyebrow": "Your home",
@@ -22,13 +26,9 @@
     "mission_badge_selected": "Selected",
     "hint": "Fruit on your joints = good form. Bombs when knees drift or hands push off.",
     "begin": "Begin",
-    "back_board": "Back to your board",
+    "back_week": "Back to your week",
     "demo_chip": "Demo data",
     "meta_checkins": "{n} check-ins",
-    "chips": {
-      "rank": "Board place",
-      "hits": "Board hits"
-    },
     "recovery": {
       "tka": "Knee recovery",
       "tha": "Hip recovery",
@@ -63,7 +63,10 @@
     "title": "We need to see you",
     "body": "Stand so your hips, knees, and feet are in the outline.",
     "continue": "Continue",
-    "demo_badge": "Demo replay"
+    "demo_badge": "Demo replay",
+    "looking_good": "Looking good.",
+    "step_back": "Step back until hips and knees are in the outline.",
+    "fallback": "We could not use the camera, so a demo replay will play instead."
   },
   "countdown": ["Three", "Two", "One", "Go"],
   "live": {
@@ -76,6 +79,8 @@
     },
     "tracking_soft": "We need a clearer view — step back a little.",
     "step_back": "Step back so we can see your knees — then keep playing.",
+    "step_back_ok": "Looking good. Continue when you're ready.",
+    "step_back_wait": "We need to see your hips and knees.",
     "stop": "Stop",
     "pause": "Pause",
     "demo_badge": "Demo replay",
@@ -97,22 +102,34 @@
   "questions": {
     "yes": "Yes",
     "no": "No",
-    "next": "Next"
+    "next": "Next",
+    "progress": "Question {n} of {total}",
+    "pain_low": "No pain",
+    "pain_high": "Worst pain",
+    "pain_value": "{n} out of 10"
   },
   "emergency": {
-    "yes_i_meant_that": "Yes, I meant that",
-    "mistap": "No, go back",
-    "call": "Call now"
+    "call": "Call now",
+    "mistap_undo": "I tapped this by mistake"
   },
   "close": {
     "title": "Your session",
     "workout_label": "Workout",
     "hits_label": "Hits",
     "timeline_label": "Hit timeline",
+    "how_it_went": "How your moves went",
+    "tip_label": "One tip for next time",
     "care_team": "Your care team can review this session on the clinic board.",
     "done": "Done",
     "back_to_questions": "Answer questions again",
-    "change_profile": "Back to your board"
+    "change_profile": "Back to your week"
+  },
+  "note": {
+    "send": "Send to my nurse",
+    "skip": "Skip",
+    "placeholder": "Type, or tap the microphone on your keyboard",
+    "sent": "Your note was sent to your nurse.",
+    "skipped": "No note this time. That's okay."
   },
   "synthetic": "Synthetic data"
 }

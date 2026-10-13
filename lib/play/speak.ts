@@ -80,11 +80,27 @@ export function unlockPlayback(): void {
   void loadManifest()
 }
 
-function speakWithBrowser(text: string) {
+/** Resolves the line in flight (end, error, or cancel) so speakLines can move on. */
+let settle: (() => void) | null = null
+
+function finishLine() {
+  const done = settle
+  settle = null
+  done?.()
+}
+
+function speakWithBrowser(text: string, my: number) {
   const utter = new SpeechSynthesisUtterance(text)
   utter.onstart = () => emitSpeaking(true)
-  utter.onend = () => emitSpeaking(false)
-  utter.onerror = () => emitSpeaking(false)
+  // A cancelled utterance fires end/error late; only the current line may settle.
+  utter.onend = () => {
+    emitSpeaking(false)
+    if (my === gen) finishLine()
+  }
+  utter.onerror = () => {
+    emitSpeaking(false)
+    if (my === gen) finishLine()
+  }
   void waitForVoices().then(() => {
     const voice = pickVoice()
     if (voice) utter.voice = voice
@@ -93,29 +109,64 @@ function speakWithBrowser(text: string) {
 }
 
 export function speak(text: string): void {
-  if (typeof window === "undefined") return
+  void speakLine(text)
+}
+
+/**
+ * Speak one line and resolve when it ends, errors, or is cancelled. A muted or blocked synth still resolves
+ * after a reading-time guard so captions keep moving.
+ */
+export function speakLine(text: string): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve()
   cancel()
+  const done = new Promise<void>((resolve) => {
+    const my = gen
+    const guard = window.setTimeout(() => {
+      if (my === gen) finishLine()
+    }, 2500 + text.length * 90)
+    settle = () => {
+      window.clearTimeout(guard)
+      resolve()
+    }
+  })
+  playLine(text)
+  return done
+}
+
+/** Lines one after another, each spoken and captioned. Stops quietly if any newer speech or cancel() takes over. */
+export async function speakLines(texts: string[]): Promise<void> {
+  if (typeof window === "undefined") return
+  for (let i = 0; i < texts.length; i++) {
+    const before = gen
+    await speakLine(texts[i])
+    // speakLine bumps gen once via cancel(); anything more means someone else spoke or cancelled.
+    if (gen !== before + 1) return
+  }
+}
+
+function playLine(text: string) {
   const my = gen
   emitCaption(text)
   void loadManifest().then(() => {
     // A newer line (or cancel) took over while the manifest loaded.
     if (my !== gen) return
     const file = manifest?.[text]
-    if (!file) return speakWithBrowser(text)
+    if (!file) return speakWithBrowser(text, my)
     const a = new Audio(`/voice/play/${file}`)
     clip = a
     a.onplay = () => emitSpeaking(true)
     a.onended = () => {
       if (clip === a) clip = null
       emitSpeaking(false)
+      if (my === gen) finishLine()
     }
     a.onerror = () => {
       if (clip === a) clip = null
-      speakWithBrowser(text)
+      if (my === gen) speakWithBrowser(text, my)
     }
     a.play().catch(() => {
       if (clip === a) clip = null
-      speakWithBrowser(text)
+      if (my === gen) speakWithBrowser(text, my)
     })
   })
 }
@@ -123,6 +174,7 @@ export function speak(text: string): void {
 export function cancel(): void {
   if (typeof window === "undefined") return
   gen++
+  finishLine()
   window.speechSynthesis.cancel()
   if (clip) {
     clip.onended = clip.onerror = null

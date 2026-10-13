@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach } from "vitest"
 import { getPatient } from "@/lib/seed"
 import {
   clearPlayerHomeCache,
+  missionDose,
   nextSessionLabel,
   playerHome,
   recoveryLabel,
@@ -12,7 +13,7 @@ describe("playerHome", () => {
     clearPlayerHomeCache()
   })
 
-  it("builds Ellen’s safe pre-game model with exact board rank", () => {
+  it("builds Ellen’s self-only pre-game model", () => {
     const ellen = getPatient("rise-01")!
     const home = playerHome(ellen)
 
@@ -25,14 +26,25 @@ describe("playerHome", () => {
     expect(home.family).toBe("tka")
     expect(home.checkInsDone).toBe(ellen.checkins.length)
     expect(home.checkInsDone).toBe(2)
-    expect(home.rank).toBe(9)
-    expect(home.rankPlace).toBe("9TH PLACE")
-    expect(home.weekHits).toBe(3)
+    expect(home.sinceSurgeryLabel).toBe("Day 3 since surgery")
     expect(home.trend).toBe("harder")
+    expect(home.trendLabel).toBe("Felt harder than last time")
     expect(home.nextSessionDays).toBe(1)
     expect(home.nextSessionLabel).toBe("Tomorrow")
     expect(home.missions).toHaveLength(1)
     expect(home.missions[0]?.id).toBe("sit_to_stand")
+  })
+
+  it("carries no rank, peer, score, or stand-count fields", () => {
+    const home = playerHome(getPatient("rise-01")!)
+    const keys = Object.keys(home).join(" ")
+    expect(keys).not.toMatch(/rank|place|peer|score|hits|stand|raw|steadi/i)
+    expect(JSON.stringify(home)).not.toMatch(/PLACE|STEADI|below average/i)
+  })
+
+  it("formats mission doses in plain words", () => {
+    const home = playerHome(getPatient("rise-01")!)
+    expect(missionDose(home.missions[0]!)).toMatch(/^\d+ × \d+$/)
   })
 
   it("memoizes by rise_id", () => {

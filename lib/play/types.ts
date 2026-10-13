@@ -67,7 +67,6 @@ export type PlayPhase =
   | "stepBack"
   | "paused"
   | "questions"
-  | "emergencyConfirm"
   | "emergency"
   | "close"
 
@@ -111,7 +110,6 @@ export type PlayAction =
   | { type: "SET_COMPLETE"; durationMs: number }
   | { type: "FINDING"; finding: Finding }
   | { type: "ANSWER"; id: QuestionId; value: number | boolean }
-  | { type: "CONFIRM_EMERGENCY" }
   | { type: "EMERGENCY_MISTAP" }
   | { type: "BACK_TO_QUESTIONS" }
   | { type: "SELECT_EXERCISE"; exerciseId: ExerciseId }

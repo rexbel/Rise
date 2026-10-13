@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { nextQuestionId } from "@/lib/play/phaseView"
 import { createPlaySession, reducePlaySession } from "@/lib/play/sessionMachine"
 import type { PlayAction, PlaySession } from "@/lib/play/types"
 
@@ -72,12 +73,52 @@ describe("sessionMachine", () => {
     expect(s.finishedSet).toBeNull()
   })
 
-  it("breath_chest true goes to emergencyConfirm then emergency", () => {
+  it("breath_chest true goes straight to emergency (no confirm screen)", () => {
+    const s = run("rise-01", [
+      ...toLive,
+      { type: "SET_COMPLETE", durationMs: 12_000 },
+      { type: "ANSWER", id: "pain", value: 3 },
+      { type: "ANSWER", id: "dizzy", value: false },
+      { type: "ANSWER", id: "breath_chest", value: true },
+    ])
+    expect(s.phase).toBe("emergency")
+    expect(s.answers.breath_chest).toBe(true)
+  })
+
+  it("mistap undo returns to the breath question and keeps earlier answers", () => {
+    const s = run("rise-01", [
+      ...toLive,
+      { type: "SET_COMPLETE", durationMs: 12_000 },
+      { type: "ANSWER", id: "pain", value: 3 },
+      { type: "ANSWER", id: "dizzy", value: false },
+      { type: "ANSWER", id: "breath_chest", value: true },
+      { type: "EMERGENCY_MISTAP" },
+    ])
+    expect(s.phase).toBe("questions")
+    expect(s.answers).toEqual({ pain: 3, dizzy: false })
+    expect(nextQuestionId(s.answers)).toBe("breath_chest")
+  })
+
+  it("re-answering No after a mistap reaches close", () => {
+    const s = run("rise-01", [
+      ...toLive,
+      { type: "SET_COMPLETE", durationMs: 12_000 },
+      { type: "ANSWER", id: "pain", value: 3 },
+      { type: "ANSWER", id: "dizzy", value: false },
+      { type: "ANSWER", id: "breath_chest", value: true },
+      { type: "EMERGENCY_MISTAP" },
+      { type: "ANSWER", id: "breath_chest", value: false },
+      { type: "ANSWER", id: "calf", value: false },
+    ])
+    expect(s.phase).toBe("close")
+  })
+
+  it("ignores answers while on the emergency screen", () => {
     const s = run("rise-01", [
       ...toLive,
       { type: "SET_COMPLETE", durationMs: 12_000 },
       { type: "ANSWER", id: "breath_chest", value: true },
-      { type: "CONFIRM_EMERGENCY" },
+      { type: "ANSWER", id: "breath_chest", value: false },
     ])
     expect(s.phase).toBe("emergency")
     expect(s.answers.breath_chest).toBe(true)
@@ -118,7 +159,7 @@ describe("sessionMachine", () => {
       { type: "PRESENTER_JUMP_TO_QUESTIONS" },
       { type: "ANSWER", id: "breath_chest", value: true },
     ])
-    expect(s.phase).toBe("emergencyConfirm")
+    expect(s.phase).toBe("emergency")
     expect(s.finishedSet?.durationMs).toBe(12_000)
     expect(s.answers.pain).toBeUndefined()
   })
