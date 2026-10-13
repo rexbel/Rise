@@ -39,6 +39,8 @@ type PlayContextValue = {
   addCosmosLook: (look: CosmosLook) => void
   resolveCosmosLook: (id: string, look: CosmosLook) => void
   sessionId: string
+  /** True when sessionId came from the console invite (?s=), the same on the server render and in the browser. */
+  invited: boolean
   clinicName: string
   /** Last result sent to the care team (null until close or emergency). */
   result: SessionResult | null
@@ -57,12 +59,14 @@ const PlayContext = createContext<PlayContextValue | null>(null)
 export function PlayProvider({
   patient,
   sessionId,
+  invited,
   clinicName,
   demo,
   children,
 }: {
   patient: SeedPatient
   sessionId: string
+  invited: boolean
   clinicName: string
   demo: boolean
   children: ReactNode
@@ -260,6 +264,7 @@ export function PlayProvider({
       addCosmosLook,
       resolveCosmosLook,
       sessionId,
+      invited,
       clinicName,
       result,
       delivery,
@@ -285,6 +290,7 @@ export function PlayProvider({
       addCosmosLook,
       resolveCosmosLook,
       sessionId,
+      invited,
       clinicName,
       result,
       delivery,

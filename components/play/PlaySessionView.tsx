@@ -26,7 +26,7 @@ export function PlaySessionView({
   // One id per page load: an invite's id when valid, else `<riseId>-<base36 time>`. Restart keeps it.
   const [sessionId] = useState(() => resolvePlaySessionId(patient.rise_id, sessionParam, Date.now()))
   return (
-    <PlayProvider key={restartKey} patient={patient} sessionId={sessionId} clinicName={clinicName} demo={demo}>
+    <PlayProvider key={restartKey} patient={patient} sessionId={sessionId} invited={sessionId === sessionParam} clinicName={clinicName} demo={demo}>
       <PlayShell patient={patient} demo={demo} onRestart={() => setRestartKey((k) => k + 1)} />
     </PlayProvider>
   )

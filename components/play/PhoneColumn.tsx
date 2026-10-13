@@ -72,7 +72,7 @@ export function PhoneColumn({ patient }: { patient: SeedPatient }) {
 }
 
 function PhoneBody({ patient }: { patient: SeedPatient }) {
-  const { session, dispatch, begin, voiceStopOn, setVoiceStopOn, sessionId } = usePlay()
+  const { session, dispatch, begin, voiceStopOn, setVoiceStopOn, sessionId, invited } = usePlay()
   const { phase } = session
   const home = useMemo(() => playerHome(patient), [patient])
   const missionKey = home.missions.map((m) => m.id).join("|")
@@ -114,7 +114,7 @@ function PhoneBody({ patient }: { patient: SeedPatient }) {
                   Voice Stop {voiceStopOn ? "on" : "off"}
                 </Button>
               ) : null}
-              <Link href={weekHref(sessionId)} className={cn(ptLink, "inline-flex min-h-14 items-center self-start")}>
+              <Link href={weekHref(patient.rise_id, sessionId, invited)} className={cn(ptLink, "inline-flex min-h-14 items-center self-start")}>
                 {ui.home.back_week}
               </Link>
             </>

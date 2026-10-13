@@ -11,6 +11,7 @@ import type { LiveVisual } from "@/lib/play/findings"
 import type { HitMissEvent } from "@/lib/play/hitMiss"
 import type { ExerciseId } from "@/lib/play/programs"
 import type { Keypoints17 } from "@/lib/play/types"
+import { avatarGeometry, demoY, fitDemoBand, type AvatarGeometry } from "@/lib/play/avatarGeometry"
 
 type Fx = {
   kind: "hit" | "miss"
@@ -177,10 +178,14 @@ export function PixiLiveField({
           g.roundRect(20, h - 28, (w - 40) * prog, 10, 5)
           g.fill({ color: 0xfafafa, alpha: 0.95 })
 
+          // Demo replay fits the body below the header; live camera keypoints stay as tracked.
+          const kp = s.showGhost && s.keypoints ? fitDemoBand(s.keypoints) : s.keypoints
+          const fy = (y: number) => (s.showGhost ? demoY(y) : y)
+
           if (s.showGhost) {
-            const ghostT = (now / 3200) % 1
-            const stand = ghostT < 0.5 ? ghostT * 2 : (1 - ghostT) * 2
-            drawGhost(g, w, h, stand)
+            // Demo replay: the medic ninja is drawn from the same keypoints that place the fruit.
+            const body = avatarGeometry(kp, w, h)
+            if (body) drawMedicNinja(g, body)
           }
 
           const bent =
@@ -194,10 +199,10 @@ export function PixiLiveField({
           // Near-apex pulse cue for STS/squat
           const nearApex = s.visual.standAmount > 0.45 && s.visual.standAmount < 0.7 && !bent && s.visual.trackingOk
 
-          if (s.keypoints && s.visual.trackingOk) {
+          if (kp && s.visual.trackingOk) {
             if (s.exerciseId === "single_leg_balance") {
-              const ax = ((s.keypoints[15].x + s.keypoints[16].x) / 2) * w
-              const ay = ((s.keypoints[15].y + s.keypoints[16].y) / 2) * h
+              const ax = ((kp[15].x + kp[16].x) / 2) * w
+              const ay = ((kp[15].y + kp[16].y) / 2) * h
               const r = 58 * pulse
               g.circle(ax, ay, r)
               g.stroke({ width: 5, color: bent ? 0xea580c : 0xfafafa, alpha: 0.55 })
@@ -206,14 +211,14 @@ export function PixiLiveField({
               drawFruit(g, ax, ay, bent ? "bomb" : "melon", 1.35 * pulse)
             } else {
               const scale = (nearApex ? 1.45 : 1.28) * pulse
-              drawFruit(g, s.keypoints[13].x * w, s.keypoints[13].y * h + bob, bent ? "bomb" : "melon", scale)
-              drawFruit(g, s.keypoints[14].x * w, s.keypoints[14].y * h - bob * 0.6, bent ? "bomb" : "apple", scale)
+              drawFruit(g, kp[13].x * w, kp[13].y * h + bob, bent ? "bomb" : "melon", scale)
+              drawFruit(g, kp[14].x * w, kp[14].y * h - bob * 0.6, bent ? "bomb" : "apple", scale)
               if (s.visual.armsOut) {
-                drawFruit(g, s.keypoints[9].x * w, s.keypoints[9].y * h, "bomb", 1.2)
-                drawFruit(g, s.keypoints[10].x * w, s.keypoints[10].y * h, "bomb", 1.2)
+                drawFruit(g, kp[9].x * w, kp[9].y * h, "bomb", 1.2)
+                drawFruit(g, kp[10].x * w, kp[10].y * h, "bomb", 1.2)
               }
             }
-          } else if (!s.keypoints) {
+          } else if (!kp) {
             drawFruit(g, w * 0.42, h * 0.62 + bob, "melon", 1.15)
             drawFruit(g, w * 0.58, h * 0.62 - bob * 0.5, "apple", 1.15)
           }
@@ -221,7 +226,7 @@ export function PixiLiveField({
           for (const f of fxRef.current) {
             const age = (now - f.born) / f.life
             const px = f.x * w
-            const py = f.y * h
+            const py = fy(f.y) * h
             if (f.kind === "hit") {
               drawSlash(fxLayer, px, py, f.angle, age)
               drawHalf(fxLayer, px, py, f.angle, age, 1, 0x16a34a)
@@ -239,7 +244,7 @@ export function PixiLiveField({
             const age = (now - j.born) / j.life
             const t = (now - j.born) / 1000
             const jx = (j.x + j.vx * t) * w
-            const jy = (j.y + j.vy * t + 0.35 * t * t) * h
+            const jy = (fy(j.y) + j.vy * t + 0.35 * t * t) * h
             fxLayer.circle(jx, jy, j.r * (1 - age * 0.5))
             fxLayer.fill({ color: j.color, alpha: 1 - age })
           }
@@ -321,24 +326,108 @@ function drawHalf(g: Graphics, x: number, y: number, angle: number, age: number,
   g.fill({ color, alpha: 1 - age * 0.85 })
 }
 
-function drawGhost(g: Graphics, w: number, h: number, stand: number) {
-  const cx = w * 0.5
-  const hipY = h * (0.62 - stand * 0.18)
-  const headY = h * (0.28 - stand * 0.12)
-  const shoulderY = h * (0.36 - stand * 0.12)
-  const kneeY = h * (0.74 - stand * 0.1)
-  const ankleY = h * 0.88
-  g.circle(cx, headY, 14)
-  g.stroke({ width: 3, color: 0xa1a1aa, alpha: 0.35 })
-  g.moveTo(cx - 28, shoulderY)
-  g.lineTo(cx + 28, shoulderY)
-  g.moveTo(cx, shoulderY)
-  g.lineTo(cx, hipY)
-  g.moveTo(cx, hipY)
-  g.lineTo(cx - 18, kneeY)
-  g.lineTo(cx - 20, ankleY)
-  g.moveTo(cx, hipY)
-  g.lineTo(cx + 18, kneeY)
-  g.lineTo(cx + 20, ankleY)
-  g.stroke({ width: 3, color: 0xa1a1aa, alpha: 0.3 })
+/** Light rim so the dark parts of the figure stand out from the near-black stage. */
+const RIM = 0xe7e5e4
+const LIMB = 0x57534e // slate legs: lighter than the stage, still reads as the ninja
+const SLEEVE = 0xfafaf9
+const SLEEVE_EDGE = 0x78716c
+const HAND = 0x292524
+const COAT = 0xffffff
+const COAT_EDGE = 0xd6d3d1
+const HOOD = 0x111111
+const BAND = 0x1d9e75
+const MASK = 0x85b7eb
+
+type Pt = { x: number; y: number }
+
+function bone(g: Graphics, a: Pt, b: Pt, width: number, color: number, alpha = 1) {
+  g.moveTo(a.x, a.y)
+  g.lineTo(b.x, b.y)
+  g.stroke({ width, color, alpha, cap: "round", join: "round" })
+}
+
+/**
+ * Medic ninja from keypoints: slate legs, white coat torso, white sleeves with dark hands, black hood with the green
+ * band and cross, blue mask. Every dark part gets a light rim so the body reads on the dark stage.
+ */
+function drawMedicNinja(g: Graphics, b: AvatarGeometry) {
+  const t = b.limb
+  const [ls, rs] = b.shoulders
+  const [lh, rh] = b.hips
+
+  // Legs and pelvis (rim first, then fill)
+  const legs: [Pt, Pt][] = [
+    [b.hips[0], b.knees[0]],
+    [b.knees[0], b.ankles[0]],
+    [b.hips[1], b.knees[1]],
+    [b.knees[1], b.ankles[1]],
+    [lh, rh],
+  ]
+  for (const [a, c] of legs) bone(g, a, c, t + 6, RIM, 0.85)
+  for (const [a, c] of legs) bone(g, a, c, t, LIMB)
+
+  // Coat torso: shoulders to hips, slightly flared
+  const pad = t * 0.45
+  g.poly([ls.x - pad, ls.y, rs.x + pad, rs.y, rh.x + pad * 0.7, rh.y + t * 0.3, lh.x - pad * 0.7, lh.y + t * 0.3])
+  g.fill({ color: COAT, alpha: 1 })
+  g.stroke({ width: 3, color: COAT_EDGE, alpha: 1, join: "round" })
+  // Lapels and the red-cross pocket
+  const mid = { x: (ls.x + rs.x) / 2, y: (ls.y + rs.y) / 2 }
+  const lapel = t * 0.9
+  g.moveTo(mid.x - lapel * 0.5, mid.y + 2)
+  g.lineTo(mid.x, mid.y + lapel)
+  g.lineTo(mid.x + lapel * 0.5, mid.y + 2)
+  g.stroke({ width: 2, color: COAT_EDGE, alpha: 1 })
+  const pocket = { x: rs.x - t * 0.9, y: (rs.y + rh.y) / 2 }
+  const ps = Math.max(6, t * 0.45)
+  g.roundRect(pocket.x - ps / 2, pocket.y - ps / 2, ps, ps, 2)
+  g.fill({ color: 0xe24b4a, alpha: 1 })
+  g.moveTo(pocket.x, pocket.y - ps * 0.3)
+  g.lineTo(pocket.x, pocket.y + ps * 0.3)
+  g.moveTo(pocket.x - ps * 0.3, pocket.y)
+  g.lineTo(pocket.x + ps * 0.3, pocket.y)
+  g.stroke({ width: Math.max(1.5, ps * 0.18), color: 0xffffff, alpha: 1 })
+
+  // Arms: outlined white sleeves over the coat, dark hands with a rim
+  const arms: [Pt, Pt][] = [
+    [ls, b.elbows[0]],
+    [b.elbows[0], b.wrists[0]],
+    [rs, b.elbows[1]],
+    [b.elbows[1], b.wrists[1]],
+  ]
+  const armW = t * 0.85
+  for (const [a, c] of arms) bone(g, a, c, armW + 5, SLEEVE_EDGE)
+  for (const [a, c] of arms) bone(g, a, c, armW, SLEEVE)
+  for (const w of b.wrists) {
+    g.circle(w.x, w.y, armW * 0.55 + 2.5)
+    g.fill({ color: RIM, alpha: 0.9 })
+    g.circle(w.x, w.y, armW * 0.55)
+    g.fill({ color: HAND, alpha: 1 })
+  }
+
+  // Neck and head: black hood, green band with a white cross, white eye, blue mask
+  const r = b.headR
+  const head = { x: b.head.x, y: Math.min(b.head.y, mid.y - r * 0.9) }
+  bone(g, { x: mid.x, y: mid.y }, { x: head.x, y: head.y + r * 0.6 }, t * 0.8 + 6, RIM, 0.85)
+  bone(g, { x: mid.x, y: mid.y }, { x: head.x, y: head.y + r * 0.6 }, t * 0.8, HOOD)
+  g.circle(head.x, head.y, r + 3)
+  g.fill({ color: RIM, alpha: 0.9 })
+  g.circle(head.x, head.y, r)
+  g.fill({ color: HOOD, alpha: 1 })
+  const bandH = r * 0.36
+  g.rect(head.x - r * 0.98, head.y - r * 0.55, r * 1.96, bandH)
+  g.fill({ color: BAND, alpha: 1 })
+  // Tail of the band trailing behind
+  g.poly([head.x - r * 0.95, head.y - r * 0.5, head.x - r * 1.7, head.y - r * 0.85, head.x - r * 1.55, head.y - r * 0.2])
+  g.fill({ color: BAND, alpha: 1 })
+  const cy = head.y - r * 0.55 + bandH / 2
+  g.moveTo(head.x - r * 0.16, cy)
+  g.lineTo(head.x + r * 0.16, cy)
+  g.moveTo(head.x, cy - r * 0.14)
+  g.lineTo(head.x, cy + r * 0.14)
+  g.stroke({ width: Math.max(1.5, r * 0.09), color: 0xffffff, alpha: 1 })
+  g.circle(head.x + r * 0.38, head.y + r * 0.02, r * 0.16)
+  g.fill({ color: 0xffffff, alpha: 1 })
+  g.roundRect(head.x - r * 0.62, head.y + r * 0.22, r * 1.24, r * 0.48, r * 0.22)
+  g.fill({ color: MASK, alpha: 1 })
 }

@@ -27,7 +27,7 @@ type Step = "tip" | "today" | "nurse"
  * note to the nurse. Each step speaks only its own lines; the closure line comes last, after the note.
  */
 export function SessionReport({ patient }: { patient: SeedPatient }) {
-  const { session, dispatch, result, clinicName, sessionId } = usePlay()
+  const { session, dispatch, result, clinicName, sessionId, invited } = usePlay()
   const finishedSet = session.finishedSet
   const workout = exerciseById(finishedSet?.exerciseId ?? session.exerciseId)
   const close = useMemo(
@@ -128,7 +128,7 @@ export function SessionReport({ patient }: { patient: SeedPatient }) {
         ) : noteDone ? (
           <>
             <Button asChild className={ptCta}>
-              <Link href={weekHref(sessionId)}>{ui.close.change_profile}</Link>
+              <Link href={weekHref(patient.rise_id, sessionId, invited)}>{ui.close.change_profile}</Link>
             </Button>
             {session.demo ? (
               <Button type="button" className={ptSecondary} onClick={() => dispatch({ type: "BACK_TO_QUESTIONS" })}>
