@@ -49,3 +49,6 @@ public/models/*.onnx
 /*.onnx
 *.pt
 !.env.example
+
+# AI demo video work files (Runway downloads, ledger)
+/.demo-work/
