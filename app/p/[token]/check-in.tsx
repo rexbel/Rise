@@ -19,6 +19,7 @@ import lines from "@/content/patient-lines.json"
 import { closingLines } from "@/lib/feedback"
 import { StandCounter, type CounterSummary } from "@/lib/pose/counter"
 import { triage } from "@/lib/rules"
+import { resolvePlaySessionId } from "@/lib/play/playResult"
 import { sendEvent, sendResult } from "@/lib/session-client"
 import { steadiScore } from "@/lib/steadi"
 import type { CheckIn as PriorCheckIn, Recommendation, SeedPatient, SessionResult, SessionStatus, Symptoms, Trend } from "@/lib/types"
@@ -52,15 +53,27 @@ function trendVsPrevious(s: CounterSummary, prev: PriorCheckIn | undefined, fini
 const btn = ptCta
 const btn2 = ptSecondary
 
-export function CheckIn({ patient, clinicName }: { patient: SeedPatient; clinicName: string }) {
+export function CheckIn({
+  patient,
+  clinicName,
+  sessionParam,
+  demoParam = false,
+}: {
+  patient: SeedPatient
+  clinicName: string
+  /** ?s= from the console invite; ignored unless it is a valid id for this patient. */
+  sessionParam?: string
+  /** ?demo=1: start with the demo recording switched on. */
+  demoParam?: boolean
+}) {
   const firstName = patient.display_name.split(" ")[0]
   const prev = patient.checkins[patient.checkins.length - 1]
-  const [sessionId] = useState(() => `${patient.rise_id}-${Date.now().toString(36)}`)
+  const [sessionId] = useState(() => resolvePlaySessionId(patient.rise_id, sessionParam, Date.now()))
 
   const [step, setStep] = useState<Step>("welcome")
   const [checks, setChecks] = useState<Record<string, boolean>>({})
   const [facing, setFacing] = useState<"environment" | "user">("environment")
-  const [demo, setDemo] = useState(false)
+  const [demo, setDemo] = useState(demoParam)
   const [countdown, setCountdown] = useState<number | null>(null)
   const [elapsed, setElapsed] = useState(0)
   const [repPulse, setRepPulse] = useState(0)
@@ -272,6 +285,7 @@ export function CheckIn({ patient, clinicName }: { patient: SeedPatient; clinicN
         patientNote,
         tier: tier ?? "seeded",
         demoData: demo || tier === "seeded",
+        scripted: demo ? ["new_incontinence", "gait", "tandem"] : [],
         startedAt: startedAt.current,
         finishedAt: Date.now(),
       }
@@ -300,7 +314,7 @@ export function CheckIn({ patient, clinicName }: { patient: SeedPatient; clinicN
     }
     const r = buildResult(symptoms)
     setResult(r)
-    sendResult(r)
+    void sendResult(r)
     status("scoring")
     const decision = triage(r, prev, patient.episode.post_op_day_today)
     if (decision.emergency) {
@@ -324,7 +338,7 @@ export function CheckIn({ patient, clinicName }: { patient: SeedPatient; clinicN
 
   const sendNote = (skip: boolean) => {
     voice.stop()
-    if (!skip && note.trim() && result) sendResult({ ...result, patientNote: note.trim() })
+    if (!skip && note.trim() && result) void sendResult({ ...result, patientNote: note.trim() })
     setNoteSent(skip || !note.trim() ? "skipped" : "sent")
   }
 

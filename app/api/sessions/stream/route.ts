@@ -11,10 +11,18 @@ export async function GET(request: Request) {
   let cleanup = () => {}
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      const send = (m: SessionStreamMessage) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(m)}\n\n`))
+      // A write to a stream that closed without abort/cancel throws; drop this listener instead of leaking it.
+      const write = (chunk: string) => {
+        try {
+          controller.enqueue(encoder.encode(chunk))
+        } catch {
+          cleanup()
+        }
+      }
+      const send = (m: SessionStreamMessage) => write(`data: ${JSON.stringify(m)}\n\n`)
       send({ type: "snapshot", sessions: listSessions() })
       const unsubscribe = subscribe(send)
-      const beat = setInterval(() => controller.enqueue(encoder.encode(": keep-alive\n\n")), HEARTBEAT_MS)
+      const beat = setInterval(() => write(": keep-alive\n\n"), HEARTBEAT_MS)
       cleanup = () => {
         clearInterval(beat)
         unsubscribe()

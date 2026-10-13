@@ -146,20 +146,28 @@ function PhoneBody({ patient }: { patient: SeedPatient }) {
   return null
 }
 
-/** Red flag: shown the moment Yes is tapped, no confirm step first. The result is already on its way. */
+/**
+ * Red flag: shown the moment Yes is tapped, no confirm step first. "Your care team is being told" appears (and is
+ * spoken) only after the server acknowledged the result; the 911 instruction never waits on the network.
+ */
 function Emergency() {
-  const { dispatch } = usePlay()
+  const { dispatch, delivery } = usePlay()
+  const told = delivery === "ok"
 
   useEffect(() => {
-    void speakLines([lines.emergency.line, lines.emergency.care_team_told, lines.emergency.follow_up])
+    void speakLines([lines.emergency.line, lines.emergency.follow_up])
   }, [])
+
+  useEffect(() => {
+    if (told) void speakLines([lines.emergency.care_team_told])
+  }, [told])
 
   return (
     <div className="flex flex-1 flex-col justify-center gap-5">
       <section role="alert" className="flex flex-col gap-4 rounded-2xl bg-pt-danger-fill p-5 text-white sm:p-6">
         <TriangleAlert className="size-12" aria-hidden />
         <h2 className={`${playDisplay.className} text-3xl font-bold leading-snug`}>{lines.emergency.line}</h2>
-        <p className="text-xl leading-snug">{lines.emergency.care_team_told}</p>
+        {told ? <p className="text-xl leading-snug" role="status">{lines.emergency.care_team_told}</p> : null}
         <p className="text-xl leading-snug">{lines.emergency.follow_up}</p>
         <Button
           asChild

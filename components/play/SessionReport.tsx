@@ -9,7 +9,6 @@
 import Link from "next/link"
 import { useEffect, useId, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { HitTimeline } from "@/components/play/HitTimeline"
 import { usePlay } from "@/components/play/PlayProvider"
 import { playDisplay, ptCta, ptFocus, ptSecondary } from "@/components/play/playTheme"
 import lines from "@/content/patient-lines.json"
@@ -21,7 +20,7 @@ import type { SeedPatient } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 export function SessionReport({ patient }: { patient: SeedPatient }) {
-  const { session, dispatch, hitLog, result, clinicName } = usePlay()
+  const { session, dispatch, result, clinicName } = usePlay()
   const finishedSet = session.finishedSet
   const workout = exerciseById(finishedSet?.exerciseId ?? session.exerciseId)
   const close = useMemo(
@@ -58,8 +57,7 @@ export function SessionReport({ patient }: { patient: SeedPatient }) {
         <h2 className={`${playDisplay.className} mt-1 text-3xl font-extrabold text-pt-ink`}>{workout.name}</h2>
       </div>
 
-      <HitTimeline hitLog={hitLog} label={ui.close.how_it_went} className="rounded-2xl border border-pt-line bg-pt-bg/60 p-4" />
-
+      {/* No per-rep hit/miss record here: on the closing screen it reads as a pass/fail score. The clinic strip keeps it. */}
       {close.correction ? (
         <section aria-labelledby="tip-heading" className="rounded-2xl border border-pt-line bg-pt-surface-2 p-5">
           <h3 id="tip-heading" className="text-xl font-semibold text-pt-accent">
@@ -97,10 +95,11 @@ export function SessionReport({ patient }: { patient: SeedPatient }) {
 function NoteBox() {
   const { sendNote } = usePlay()
   const [note, setNote] = useState("")
-  const [state, setState] = useState<"open" | "sent" | "skipped">("open")
+  const [state, setState] = useState<"open" | "sending" | "sent" | "skipped">("open")
+  const [failed, setFailed] = useState(false)
   const fieldId = useId()
 
-  if (state !== "open") {
+  if (state === "sent" || state === "skipped") {
     return (
       <p className="rounded-2xl bg-pt-surface-2 px-4 py-3 text-xl text-pt-ink" role="status">
         {state === "sent" ? ui.note.sent : ui.note.skipped}
@@ -113,6 +112,11 @@ function NoteBox() {
       <label htmlFor={fieldId} className="text-xl leading-snug text-pt-ink">
         {lines.note_prompt}
       </label>
+      {failed ? (
+        <p className="text-xl leading-snug text-pt-ink" role="alert">
+          {ui.note.not_sent}
+        </p>
+      ) : null}
       <textarea
         id={fieldId}
         rows={3}
@@ -129,10 +133,13 @@ function NoteBox() {
         <Button
           type="button"
           className={ptCta}
-          disabled={!note.trim()}
-          onClick={() => {
+          disabled={!note.trim() || state === "sending"}
+          onClick={async () => {
             cancel()
-            setState(sendNote(note) ? "sent" : "skipped")
+            setState("sending")
+            const ok = await sendNote(note)
+            setFailed(!ok)
+            setState(ok ? "sent" : "open")
           }}
         >
           {ui.note.send}

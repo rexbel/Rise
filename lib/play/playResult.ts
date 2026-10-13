@@ -120,6 +120,8 @@ export function buildPlayResult(input: PlayResultInput): SessionResult {
     patientNote: input.patientNote,
     tier: input.tier,
     demoData: demo || input.seeded || input.tier === "seeded",
+    // Only a ?demo=1 run copies scripted fields; a camera fallback replays movement but scripts no answers.
+    scripted: demo ? ["new_incontinence", "gait", "tandem"] : [],
     startedAt,
     finishedAt: Math.max(startedAt, Math.floor(input.finishedAt)),
   }

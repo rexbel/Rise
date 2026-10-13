@@ -12,13 +12,27 @@ export function fail(message: string, status: number, issues?: string[]) {
 export async function readBody<S extends z.ZodType>(request: Request, schema: S): Promise<{ data: z.infer<S> } | { error: Response }> {
   const length = Number(request.headers.get("content-length") ?? 0)
   if (length > MAX_BODY_BYTES) return { error: fail("body too large", 413) }
-  let text: string
+  // Read with a running byte count: chunked uploads have no content-length to check up front.
+  let text = ""
   try {
-    text = await request.text()
+    const reader = request.body?.getReader()
+    const decoder = new TextDecoder()
+    let bytes = 0
+    for (;;) {
+      if (!reader) break
+      const { done, value } = await reader.read()
+      if (done) break
+      bytes += value.byteLength
+      if (bytes > MAX_BODY_BYTES) {
+        await reader.cancel()
+        return { error: fail("body too large", 413) }
+      }
+      text += decoder.decode(value, { stream: true })
+    }
+    text += decoder.decode()
   } catch {
     return { error: fail("unreadable body", 400) }
   }
-  if (text.length > MAX_BODY_BYTES) return { error: fail("body too large", 413) }
   let body: unknown
   try {
     body = JSON.parse(text)

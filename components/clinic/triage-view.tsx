@@ -258,7 +258,9 @@ function Metrics({ card }: { card: TriageCard }) {
           {/* The game does not measure these; showing 0 would read as a normal finding. */}
           <Small label="Asymmetry" value="Not measured" />
           <Small label="Pauses over 3 s" value="Not measured" />
-          {m.tandemHoldS !== undefined && <Small label="Tandem hold" value={`${m.tandemHoldS} s`} />}
+          {m.tandemHoldS !== undefined && (
+            <Small label="Tandem hold" value={`${m.tandemHoldS} s${card.scripted.includes("tandem") ? " (scripted)" : ""}`} />
+          )}
           <p className="col-span-full text-base text-cl-muted">
             A fixed rep target with no 30-second clock, so it is not compared to CDC norms or to past 30-second counts.
           </p>
@@ -286,7 +288,9 @@ function Metrics({ card }: { card: TriageCard }) {
           <Small label="Arm use" value={m.armsUsed ? (m.armsFromRep ? `Yes, from rep ${m.armsFromRep}` : "Yes") : "No"} />
           <Small label="Asymmetry" value={`${m.asymmetryPct}%`} />
           <Small label="Pauses over 3 s" value={String(m.pausesOver3s)} />
-          {m.tandemHoldS !== undefined && <Small label="Tandem hold" value={`${m.tandemHoldS} s`} />}
+          {m.tandemHoldS !== undefined && (
+            <Small label="Tandem hold" value={`${m.tandemHoldS} s${card.scripted.includes("tandem") ? " (scripted)" : ""}`} />
+          )}
         </dl>
       )}
     </section>
@@ -346,7 +350,7 @@ const NOT_ASKED: Record<(typeof SYMPTOMS)[number]["key"], string> = {
  */
 function symptomAsked(card: TriageCard, key: (typeof SYMPTOMS)[number]["key"]): "asked" | "not_asked" | "scripted" {
   if (key === "calf_pain_or_swelling" && card.symptoms.short_of_breath_or_chest_pain) return "not_asked"
-  if (key === "new_incontinence") return card.demoData ? "scripted" : "not_asked"
+  if (key === "new_incontinence") return card.scripted.includes("new_incontinence") ? "scripted" : "not_asked"
   return "asked"
 }
 
@@ -454,8 +458,13 @@ function Actions({ s, card }: { s: SessionSnapshot; card: TriageCard }) {
             action: "approve",
             careTeamNote: note !== original ? note : undefined,
             user: DEMO_USER,
+            // The card this person read; the server answers 409 if the patient changed it meanwhile.
+            expectRecommendation: card.recommendation,
+            expectRule: card.ruleFired,
           })
         : await decide(s.sessionId, {
+            expectRecommendation: card.recommendation,
+            expectRule: card.ruleFired,
             action: "downgrade",
             to: to as Recommendation,
             reasonCode: reason,
@@ -527,6 +536,12 @@ function Actions({ s, card }: { s: SessionSnapshot; card: TriageCard }) {
               </span>
               .
             </p>
+            {card.recommendation === "human_confirm" ? (
+              <p className="text-base text-cl-muted">
+                Approving keeps this with the care coordinator to call the patient and ask whether it was a safety event. If you
+                already confirmed it was not, use Downgrade to Continue plan instead.
+              </p>
+            ) : null}
             <div className="grid gap-2">
               <Label htmlFor={`${id}-note`} className="text-base font-semibold">
                 Care-team note <span className="font-normal text-cl-muted">(optional)</span>

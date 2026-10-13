@@ -46,8 +46,10 @@ type PlayContextValue = {
   recordRep: (count: number) => void
   /** LivePlay: which pose source feeds the set. */
   setSetSource: (tier: PoseTier, seeded: boolean) => void
-  /** Re-send the result with the patient's note. False when there is nothing to attach it to. */
-  sendNote: (note: string) => boolean
+  /** Re-send the result with the patient's note. Resolves true once the server acknowledged it. */
+  sendNote: (note: string) => Promise<boolean>
+  /** Delivery of the latest result: the emergency screen says "your care team is being told" only when "ok". */
+  delivery: "idle" | "sending" | "ok" | "failed"
 }
 
 const PlayContext = createContext<PlayContextValue | null>(null)
@@ -79,6 +81,16 @@ export function PlayProvider({
   const [cosmosLooks, setCosmosLooks] = useState<CosmosLook[]>([])
   const [result, setResult] = useState<SessionResult | null>(null)
   const resultRef = useRef<SessionResult | null>(null)
+  const [delivery, setDelivery] = useState<"idle" | "sending" | "ok" | "failed">("idle")
+  const deliverySeq = useRef(0)
+  /** Send a result; only the newest send may update the delivery state. */
+  const deliver = useCallback(async (out: SessionResult) => {
+    const seq = ++deliverySeq.current
+    setDelivery("sending")
+    const ok = await sendResult(out)
+    if (seq === deliverySeq.current) setDelivery(ok ? "ok" : "failed")
+    return ok
+  }, [])
   const relay = useRef({
     lastStatus: null as SessionStatus | null,
     reps: 0,
@@ -155,10 +167,10 @@ export function PlayProvider({
         })
         resultRef.current = out
         setResult(out)
-        sendResult(out)
+        void deliver(out)
       }
     },
-    [sessionId, patient, demo],
+    [sessionId, patient, demo, deliver],
   )
 
   const apply = useCallback(
@@ -197,16 +209,18 @@ export function PlayProvider({
     [demo],
   )
 
-  const sendNote = useCallback((note: string) => {
-    const base = resultRef.current
-    const text = note.trim()
-    if (!base || !text) return false
-    const out = { ...base, patientNote: text.slice(0, 2000) }
-    resultRef.current = out
-    setResult(out)
-    sendResult(out)
-    return true
-  }, [])
+  const sendNote = useCallback(
+    async (note: string) => {
+      const base = resultRef.current
+      const text = note.trim()
+      if (!base || !text) return false
+      const out = { ...base, patientNote: text.slice(0, 2000) }
+      resultRef.current = out
+      setResult(out)
+      return deliver(out)
+    },
+    [deliver],
+  )
 
   useEffect(() => subscribeCaption(setCaption), [])
   useEffect(() => subscribeSpeaking(setSpeaking), [])
@@ -248,6 +262,7 @@ export function PlayProvider({
       sessionId,
       clinicName,
       result,
+      delivery,
       recordRep,
       setSetSource,
       sendNote,
@@ -272,6 +287,7 @@ export function PlayProvider({
       sessionId,
       clinicName,
       result,
+      delivery,
       recordRep,
       setSetSource,
       sendNote,

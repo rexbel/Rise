@@ -116,11 +116,17 @@ export function buildPatientLink(origin: string, path: string, useDemoRecording:
   return base + (base.includes("?") ? "&" : "?") + "demo=1"
 }
 
-/** Mirrors lib/sessions.ts finalRecommendation: the last downgrade wins, otherwise the rules' recommendation. */
+/**
+ * Mirrors lib/sessions.ts finalRecommendation: a pending card stands on the rules; a downgraded card stands on
+ * its latest downgrade. An older downgrade never carries over to a card that new patient input reopened.
+ */
 export function finalRecommendation(s: Pick<SessionSnapshot, "card" | "audit">): Recommendation | null {
   if (!s.card) return null
-  const down = [...s.audit].reverse().find((a) => a.action === "downgraded")
-  return down?.to ?? s.card.recommendation
+  if (s.card.approval === "downgraded") {
+    const down = [...s.audit].reverse().find((a) => a.action === "downgraded")
+    if (down?.to) return down.to
+  }
+  return s.card.recommendation
 }
 
 /** Severity used by the server to validate a downgrade (lib/sessions.ts). */
@@ -173,6 +179,12 @@ export function auditActionLabel(a: AuditEntry): string {
       return "Approved"
     case "downgraded":
       return "Downgraded"
+    case "reopened":
+      return "Reopened by new patient input"
+    case "restarted":
+      return "Demo set replayed"
+    case "red_flag_retracted":
+      return "Red flag tapped, then retracted by the patient"
     case "reset":
       return "Reset"
   }
@@ -183,6 +195,7 @@ export function apiErrorMessage(status: number, body: unknown): string {
   const error = typeof body === "object" && body && "error" in body ? String((body as { error: unknown }).error) : ""
   if (status === 404) return "This session is no longer on the server, probably after Reset demo. Go back to the board and send a new check-in."
   if (status === 409 && error === "already decided") return "Someone already decided this card. The latest decision is shown below."
+  if (status === 409 && error === "card changed") return "The patient's answers changed while you were reading. The card has been refreshed; review it and decide again."
   if (status === 409) return "The patient has not finished yet, so there is no card to decide. Wait for the tile to show Ready."
   if (status === 400 && error) return `The server rejected this request: ${error}. Check the form and try again.`
   if (status >= 500) return "The Rise server hit an error. Try again; if it keeps failing, restart the dev server."

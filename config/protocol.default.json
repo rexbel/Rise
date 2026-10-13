@@ -58,7 +58,7 @@
     { "id": "short_of_breath_or_chest_pain", "type": "yes_no", "red_flag": true, "text": "Are you short of breath, or do you have chest pain?" },
     { "id": "calf_pain_or_swelling", "type": "yes_no", "text": "Do you have new pain or swelling in your calf?" }
   ],
-  "note_red_flag_phrases": ["chest pain", "can't breathe", "cant breathe", "short of breath", "fell", "fall", "bleeding", "fainted", "passed out"],
+  "note_red_flag_phrases": ["chest pain", "chest hurts", "chest is tight", "can't breathe", "cant breathe", "cannot breathe", "short of breath", "hard to breathe", "fell", "fall", "falling", "fallen", "bleeding", "fainted", "fainting", "passed out", "blacked out"],
   "override_reasons": [
     { "code": "patient_preference", "label": "Patient preference or burden" },
     { "code": "closer_monitoring", "label": "Clinical condition calls for closer monitoring" },

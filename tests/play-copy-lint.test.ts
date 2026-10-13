@@ -56,7 +56,7 @@ describe("play patient copy", () => {
   })
 
   it("new patient lines stay short (under 20 words)", () => {
-    for (const text of stringsOf([playUi.week, playUi.note, playUi.emergency, playUi.close.tip_label, playUi.close.how_it_went])) {
+    for (const text of stringsOf([playUi.week, playUi.note, playUi.emergency, playUi.close.tip_label, playUi.ready])) {
       expect(text.split(/\s+/).length, text).toBeLessThan(20)
     }
   })

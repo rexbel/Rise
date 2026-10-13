@@ -183,6 +183,8 @@ export const SessionResult = z.object({
   tier: PoseTier,
   /** True when any part came from a seeded fallback; shows the "Demo data" badge. */
   demoData: z.boolean(),
+  /** Fields copied from the patient's scripted session instead of measured or asked (demo runs only). */
+  scripted: z.array(z.enum(["new_incontinence", "gait", "tandem"])).default([]),
   startedAt: At,
   finishedAt: At,
 })
@@ -323,6 +325,8 @@ export const TriageCard = TriageDecision.extend({
   patientNote: z.string().optional(),
   /** Phrase screen hit on the patient note ("chest pain", "fell", ...) -> amber "Note needs review". */
   noteNeedsReview: z.boolean(),
+  /** Copied from SessionResult.scripted so each scripted row can say so. */
+  scripted: z.array(z.enum(["new_incontinence", "gait", "tandem"])),
   observation: CosmosObservation.optional(),
   careTeamNote: z.string().optional(),
   clip: ClipRef.optional(),
@@ -352,14 +356,22 @@ export const InviteResponse = z.object({
 export type InviteResponse = z.infer<typeof InviteResponse>
 
 /** Console -> POST /api/sessions/[id]/approval. A person decides; nothing escalates without this. */
+/** The card version the coordinator read. A mismatch (the patient re-answered meanwhile) returns 409. */
+const ExpectedCard = {
+  expectRecommendation: Recommendation.optional(),
+  expectRule: z.string().max(40).optional(),
+}
+
 export const ApprovalRequest = z.discriminatedUnion("action", [
   z.object({
+    ...ExpectedCard,
     action: z.literal("approve"),
     /** Coordinator's edit of the care-team note, if any. */
     careTeamNote: z.string().max(2000).optional(),
     user: z.string().min(1).max(80),
   }),
   z.object({
+    ...ExpectedCard,
     action: z.literal("downgrade"),
     to: Recommendation,
     /** Code from config/protocol.default.json -> downgrade_reasons. */
@@ -374,7 +386,11 @@ export type ApprovalRequest = z.infer<typeof ApprovalRequest>
 export const AuditEntry = z.object({
   sessionId: z.string(),
   riseId: z.string(),
-  action: z.enum(["invited", "approved", "downgraded", "reset"]),
+  /**
+   * reopened = new answers or a flagged note sent a decided card back to pending; restarted = a demo set was replayed;
+   * red_flag_retracted = the patient answered Yes to breath/chest pain, saw the 911 screen, then said it was a mistake.
+   */
+  action: z.enum(["invited", "approved", "downgraded", "reopened", "restarted", "red_flag_retracted", "reset"]),
   from: Recommendation.optional(),
   to: Recommendation.optional(),
   reasonCode: z.string().optional(),

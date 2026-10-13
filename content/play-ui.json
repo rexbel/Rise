@@ -55,7 +55,7 @@
   },
   "ready": {
     "title": "Before you start",
-    "body": "Sturdy chair behind you? Feeling OK to start?",
+    "body": "Sturdy chair behind you? Someone nearby? Feeling OK to start?",
     "continue": "I am ready",
     "not_now": "Not now"
   },
@@ -117,7 +117,6 @@
     "workout_label": "Workout",
     "hits_label": "Hits",
     "timeline_label": "Hit timeline",
-    "how_it_went": "How your moves went",
     "tip_label": "One tip for next time",
     "care_team": "Your care team can review this session on the clinic board.",
     "done": "Done",
@@ -129,6 +128,7 @@
     "skip": "Skip",
     "placeholder": "Type, or tap the microphone on your keyboard",
     "sent": "Your note was sent to your nurse.",
+    "not_sent": "Your note did not go through yet. You can try sending it again.",
     "skipped": "No note this time. That's okay."
   },
   "synthetic": "Synthetic data"

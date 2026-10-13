@@ -30,6 +30,7 @@ export function scriptedResult(p: SeedPatient, overrides: Partial<SessionResult>
     symptoms: t.symptoms,
     tier: "seeded",
     demoData: true,
+    scripted: ["new_incontinence", "gait", "tandem"],
     startedAt: 0,
     finishedAt: 30_000,
     ...overrides,
