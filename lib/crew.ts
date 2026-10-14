@@ -357,3 +357,34 @@ export function recordSelfStartedSet(result: SessionResult, now = Date.now()): b
   markActive(result.riseId, now)
   return true
 }
+
+/** Durable storage (lib/persist.ts): the crew store as plain JSON (Maps and Sets as arrays). */
+export type CrewDump = {
+  active: [string, string[]][]
+  cheers: LiveCheer[]
+  members: [string, Membership][]
+  tokens: [string, string][]
+  paused: [string, string[]][]
+  consent: ConsentRecord[]
+}
+
+export function exportCrew(): CrewDump {
+  return {
+    active: [...store.active].map(([k, v]) => [k, [...v]]),
+    cheers: store.cheers,
+    members: [...store.members],
+    tokens: [...store.tokens],
+    paused: [...store.paused].map(([k, v]) => [k, [...v]]),
+    consent: store.consent,
+  }
+}
+
+/** Durable storage: load the saved crew store on start. */
+export function importCrew(d: CrewDump) {
+  store.active = new Map(d.active.map(([k, v]) => [k, new Set(v)]))
+  store.cheers = d.cheers ?? []
+  store.members = new Map(d.members ?? [])
+  store.tokens = new Map(d.tokens ?? [])
+  store.paused = new Map((d.paused ?? []).map(([k, v]) => [k, new Set(v)]))
+  store.consent = d.consent ?? []
+}

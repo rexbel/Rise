@@ -1,11 +1,13 @@
 /**
- * In-memory session store for the live board (plan §6b). One Node process, demo scale: no database, no auth.
- * Everything resets on server restart or Reset demo. The recommendation comes only from lib/rules.ts;
+ * In-memory session store for the live board (plan §6b). One Node process, demo scale: no auth. Every write
+ * marks the store dirty; on Cloudflare lib/persist.ts saves it durably and reloads it on start. Reset demo clears it. The recommendation comes only from lib/rules.ts;
  * a person approves or downgrades it through approve(). Patient answers and notes stay on the card and
  * are never copied into the audit log.
  */
 import protocol from "@/config/protocol.default.json"
 import { markActive, resetCrew, syncPause } from "@/lib/crew"
+import { cadenceInputFor, dueOn, nextCheckIn } from "@/lib/cadence"
+import { markDirty } from "@/lib/dirty"
 import { triage } from "@/lib/rules"
 import { getPatient, lastCheckIn } from "@/lib/seed"
 import { belowAverageCutoff } from "@/lib/steadi"
@@ -14,6 +16,9 @@ import {
   type ApprovalRequest,
   type CrewResumeRequest,
   type AuditEntry,
+  type FollowUp,
+  type FollowUpRequest,
+  type NextCheckIn,
   type Recommendation,
   type RepEvent,
   type SessionResult,
@@ -21,6 +26,7 @@ import {
   type SessionStreamMessage,
   type Surface,
   type TriageCard,
+  type Trend,
 } from "@/lib/types"
 
 const MAX_SESSIONS = 100
@@ -115,6 +121,7 @@ function put(next: SessionSnapshot) {
     syncPause(oldest.riseId, oldest.sessionId, false)
   }
   emit({ type: "session", session: s })
+  markDirty()
   return s
 }
 
@@ -326,6 +333,10 @@ function sameFindings(a: TriageCard, b: TriageCard): boolean {
 const SEVERITY: Record<Recommendation, number> = { escalate_urgent: 3, human_confirm: 2, nurse_callback: 2, continue_plan: 1 }
 
 export function approve(sessionId: string, req: ApprovalRequest, now = Date.now()): SessionSnapshot {
+  return put(afterDecision(decide(sessionId, req, now), now))
+}
+
+function decide(sessionId: string, req: ApprovalRequest, now: number): SessionSnapshot {
   const s = store.sessions.get(sessionId)
   if (!s) throw new SessionError("unknown session", 404)
   if (!s.card) throw new SessionError("no triage card yet", 409)
@@ -341,12 +352,12 @@ export function approve(sessionId: string, req: ApprovalRequest, now = Date.now(
   if (req.action === "approve") {
     const edited = req.careTeamNote !== undefined && req.careTeamNote !== (s.card.careTeamNote ?? "")
     const entry: AuditEntry = { sessionId, riseId: s.riseId, action: "approved", from, to: from, user: req.user, at: now }
-    return put({
+    return {
       ...s,
       card: { ...s.card, approval: edited ? "edited" : "approved", careTeamNote: req.careTeamNote ?? s.card.careTeamNote },
       audit: [...s.audit, entry].slice(-MAX_AUDIT),
       updatedAt: now,
-    })
+    }
   }
 
   const reason = protocol.downgrade_reasons.find((r) => r.code === req.reasonCode)
@@ -368,7 +379,99 @@ export function approve(sessionId: string, req: ApprovalRequest, now = Date.now(
     user: req.user,
     at: now,
   }
-  return put({ ...s, card: { ...s.card, approval: "downgraded" }, audit: [...s.audit, entry].slice(-MAX_AUDIT), updatedAt: now })
+  return { ...s, card: { ...s.card, approval: "downgraded" }, audit: [...s.audit, entry].slice(-MAX_AUDIT), updatedAt: now }
+}
+
+const FOLLOW = protocol.followup
+
+/** Easier / same / harder than the patient's last check-in. A game set is not a CDC count, so it never moves the schedule. */
+function trendOf(card: TriageCard): Trend {
+  const prev = card.metrics.previousRawStands
+  if (card.protocol === "play_set" || prev === null) return "same"
+  const patient = getPatient(card.riseId)
+  const prevArms = patient ? (lastCheckIn(patient)?.arms_used ?? false) : false
+  if (card.metrics.rawStands < prev || (card.metrics.armsUsed && !prevArms)) return "harder"
+  return card.metrics.rawStands > prev ? "better" : "same"
+}
+
+function schedule(card: TriageCard, rec: Recommendation, now: number): NextCheckIn | undefined {
+  const patient = getPatient(card.riseId)
+  if (!patient) return undefined
+  const c = nextCheckIn(cadenceInputFor(patient, rec, trendOf(card)))
+  return { inDays: c.inDays, dueOn: dueOn(now, c.inDays), phase: c.phase, reason: c.reason, paused: false, source: "session" }
+}
+
+/**
+ * After a person decides the card: open a follow-up when the decision needs one (protocol.followup.opens_on) and set
+ * the next check-in. A later decision that no longer needs one drops a still-open task; a closed one stays on record.
+ */
+function afterDecision(s: SessionSnapshot, now: number): SessionSnapshot {
+  const final = finalRecommendation(s)
+  if (!s.card || !final) return s
+  const needs = (FOLLOW.opens_on as string[]).includes(final)
+  if (needs) {
+    if (s.followUp?.status === "open" && s.followUp.recommendation === final) return { ...s, nextCheckIn: schedule(s.card, final, now) }
+    const followUp: FollowUp = {
+      status: "open",
+      recommendation: final,
+      route: s.card.route ?? null,
+      openedAt: now,
+      attempts: 0,
+      lastAttemptAt: null,
+      outcome: null,
+      note: null,
+      closedAt: null,
+      closedBy: null,
+    }
+    const entry: AuditEntry = { sessionId: s.sessionId, riseId: s.riseId, action: "followup_opened", to: final, user: "Rise", at: now }
+    return { ...s, followUp, nextCheckIn: schedule(s.card, final, now), audit: [...s.audit, entry].slice(-MAX_AUDIT) }
+  }
+  const followUp = s.followUp?.status === "open" ? undefined : s.followUp
+  return { ...s, followUp, nextCheckIn: schedule(s.card, final, now) }
+}
+
+/** Console: record how a follow-up ended. "Not reached" keeps it open; a closing outcome sets the next check-in. */
+export function recordFollowUp(sessionId: string, req: FollowUpRequest, now = Date.now()): SessionSnapshot {
+  const s = store.sessions.get(sessionId)
+  if (!s) throw new SessionError("unknown session", 404)
+  if (!s.card || s.followUp?.status !== "open") throw new SessionError("no open follow-up", 409)
+  const outcome = FOLLOW.outcomes.find((o) => o.code === req.outcome)
+  if (!outcome) throw new SessionError("unknown outcome", 400)
+  const note = req.note?.trim() || null
+  if ("requires_free_text" in outcome && outcome.requires_free_text && !note) throw new SessionError("this outcome needs a note", 400)
+
+  if (!outcome.closes) {
+    const entry: AuditEntry = { sessionId, riseId: s.riseId, action: "followup_attempt", reasonCode: outcome.code, freeText: note ?? undefined, user: req.user, at: now }
+    return put({
+      ...s,
+      followUp: { ...s.followUp, attempts: s.followUp.attempts + 1, lastAttemptAt: now },
+      audit: [...s.audit, entry].slice(-MAX_AUDIT),
+      updatedAt: now,
+    })
+  }
+
+  const paused = "pauses_schedule" in outcome && outcome.pauses_schedule
+  const next: NextCheckIn | undefined = paused
+    ? { inDays: null, dueOn: null, phase: s.nextCheckIn?.phase ?? "", reason: "Paused until a clinician clears the patient", paused: true, source: "session" }
+    : schedule(s.card, s.followUp.recommendation, now)
+  const entry: AuditEntry = { sessionId, riseId: s.riseId, action: "followup_closed", reasonCode: outcome.code, freeText: note ?? undefined, user: req.user, at: now }
+  return put({
+    ...s,
+    followUp: { ...s.followUp, status: "done", outcome: outcome.code, note, closedAt: now, closedBy: req.user },
+    nextCheckIn: next,
+    audit: [...s.audit, entry].slice(-MAX_AUDIT),
+    updatedAt: now,
+  })
+}
+
+/** The patient's next check-in: their latest decided session's schedule, else the seed's. */
+export function patientNextCheckIn(riseId: string, now = Date.now()): NextCheckIn | null {
+  const patient = getPatient(riseId)
+  if (!patient) return null
+  const latest = listSessions().find((s) => s.riseId === riseId && s.nextCheckIn)
+  if (latest?.nextCheckIn) return latest.nextCheckIn
+  const c = patient.cadence
+  return { inDays: c.next_checkin_in_days, dueOn: dueOn(now, c.next_checkin_in_days), phase: c.phase, reason: c.reason, paused: false, source: "seed" }
 }
 
 /**
@@ -417,4 +520,17 @@ export function resetSessions() {
   store.sessions.clear()
   resetCrew()
   emit({ type: "reset" })
+  markDirty()
+}
+
+/** Durable storage (lib/persist.ts): every session, as stored. */
+export function exportSessions(): SessionSnapshot[] {
+  return [...store.sessions.values()]
+}
+
+/** Durable storage: load saved sessions on start. Replaces the store; listeners are told with a fresh snapshot. */
+export function importSessions(sessions: SessionSnapshot[]) {
+  store.sessions.clear()
+  for (const s of sessions) store.sessions.set(s.sessionId, s)
+  emit({ type: "snapshot", sessions: listSessions() })
 }
