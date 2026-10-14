@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import type { PoseEstimator } from "@/lib/pose"
 import { FpsMonitor, selectTier } from "@/lib/pose/select"
+import { CAMERA_TIMEOUT_MS, TRACKER_TIMEOUT_MS, withTimeout } from "@/lib/pose/timeout"
 import { clientLog } from "@/lib/play/clientLog"
 import { toPlayKeypoints } from "@/lib/play/keypointsAdapt"
 import type { PoseFrame } from "@/lib/play/types"
@@ -90,10 +91,15 @@ export function usePlayCamera(onFrame: (frame: PoseFrame) => void) {
         return "error"
       }
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: facing, width: { ideal: 640 }, height: { ideal: 480 } },
-          audio: false,
-        })
+        const stream = await withTimeout(
+          navigator.mediaDevices.getUserMedia({
+            video: { facingMode: facing, width: { ideal: 640 }, height: { ideal: 480 } },
+            audio: false,
+          }),
+          CAMERA_TIMEOUT_MS,
+          "camera",
+          (late) => late.getTracks().forEach((t) => t.stop()),
+        )
         if (my !== startGen.current) {
           stream.getTracks().forEach((t) => t.stop())
           return "cancelled"
@@ -119,7 +125,10 @@ export function usePlayCamera(onFrame: (frame: PoseFrame) => void) {
       if (my !== startGen.current) return "cancelled"
       setStatus("loading")
       try {
-        const sel = await selectTier(video)
+        const sel = await withTimeout(selectTier(video), TRACKER_TIMEOUT_MS, "tracker", (late) => {
+          late.primary.dispose()
+          late.fallback?.dispose()
+        })
         if (my !== startGen.current) {
           sel.primary.dispose()
           sel.fallback?.dispose()

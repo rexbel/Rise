@@ -444,6 +444,8 @@ export type NextCheckIn = z.infer<typeof NextCheckIn>
  */
 export const FollowUp = z.object({
   status: z.enum(["open", "done"]),
+  /** decision = opened by a decided card; could_not_complete = the patient couldn't do the check-in (no card). */
+  kind: z.enum(["decision", "could_not_complete"]).optional(),
   /** The decided recommendation the task follows up on. */
   recommendation: Recommendation,
   route: z.string().nullable(),
@@ -628,7 +630,7 @@ export const CrewJoinRequest = z.object({
   riseId: RiseIdLike,
   /** Omitted on a re-join from another phone: keeps the current photo choice. */
   showPhoto: z.boolean().optional(),
-  /** The console invite's session id (?s=). Required when the console key is set (public tunnel). */
+  /** Unused: joins are verified by the invite token in the x-rise-invite header. Kept so older phones still parse. */
   sessionId: z.string().max(40).optional(),
   /** The consent text version the patient saw; must equal CREW_CONSENT_VERSION. */
   consentVersion: z.string().max(20),

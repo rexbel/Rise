@@ -9,9 +9,10 @@ export async function POST(request: Request) {
   const body = await readBody(request, CrewJoinRequest)
   if ("error" in body) return body.error
   try {
-    // On the public tunnel, joining needs the patient's console invite (?s=), so nobody can opt someone else in.
-    // Verified = the phone holds this patient's invite token (from their link), not just an id the board shows.
-    const verified = resolveInvite(body.data.riseId, request.headers.get(INVITE_HEADER) ?? undefined) !== null
+    // On the public tunnel, joining needs the patient's own console invite, so nobody can opt someone else in.
+    // Verified = the phone holds this patient's real (not demo) invite token, not just an id the board shows.
+    const invite = resolveInvite(body.data.riseId, request.headers.get(INVITE_HEADER) ?? undefined)
+    const verified = !!invite && !invite.demo
     if (process.env.CONSOLE_KEY && !verified) throw new CrewError("open your check-in link from your care team to join", 403)
     const { token, board } = joinCrew(body.data, Date.now(), verified)
     return Response.json(board, { headers: { "set-cookie": tokenCookie(request, body.data.riseId, token) } })

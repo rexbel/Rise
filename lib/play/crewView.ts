@@ -323,12 +323,7 @@ export async function leaveCrewCall(riseId: string, opts: { fetchImpl?: FetchLik
   }
 }
 
-/**
- * "Your week" link that keeps the invite id, so joining the crew there is tied to the patient's own link.
- * Only an id that came from the invite (?s=) is carried: a locally generated id differs between the server render
- * and the browser (hydration mismatch) and could never verify a join anyway.
- */
-/** "Your week", keeping the invite token so the crew can verify the patient's own link. */
+/** "Your week", keeping the invite token (?i=) so the crew can verify the patient's own link and Continue stays on it. */
 export function weekHref(token: string | null | undefined): string {
   return token ? `/play?i=${encodeURIComponent(token)}` : "/play"
 }

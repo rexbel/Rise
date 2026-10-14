@@ -7,14 +7,26 @@ import ui from "@/content/play-ui.json"
 import { DEFAULT_YOU_ID } from "@/lib/play/cohort"
 import { missionDose, playerHome } from "@/lib/play/playerHome"
 import { getPatient } from "@/lib/seed"
+import { resolveInviteToken } from "@/lib/sessions"
 import { cn } from "@/lib/utils"
 
 /**
  * Your week: the patient's own progress first (Continue stays the first action), then their crew. The crew shows
  * days active and cheers only: no ranks, places, scores, or counts from stands.
  */
-export default function YourWeekPage() {
-  const patient = getPatient(DEFAULT_YOU_ID)
+// Reads ?i= (the patient's invite token, carried from their check-in link): render per request.
+export const instant = false
+
+/**
+ * With ?i=, this is the invited patient's own week: their patient, and Continue keeps the invite so the set stays
+ * tied to it (a real invite never falls back to the demo replay). Without it, the demo patient's week.
+ */
+export default async function YourWeekPage(props: PageProps<"/play">) {
+  const search = await props.searchParams
+  const token = typeof search.i === "string" ? search.i : undefined
+  const invite = resolveInviteToken(token)
+  const playInvite = invite?.surface === "play" ? invite : null
+  const patient = getPatient(playInvite?.riseId ?? DEFAULT_YOU_ID)
   if (!patient) notFound()
   const home = playerHome(patient)
 
@@ -72,7 +84,7 @@ export default function YourWeekPage() {
               ))}
             </ul>
             <p className="text-xl leading-snug text-pt-muted">{ui.home.hint}</p>
-            <Link href={`/play/${home.riseId}`} className={cn(ptCta, "mt-auto inline-flex h-16 min-h-16 items-center justify-center text-2xl", playDisplay.className)}>
+            <Link href={playInvite ? `/play/${home.riseId}?i=${encodeURIComponent(playInvite.token)}` : `/play/${home.riseId}`} className={cn(ptCta, "mt-auto inline-flex h-16 min-h-16 items-center justify-center text-2xl", playDisplay.className)}>
               {ui.week.continue}
             </Link>
           </section>

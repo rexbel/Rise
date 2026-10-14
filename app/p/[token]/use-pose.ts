@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { PoseEstimator } from "@/lib/pose"
 import { FpsMonitor, selectTier } from "@/lib/pose/select"
+import { CAMERA_TIMEOUT_MS, TRACKER_TIMEOUT_MS, withTimeout } from "@/lib/pose/timeout"
 import { DEMO_VIDEO_SRC, fromDemoVideo, loadFixture, seededFrames } from "@/lib/pose/seeded"
 import type { Keypoints17, PoseTier, SeedPatient } from "@/lib/types"
 
@@ -174,7 +175,12 @@ export function usePose() {
         videoRef.current.loop = false
       }
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 640 }, height: { ideal: 480 } }, audio: false })
+        const stream = await withTimeout(
+          navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 640 }, height: { ideal: 480 } }, audio: false }),
+          CAMERA_TIMEOUT_MS,
+          "camera",
+          (late) => late.getTracks().forEach((t) => t.stop()),
+        )
         const v = videoRef.current!
         v.srcObject = stream
         await v.play()
@@ -185,7 +191,10 @@ export function usePose() {
         return
       }
       try {
-        const sel = await selectTier(videoRef.current!, setStatus)
+        const sel = await withTimeout(selectTier(videoRef.current!, setStatus), TRACKER_TIMEOUT_MS, "tracker", (late) => {
+          late.primary.dispose()
+          late.fallback?.dispose()
+        })
         if (my !== startGen.current) {
           sel.primary.dispose()
           sel.fallback?.dispose()

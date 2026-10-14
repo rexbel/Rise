@@ -150,10 +150,11 @@ function Detail({ s, p }: { s: SessionSnapshot; p: PatientSummary | undefined })
         </div>
         <aside className="grid min-w-0 gap-6">
           {card && card.approval === "pending" && <Actions s={s} card={card} />}
-          {card && card.approval !== "pending" && (s.followUp || s.nextCheckIn) && (
+          {/* A decided card, or a couldn't-complete (no card) that opened its own follow-up. */}
+          {((card && card.approval !== "pending") || (!card && s.followUp)) && (s.followUp || s.nextCheckIn) && (
             <FollowUpPanel s={s} followUp={s.followUp} nextCheckIn={s.nextCheckIn} />
           )}
-          {!card && <ActionsLocked couldNotComplete={!!s.couldNotComplete} />}
+          {!card && !s.followUp && <ActionsLocked couldNotComplete={!!s.couldNotComplete} />}
           <CrewPanel s={s} />
           <Audit s={s} />
         </aside>
@@ -229,6 +230,10 @@ function CouldNotComplete({ s }: { s: SessionSnapshot }) {
       <p className="text-lg">
         <span className="font-semibold">No test was done</span>, so the rules did not run and there is no triage card. The
         patient was not shown a demo replay.
+      </p>
+      <p className="text-lg">
+        <span className="font-semibold">Symptoms were not asked</span>, including the red-flag questions. The follow-up call
+        on Today is the chance to ask them.
       </p>
     </section>
   )
@@ -871,7 +876,7 @@ function FollowUpForm({ s, f }: { s: SessionSnapshot; f: FollowUp }) {
           </p>
         )}
         <p className="text-base text-cl-muted">
-          For {RECOMMENDATION_LABEL[f.recommendation]}
+          {f.kind === "could_not_complete" ? "For a check-in the patient couldn't complete: call to help" : `For ${RECOMMENDATION_LABEL[f.recommendation]}`}
           {route ? ` → ${route}` : ""}. Recording as {DEMO_USER}.
         </p>
         <Attempts f={f} />

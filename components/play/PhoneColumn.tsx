@@ -143,7 +143,7 @@ function PhoneBody({ patient }: { patient: SeedPatient }) {
           {ui.ready.continue}
         </Button>
         <Button asChild className={ptSecondary}>
-          <Link href="/play">{ui.ready.not_now}</Link>
+          <Link href={weekHref(inviteToken)}>{ui.ready.not_now}</Link>
         </Button>
       </Screen>
     )

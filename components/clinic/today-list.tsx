@@ -62,7 +62,7 @@ export function TodayList() {
               <li key={s.sessionId} className="min-w-0">
                 <Link
                   href={`/clinic/s/${s.sessionId}`}
-                  aria-label={`${name}: ${RECOMMENDATION_LABEL[f.recommendation]}${route ? ` to ${route}` : ""}. Opened ${formatWhen(f.openedAt)}.${tries ? ` ${tries}.` : ""}${f.awaitingClearance ? " Waiting for clinician clearance." : ""}${reopened ? " Card reopened: decide it first." : ""} Open triage card.`}
+                  aria-label={`${name}: ${f.kind === "could_not_complete" ? "Couldn't complete the check-in" : RECOMMENDATION_LABEL[f.recommendation]}${route ? ` to ${route}` : ""}. Opened ${formatWhen(f.openedAt)}.${tries ? ` ${tries}.` : ""}${f.awaitingClearance ? " Waiting for clinician clearance." : ""}${reopened ? " Card reopened: decide it first." : ""} Open triage card.`}
                   className={cn(
                     "group grid gap-x-6 gap-y-1 rounded-md border border-l-[6px] border-cl-line bg-cl-surface px-4 py-3 transition-colors hover:border-cl-ink/40",
                     "md:grid-cols-[minmax(10rem,14rem)_minmax(0,1fr)_auto_auto] md:items-center",
@@ -72,7 +72,9 @@ export function TodayList() {
                 >
                   <p className="truncate text-lg font-semibold group-hover:underline">{name}</p>
                   <RecommendationText rec={f.recommendation} className="text-base">
-                    {RECOMMENDATION_LABEL[f.recommendation]}
+                    {f.kind === "could_not_complete"
+                      ? `Couldn't complete${s.couldNotComplete ? `: ${s.couldNotComplete.reason} problem` : ""}`
+                      : RECOMMENDATION_LABEL[f.recommendation]}
                     {route && (
                       <>
                         {" "}
