@@ -1,12 +1,15 @@
 /**
- * In-memory session store for the live board (plan §6b). One Node process, demo scale: no database, no auth.
- * Everything resets on server restart or Reset demo. The recommendation comes only from lib/rules.ts;
+ * In-memory session store for the live board (plan §6b). One Node process, demo scale: no auth. Every write
+ * marks the store dirty; on Cloudflare lib/persist.ts saves it durably and reloads it on start. Reset demo clears it. The recommendation comes only from lib/rules.ts;
  * a person approves or downgrades it through approve(). Patient answers and notes stay on the card and
  * are never copied into the audit log.
  */
 import protocol from "@/config/protocol.default.json"
 import { markActive, resetCrew, syncPause } from "@/lib/crew"
+import { cadenceInputFor, dueOn, nextCheckIn } from "@/lib/cadence"
+import { markDirty } from "@/lib/dirty"
 import { triage } from "@/lib/rules"
+import { standingNextCheckIn } from "@/lib/schedule"
 import { getPatient, lastCheckIn } from "@/lib/seed"
 import { belowAverageCutoff } from "@/lib/steadi"
 import {
@@ -14,6 +17,9 @@ import {
   type ApprovalRequest,
   type CrewResumeRequest,
   type AuditEntry,
+  type FollowUp,
+  type FollowUpRequest,
+  type NextCheckIn,
   type Recommendation,
   type RepEvent,
   type SessionResult,
@@ -21,9 +27,10 @@ import {
   type SessionStreamMessage,
   type Surface,
   type TriageCard,
+  type Trend,
 } from "@/lib/types"
 
-const MAX_SESSIONS = 100
+export const MAX_SESSIONS = 100
 const MAX_AUDIT = 50
 /** Prefix of the card warning that records an earlier result the patient's later answers replaced. */
 export const REVISION_PREFIX = "Answers changed after the first report."
@@ -107,14 +114,15 @@ function put(next: SessionSnapshot) {
   store.sessions.set(s.sessionId, s)
   syncPause(s.riseId, s.sessionId, s.crewPaused)
   if (store.sessions.size > MAX_SESSIONS) {
-    // Cards waiting for a person are evicted last.
-    const waiting = (x: SessionSnapshot) => (x.card?.approval === "pending" ? 1 : 0)
+    // Cards waiting for a person, and open follow-ups, are evicted last.
+    const waiting = (x: SessionSnapshot) => (x.card?.approval === "pending" || x.followUp?.status === "open" ? 1 : 0)
     const oldest = [...store.sessions.values()].sort((a, b) => waiting(a) - waiting(b) || a.updatedAt - b.updatedAt)[0]
     store.sessions.delete(oldest.sessionId)
     // An evicted session can no longer be resumed from the console, so it stops holding a pause.
     syncPause(oldest.riseId, oldest.sessionId, false)
   }
   emit({ type: "session", session: s })
+  markDirty()
   return s
 }
 
@@ -326,6 +334,10 @@ function sameFindings(a: TriageCard, b: TriageCard): boolean {
 const SEVERITY: Record<Recommendation, number> = { escalate_urgent: 3, human_confirm: 2, nurse_callback: 2, continue_plan: 1 }
 
 export function approve(sessionId: string, req: ApprovalRequest, now = Date.now()): SessionSnapshot {
+  return put(afterDecision(decide(sessionId, req, now), now, req.user))
+}
+
+function decide(sessionId: string, req: ApprovalRequest, now: number): SessionSnapshot {
   const s = store.sessions.get(sessionId)
   if (!s) throw new SessionError("unknown session", 404)
   if (!s.card) throw new SessionError("no triage card yet", 409)
@@ -341,12 +353,12 @@ export function approve(sessionId: string, req: ApprovalRequest, now = Date.now(
   if (req.action === "approve") {
     const edited = req.careTeamNote !== undefined && req.careTeamNote !== (s.card.careTeamNote ?? "")
     const entry: AuditEntry = { sessionId, riseId: s.riseId, action: "approved", from, to: from, user: req.user, at: now }
-    return put({
+    return {
       ...s,
       card: { ...s.card, approval: edited ? "edited" : "approved", careTeamNote: req.careTeamNote ?? s.card.careTeamNote },
       audit: [...s.audit, entry].slice(-MAX_AUDIT),
       updatedAt: now,
-    })
+    }
   }
 
   const reason = protocol.downgrade_reasons.find((r) => r.code === req.reasonCode)
@@ -368,7 +380,143 @@ export function approve(sessionId: string, req: ApprovalRequest, now = Date.now(
     user: req.user,
     at: now,
   }
-  return put({ ...s, card: { ...s.card, approval: "downgraded" }, audit: [...s.audit, entry].slice(-MAX_AUDIT), updatedAt: now })
+  return { ...s, card: { ...s.card, approval: "downgraded" }, audit: [...s.audit, entry].slice(-MAX_AUDIT), updatedAt: now }
+}
+
+const FOLLOW = protocol.followup
+
+/** Easier / same / harder than the patient's last check-in. A game set is not a CDC count, so it never moves the schedule. */
+function trendOf(card: TriageCard): Trend {
+  const prev = card.metrics.previousRawStands
+  if (card.protocol === "play_set" || prev === null) return "same"
+  const patient = getPatient(card.riseId)
+  const prevArms = patient ? (lastCheckIn(patient)?.arms_used ?? false) : false
+  if (card.metrics.rawStands < prev || (card.metrics.armsUsed && !prevArms)) return "harder"
+  return card.metrics.rawStands > prev ? "better" : "same"
+}
+
+function schedule(card: TriageCard, rec: Recommendation, now: number): NextCheckIn | undefined {
+  const patient = getPatient(card.riseId)
+  if (!patient) return undefined
+  const c = nextCheckIn(cadenceInputFor(patient, rec, trendOf(card)))
+  return { inDays: c.inDays, dueOn: dueOn(now, c.inDays), phase: c.phase, reason: c.reason, paused: false, source: "session" }
+}
+
+/** While a person owes the patient a call, no date is shown: the patient's home says the care team will be in touch. */
+function waitingFor(reason: string, phase = ""): NextCheckIn {
+  return { inDays: null, dueOn: null, phase, reason, paused: true, source: "session" }
+}
+
+const WAITING_CALL = "Waiting for the follow-up call"
+const WAITING_CLEARANCE = "Paused until a clinician clears the patient"
+
+function audit(s: SessionSnapshot, e: Omit<AuditEntry, "sessionId" | "riseId">): AuditEntry[] {
+  return [...s.audit, { sessionId: s.sessionId, riseId: s.riseId, ...e }].slice(-MAX_AUDIT)
+}
+
+/**
+ * After a person decides the card. A decision that needs a call (protocol.followup.opens_on) opens a follow-up and
+ * holds the next check-in until the call is recorded. A changed decision supersedes the open task (audited, attempts
+ * carried over); a decision that no longer needs a call cancels it (audited) and schedules from the cadence engine.
+ */
+function afterDecision(s: SessionSnapshot, now: number, user: string): SessionSnapshot {
+  const final = finalRecommendation(s)
+  if (!s.card || !final) return s
+  const open = s.followUp?.status === "open" ? s.followUp : undefined
+  if ((FOLLOW.opens_on as string[]).includes(final)) {
+    if (open?.recommendation === final) return s
+    let trail = s.audit
+    if (open) trail = audit({ ...s, audit: trail }, { action: "followup_cancelled", from: open.recommendation, to: final, reasonCode: "superseded", user, at: now })
+    const followUp: FollowUp = {
+      status: "open",
+      recommendation: final,
+      route: s.card.route ?? null,
+      openedAt: open?.openedAt ?? now,
+      attempts: open?.attempts ?? 0,
+      awaitingClearance: open?.awaitingClearance ?? false,
+      lastAttemptAt: open?.lastAttemptAt ?? null,
+      outcome: null,
+      note: null,
+      closedAt: null,
+      closedBy: null,
+    }
+    trail = audit({ ...s, audit: trail }, { action: "followup_opened", to: final, user: "Rise", at: now })
+    const held = followUp.awaitingClearance ? WAITING_CLEARANCE : WAITING_CALL
+    return { ...s, followUp, nextCheckIn: waitingFor(held), audit: trail }
+  }
+  if (open) {
+    return {
+      ...s,
+      followUp: { ...open, status: "done", outcome: "cancelled", closedAt: now, closedBy: user },
+      nextCheckIn: schedule(s.card, final, now),
+      audit: audit(s, { action: "followup_cancelled", from: open.recommendation, to: final, reasonCode: "no_longer_needed", user, at: now }),
+    }
+  }
+  return { ...s, nextCheckIn: schedule(s.card, final, now) }
+}
+
+/**
+ * Console: record how a follow-up went. Not reached counts an attempt. Sent for urgent care (or Other) keeps the task
+ * open, awaiting a clinician's clearance, with check-ins paused. Clinician cleared, plan continues, or visit booked
+ * close it and set the next check-in. A card reopened by new patient input must be decided again first.
+ */
+export function recordFollowUp(sessionId: string, req: FollowUpRequest, now = Date.now()): SessionSnapshot {
+  const s = store.sessions.get(sessionId)
+  if (!s) throw new SessionError("unknown session", 404)
+  if (!s.card || s.followUp?.status !== "open") throw new SessionError("no open follow-up", 409)
+  if (s.card.approval === "pending") throw new SessionError("the card was reopened; decide it first", 409)
+  const f = s.followUp
+  const outcome = FOLLOW.outcomes.find((o) => o.code === req.outcome)
+  if (!outcome) throw new SessionError("unknown outcome", 400)
+  const flag = (k: string) => k in outcome && (outcome as Record<string, unknown>)[k] === true
+  const note = req.note?.trim() || null
+  if (flag("requires_free_text") && !note) throw new SessionError("this outcome needs a note", 400)
+  if (flag("only_when_awaiting_clearance") && !f.awaitingClearance) throw new SessionError("only after the patient was sent for care or paused", 400)
+  if (f.awaitingClearance && outcome.closes && !flag("only_when_awaiting_clearance")) {
+    throw new SessionError("waiting for a clinician to clear the patient", 400)
+  }
+
+  if (!outcome.closes) {
+    const awaiting = f.awaitingClearance || flag("awaits_clearance")
+    const isAttempt = outcome.code === "not_reached"
+    return put({
+      ...s,
+      followUp: {
+        ...f,
+        attempts: isAttempt ? f.attempts + 1 : f.attempts,
+        lastAttemptAt: isAttempt ? now : f.lastAttemptAt,
+        awaitingClearance: awaiting,
+        note: note ?? f.note,
+      },
+      nextCheckIn: waitingFor(awaiting ? WAITING_CLEARANCE : WAITING_CALL, s.nextCheckIn?.phase),
+      audit: audit(s, { action: "followup_attempt", reasonCode: outcome.code, freeText: note ?? undefined, user: req.user, at: now }),
+      updatedAt: now,
+    })
+  }
+
+  const next = schedule(s.card, f.recommendation, now)
+  // Only a recorded clearance may say the clinician cleared the patient.
+  const cleared = outcome.code === "clinician_cleared"
+  const nextCheckIn = next && !cleared && (f.recommendation === "escalate_urgent" || f.recommendation === "human_confirm")
+    ? { ...next, reason: `Recheck after the follow-up: ${outcome.label}` }
+    : next
+  return put({
+    ...s,
+    followUp: { ...f, status: "done", awaitingClearance: false, outcome: outcome.code, note: note ?? f.note, closedAt: now, closedBy: req.user },
+    nextCheckIn,
+    audit: audit(s, { action: "followup_closed", reasonCode: outcome.code, freeText: note ?? undefined, user: req.user, at: now }),
+    updatedAt: now,
+  })
+}
+
+/** The patient's next check-in: the standing schedule (lib/schedule.ts), else the seed's. */
+export function patientNextCheckIn(riseId: string, now = Date.now()): NextCheckIn | null {
+  const patient = getPatient(riseId)
+  if (!patient) return null
+  const standing = standingNextCheckIn(listSessions(), riseId)
+  if (standing) return standing
+  const c = patient.cadence
+  return { inDays: c.next_checkin_in_days, dueOn: dueOn(now, c.next_checkin_in_days), phase: c.phase, reason: c.reason, paused: false, source: "seed" }
 }
 
 /**
@@ -417,4 +565,18 @@ export function resetSessions() {
   store.sessions.clear()
   resetCrew()
   emit({ type: "reset" })
+  markDirty()
+}
+
+/** Durable storage (lib/persist.ts): every session, as stored. */
+export function exportSessions(): SessionSnapshot[] {
+  return [...store.sessions.values()]
+}
+
+/** Durable storage: load saved sessions on start. Replaces the store; listeners are told with a fresh snapshot. */
+export function importSessions(sessions: SessionSnapshot[]) {
+  if (!Array.isArray(sessions)) throw new Error("bad sessions snapshot")
+  store.sessions.clear()
+  for (const s of sessions) store.sessions.set(s.sessionId, s)
+  emit({ type: "snapshot", sessions: listSessions() })
 }

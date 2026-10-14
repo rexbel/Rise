@@ -1,13 +1,20 @@
 "use client"
 
-import type { ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import Image from "next/image"
 import { Check } from "lucide-react"
 import ui from "@/content/play-ui.json"
 import { useCrewBoard } from "@/components/play/CrewBoard"
 import { playDisplay, ptFocus } from "@/components/play/playTheme"
 import { homeChipsRow } from "@/lib/play/crewView"
-import { crewChips, missionDose, playerHome } from "@/lib/play/playerHome"
+import {
+  crewChips,
+  fetchNextCheckIn,
+  missionDose,
+  NEXT_PAUSED_LABEL,
+  patientNextCheckInLabel,
+  playerHome,
+} from "@/lib/play/playerHome"
 import type { ProgramExercise } from "@/lib/play/programs"
 import type { SeedPatient } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -34,6 +41,8 @@ export function PlayerHome({
   const { state: crew } = useCrewBoard(patient.rise_id)
   // Chips only while the patient is on the crew: never when paused or not joined.
   const chips = crewChips(homeChipsRow(crew.status === "ready" ? crew.board : undefined))
+  // Never the scripted seed date: until the care team's schedule loads, a placeholder; if it can't load, the neutral line.
+  const nextLabel = useNextCheckInLabel(patient.rise_id) ?? "…"
 
   return (
     <div className="rn-home-enter grid gap-6 motion-reduce:animate-none lg:grid-cols-12 lg:gap-8">
@@ -67,7 +76,7 @@ export function PlayerHome({
 
         <dl className="mt-6 grid grid-cols-2 gap-3">
           <Fact label={ui.week.checkins_label} value={String(home.checkInsDone)} />
-          <Fact label={ui.week.next_label} value={home.nextSessionLabel} />
+          <Fact label={ui.week.next_label} value={nextLabel} compact={nextLabel === NEXT_PAUSED_LABEL} />
           {chips.map((c) => (
             <Fact key={c.key} label={c.label} value={c.value} />
           ))}
@@ -127,11 +136,31 @@ export function PlayerHome({
   )
 }
 
-function Fact({ label, value }: { label: string; value: string }) {
+/**
+ * The care team's next check-in for this patient, in words. null while loading. On any failure, the neutral "your care
+ * team will let you know" line rather than a date nobody set (and no error shown to the patient).
+ */
+function useNextCheckInLabel(riseId: string): string | null {
+  const [label, setLabel] = useState<string | null>(null)
+  useEffect(() => {
+    const ctrl = new AbortController()
+    fetchNextCheckIn(riseId, { signal: ctrl.signal })
+      .then((nc) => setLabel(patientNextCheckInLabel(nc, Date.now())))
+      .catch((e: unknown) => {
+        if (!ctrl.signal.aborted || (e instanceof Error && e.name === "TimeoutError")) setLabel(NEXT_PAUSED_LABEL)
+      })
+    return () => ctrl.abort()
+  }, [riseId])
+  return label
+}
+
+function Fact({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
   return (
     <div className="rounded-2xl border border-pt-line bg-pt-bg/60 px-4 py-3">
       <dt className="text-xl text-pt-muted">{label}</dt>
-      <dd className={`${playDisplay.className} mt-1 text-2xl font-bold leading-tight text-pt-ink`}>{value}</dd>
+      <dd className={cn(playDisplay.className, "mt-1 font-bold leading-tight text-pt-ink", compact ? "text-xl" : "text-2xl")}>
+        {value}
+      </dd>
     </div>
   )
 }

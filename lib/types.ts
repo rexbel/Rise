@@ -177,7 +177,7 @@ export const SessionResult = z.object({
   /** Patient chose "Keep going" after a pause (logged on the card, not a stop). */
   resumedAfterPause: z.boolean(),
   tandemHoldS: z.number().min(0).optional(),
-  gaitObservations: z.array(z.string()).default([]),
+  gaitObservations: z.array(z.string().max(200)).max(20).default([]),
   symptoms: Symptoms,
   patientNote: z.string().max(2000).optional(),
   tier: PoseTier,
@@ -390,7 +390,21 @@ export const AuditEntry = z.object({
    * reopened = new answers or a flagged note sent a decided card back to pending; restarted = a demo set was replayed;
    * red_flag_retracted = the patient answered Yes to breath/chest pain, saw the 911 screen, then said it was a mistake.
    */
-  action: z.enum(["invited", "approved", "downgraded", "reopened", "answers_changed", "restarted", "red_flag_retracted", "crew_resumed", "reset"]),
+  action: z.enum([
+    "invited",
+    "approved",
+    "downgraded",
+    "reopened",
+    "answers_changed",
+    "restarted",
+    "red_flag_retracted",
+    "crew_resumed",
+    "reset",
+    "followup_opened",
+    "followup_attempt",
+    "followup_closed",
+    "followup_cancelled",
+  ]),
   from: Recommendation.optional(),
   to: Recommendation.optional(),
   reasonCode: z.string().optional(),
@@ -399,6 +413,52 @@ export const AuditEntry = z.object({
   at: At,
 })
 export type AuditEntry = z.infer<typeof AuditEntry>
+
+/**
+ * Next check-in from lib/cadence.ts (plan §6a). `paused` = no date until a clinician clears the patient
+ * (e.g. sent for urgent care); then inDays and dueOn are null. dueOn is the local-midnight timestamp of the due day.
+ */
+export const NextCheckIn = z.object({
+  inDays: z.number().int().min(0).nullable(),
+  dueOn: At.nullable(),
+  phase: z.string(),
+  reason: z.string(),
+  paused: z.boolean(),
+  /** "session" = set by this session's decision or follow-up; "seed" = the patient's scripted schedule. */
+  source: z.enum(["session", "seed"]),
+})
+export type NextCheckIn = z.infer<typeof NextCheckIn>
+
+/**
+ * Follow-up task opened when a card is decided as escalate_urgent, human_confirm, or nurse_callback
+ * (protocol.followup.opens_on). Closed by a person recording an outcome from protocol.followup.outcomes.
+ */
+export const FollowUp = z.object({
+  status: z.enum(["open", "done"]),
+  /** The decided recommendation the task follows up on. */
+  recommendation: Recommendation,
+  route: z.string().nullable(),
+  openedAt: At,
+  /** "Not reached" attempts so far. */
+  attempts: z.number().int().min(0),
+  /** Sent for urgent care (or Other): still open on Today, check-ins paused, until a clinician clears the patient. */
+  awaitingClearance: z.boolean(),
+  lastAttemptAt: At.nullable(),
+  outcome: z.string().nullable(),
+  note: z.string().nullable(),
+  closedAt: At.nullable(),
+  closedBy: z.string().nullable(),
+})
+export type FollowUp = z.infer<typeof FollowUp>
+
+/** POST /api/sessions/[id]/followup -> SessionSnapshot. 409 if no open follow-up; 400 on an unknown code or a missing note. */
+export const FollowUpRequest = z.object({
+  /** Code from config/protocol.default.json -> followup.outcomes. */
+  outcome: z.string().min(1).max(40),
+  note: z.string().max(500).optional(),
+  user: z.string().min(1).max(80),
+})
+export type FollowUpRequest = z.infer<typeof FollowUpRequest>
 
 /** One tile on the live board (C2), pushed over SSE on every change. */
 export const SessionSnapshot = z.object({
@@ -417,8 +477,22 @@ export const SessionSnapshot = z.object({
   invitedAt: At.nullable(),
   updatedAt: At,
   demoData: z.boolean(),
+  /** Present once a decided card needs a person to follow up. */
+  followUp: FollowUp.optional(),
+  /** Present once the card is decided (and updated when the follow-up closes). */
+  nextCheckIn: NextCheckIn.optional(),
 })
 export type SessionSnapshot = z.infer<typeof SessionSnapshot>
+
+/**
+ * GET /api/patients/[riseId]/next-checkin: what the patient's home may show. Day only: no reason, phase, or source,
+ * which would reveal escalations or decline on an unauthenticated route.
+ */
+export const PatientNextCheckIn = z.object({
+  riseId: z.string(),
+  nextCheckIn: NextCheckIn.pick({ inDays: true, dueOn: true, paused: true }),
+})
+export type PatientNextCheckIn = z.infer<typeof PatientNextCheckIn>
 
 /**
  * GET /api/sessions/stream (text/event-stream). First message is `snapshot` with every session,

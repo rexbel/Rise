@@ -2,24 +2,47 @@
 
 import Link from "next/link"
 import { useEffect, useId, useState } from "react"
-import { ArrowLeft, Check, CircleCheck, CircleMinus, History, Hourglass, PauseCircle, TriangleAlert, Users } from "lucide-react"
+import {
+  ArrowLeft,
+  CalendarClock,
+  Check,
+  CircleCheck,
+  CircleMinus,
+  History,
+  Hourglass,
+  PauseCircle,
+  PhoneMissed,
+  TriangleAlert,
+  Users,
+} from "lucide-react"
 import { toast } from "sonner"
 import protocol from "@/config/protocol.default.json"
 import { exerciseById } from "@/lib/play/programs"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
-import type { ConsentRecord, Recommendation, SessionSnapshot, TriageCard } from "@/lib/types"
+import type { ConsentRecord, FollowUp, NextCheckIn, Recommendation, Route, SessionSnapshot, TriageCard } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { clinicFontClass } from "./fonts"
+import {
+  attemptsLabel,
+  outcomeChoices,
+  followUpErrors,
+  nextCheckInView,
+  outcomeByCode,
+  outcomeLabel,
+  type FollowUpErrors,
+} from "./followup"
 import {
   APPROVAL_LABEL,
   auditActionLabel,
   downgradeOptions,
   finalRecommendation,
   formatTime,
+  formatWhen,
   RECOMMENDATION_LABEL,
   RECOMMENDATION_TONE,
   ROUTE_LABEL,
@@ -41,7 +64,7 @@ import {
   TONE_WASH,
   focusRing,
 } from "./status"
-import { DEMO_USER, useClinic } from "./store"
+import { DEMO_USER, useClinic, useNow } from "./store"
 
 const serif = "font-[family-name:var(--font-cl-serif)]"
 
@@ -115,6 +138,9 @@ function Detail({ s, p }: { s: SessionSnapshot; p: PatientSummary | undefined })
         </div>
         <aside className="grid min-w-0 gap-6">
           {card && card.approval === "pending" && <Actions s={s} card={card} />}
+          {card && card.approval !== "pending" && (s.followUp || s.nextCheckIn) && (
+            <FollowUpPanel s={s} followUp={s.followUp} nextCheckIn={s.nextCheckIn} />
+          )}
           {!card && <ActionsLocked />}
           <CrewPanel s={s} />
           <Audit s={s} />
@@ -666,6 +692,269 @@ function Field({ label, id, error, children }: { label: React.ReactNode; id: str
   )
 }
 
+/**
+ * Follow-up on a decided card: a person records how the callback ended (outcomes from protocol.followup, Rise
+ * defaults). "Not reached" keeps it on Today and counts the attempt; a closing outcome takes it off Today and sets
+ * the next check-in, shown underneath.
+ */
+function FollowUpPanel({
+  s,
+  followUp,
+  nextCheckIn,
+}: {
+  s: SessionSnapshot
+  followUp: FollowUp | undefined
+  nextCheckIn: NextCheckIn | undefined
+}) {
+  return (
+    <section aria-labelledby="followup-heading" className="grid gap-4 rounded-md border border-cl-ink/30 bg-cl-surface p-5">
+      <h2 id="followup-heading" className={cn(serif, "text-2xl font-semibold")}>
+        {followUp ? "Follow-up" : "Next check-in"}
+      </h2>
+      {followUp && (followUp.status === "open" ? <FollowUpForm s={s} f={followUp} /> : <FollowUpDone f={followUp} />)}
+      {nextCheckIn ? (
+        <NextCheckInLine nc={nextCheckIn} withHeading={!!followUp} />
+      ) : (
+        <p className="text-base text-cl-muted">The next check-in is set once the follow-up is recorded.</p>
+      )}
+    </section>
+  )
+}
+
+function Attempts({ f }: { f: FollowUp }) {
+  const label = attemptsLabel(f.attempts)
+  if (!label) return null
+  return (
+    <p className="flex flex-wrap items-center gap-x-2 text-base">
+      <StatusText icon={PhoneMissed} tone="confirm">
+        {label}
+      </StatusText>
+      {f.lastAttemptAt !== null && <span className="text-cl-muted">· last tried {formatTime(f.lastAttemptAt)}</span>}
+    </p>
+  )
+}
+
+function FollowUpForm({ s, f }: { s: SessionSnapshot; f: FollowUp }) {
+  const { recordFollowUp } = useClinic()
+  const [outcome, setOutcome] = useState("")
+  const [note, setNote] = useState("")
+  const [busy, setBusy] = useState(false)
+  const [tried, setTried] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState<string | null>(null)
+  const id = useId()
+  const def = outcomeByCode(outcome)
+  const choices = outcomeChoices(f)
+  const errors: FollowUpErrors = tried ? followUpErrors(outcome, note) : {}
+  const route = f.route ? (ROUTE_LABEL[f.route as Route] ?? f.route.replace(/_/g, " ")) : null
+
+  async function submit() {
+    setError(null)
+    setSaved(null)
+    setTried(true)
+    const problems = followUpErrors(outcome, note)
+    if (problems.outcome || problems.note) {
+      document.getElementById(problems.outcome ? `${id}-outcome-${choices[0].code}` : `${id}-note`)?.focus()
+      return
+    }
+    setBusy(true)
+    const r = await recordFollowUp(s.sessionId, { outcome, note: note.trim() || undefined, user: DEMO_USER })
+    setBusy(false)
+    if (r.ok) {
+      const label = outcomeLabel(outcome)
+      if (r.data.followUp?.status === "open") {
+        // Not reached, or waiting for clearance: stays on Today. Clear the form for the next step.
+        const tries = attemptsLabel(r.data.followUp.attempts)
+        const waiting = r.data.followUp.awaitingClearance ? " Check-ins stay paused until a clinician clears the patient." : ""
+        setSaved(`Recorded “${label}”.${tries ? ` ${tries}.` : ""} It stays on Today.${waiting}`)
+        setOutcome("")
+        setNote("")
+        setTried(false)
+      }
+      toast.success(`Follow-up recorded: ${label}`)
+    } else {
+      setError(r.message)
+    }
+  }
+
+  return (
+    <div className="grid gap-4">
+      <div className="grid gap-1">
+        <p className="flex flex-wrap items-center gap-x-2 text-base">
+          <StatusText icon={Hourglass} tone={RECOMMENDATION_TONE[f.recommendation]}>
+            Open on Today
+          </StatusText>
+          <span className="text-cl-muted">since {formatWhen(f.openedAt)}</span>
+        </p>
+        {f.awaitingClearance && (
+          <p className="text-base">
+            <StatusText icon={PauseCircle} tone="confirm">
+              Waiting for a clinician to clear the patient
+            </StatusText>{" "}
+            <span className="text-cl-muted">Check-ins are paused until then.</span>
+          </p>
+        )}
+        <p className="text-base text-cl-muted">
+          For {RECOMMENDATION_LABEL[f.recommendation]}
+          {route ? ` → ${route}` : ""}. Recording as {DEMO_USER}.
+        </p>
+        <Attempts f={f} />
+      </div>
+
+      <fieldset className="grid gap-2">
+        <legend id={`${id}-legend`} className="mb-2 text-base font-semibold">
+          How did the call end?
+        </legend>
+        <RadioGroup
+          value={outcome}
+          onValueChange={(v) => {
+            setOutcome(v)
+            setSaved(null)
+          }}
+          aria-labelledby={`${id}-legend`}
+          aria-invalid={!!errors.outcome}
+          aria-describedby={errors.outcome ? `${id}-outcome-error` : undefined}
+          className="gap-1.5"
+        >
+          {choices.map((o) => (
+            <Label
+              key={o.code}
+              htmlFor={`${id}-outcome-${o.code}`}
+              className={cn(
+                "flex min-h-11 cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-base font-normal",
+                outcome === o.code ? "border-cl-ink bg-cl-paper" : "border-cl-line hover:border-cl-ink/40",
+              )}
+            >
+              <RadioGroupItem
+                id={`${id}-outcome-${o.code}`}
+                value={o.code}
+                className={cn("size-5 border-cl-ink/50 [&_svg]:size-2.5 [&_svg]:fill-cl-ink", focusRing)}
+              />
+              <span className="min-w-0 flex-1">
+                {o.label}
+                {o.code === "not_reached" && <span className="block text-sm text-cl-muted">Counts an attempt; stays on Today</span>}
+                {o.awaitsClearance && !f.awaitingClearance && (
+                  <span className="block text-sm text-cl-muted">Pauses check-ins; stays on Today until a clinician clears the patient</span>
+                )}
+                {o.onlyWhenAwaitingClearance && <span className="block text-sm text-cl-muted">Closes the follow-up and sets the next check-in</span>}
+              </span>
+            </Label>
+          ))}
+        </RadioGroup>
+        {errors.outcome && <InlineError id={`${id}-outcome-error`}>{errors.outcome}</InlineError>}
+      </fieldset>
+
+      <div className="grid gap-2">
+        <Label htmlFor={`${id}-note`} className="text-base font-semibold">
+          Note{" "}
+          <span className="font-normal text-cl-muted">{def?.requiresFreeText ? `(required for ${def.label})` : "(optional)"}</span>
+        </Label>
+        <Textarea
+          id={`${id}-note`}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          maxLength={500}
+          rows={3}
+          required={def?.requiresFreeText}
+          aria-invalid={!!errors.note}
+          aria-describedby={errors.note ? `${id}-note-error` : undefined}
+          placeholder="What was agreed. Not shown to the patient."
+          className={cn("min-h-20 bg-cl-surface text-base md:text-base", focusRing)}
+        />
+        {errors.note && <InlineError id={`${id}-note-error`}>{errors.note}</InlineError>}
+      </div>
+
+      {error && (
+        <p role="alert" className="flex items-start gap-2 rounded-md border border-status-escalate/40 bg-status-escalate/8 p-3 text-base">
+          <TriangleAlert aria-hidden className="mt-0.5 size-5 shrink-0 text-status-escalate" />
+          <span>{error}</span>
+        </p>
+      )}
+      <p role="status" className={cn("text-base", saved ? "flex items-start gap-2" : "sr-only")}>
+        {saved && (
+          <>
+            <CircleCheck aria-hidden className="mt-0.5 size-5 shrink-0 text-status-ok" />
+            <span>{saved}</span>
+          </>
+        )}
+      </p>
+
+      <Button
+        type="button"
+        onClick={submit}
+        disabled={busy}
+        aria-busy={busy}
+        className={cn("h-12 w-full bg-cl-ink text-lg text-white hover:bg-cl-ink/90", focusRing)}
+      >
+        <Check aria-hidden className="size-5" />
+        {busy ? "Saving…" : "Save outcome"}
+      </Button>
+    </div>
+  )
+}
+
+function InlineError({ id, children }: { id: string; children: React.ReactNode }) {
+  return (
+    <p id={id} className="flex items-center gap-1.5 text-base text-cl-ink">
+      <TriangleAlert aria-hidden className="size-4 shrink-0 text-status-escalate" />
+      {children}
+    </p>
+  )
+}
+
+function FollowUpDone({ f }: { f: FollowUp }) {
+  return (
+    <div className="grid gap-1">
+      <p className="text-lg">
+        <StatusText icon={CircleCheck} tone="ok">
+          Done: {f.outcome ? outcomeLabel(f.outcome) : "outcome not recorded"}
+        </StatusText>
+      </p>
+      <p className="text-base text-cl-muted">
+        {f.closedBy ?? "Unknown"}
+        {f.closedAt !== null ? ` at ${formatTime(f.closedAt)}` : ""}
+      </p>
+      {f.note && (
+        <blockquote className="mt-1 rounded-md border-l-4 border-cl-line bg-cl-paper p-3 text-base whitespace-pre-wrap">{f.note}</blockquote>
+      )}
+      <Attempts f={f} />
+    </div>
+  )
+}
+
+function NextCheckInLine({ nc, withHeading }: { nc: NextCheckIn; withHeading: boolean }) {
+  const now = useNow(60_000)
+  const v = nextCheckInView(nc, now)
+  return (
+    <div className={cn("grid gap-1", withHeading && "border-t border-cl-line pt-4")}>
+      {withHeading && <Eyebrow>Next check-in</Eyebrow>}
+      {v.paused ? (
+        <p className="text-lg font-semibold">
+          <StatusText icon={PauseCircle} tone="confirm">
+            {v.when}
+          </StatusText>
+        </p>
+      ) : (
+        <p className="flex flex-wrap items-baseline gap-x-2 text-lg">
+          <StatusText icon={v.overdue ? TriangleAlert : CalendarClock} tone={v.overdue ? "confirm" : "neutral"} className="font-semibold">
+            {v.when}
+          </StatusText>
+          {v.on && <span className="text-base text-cl-muted">{v.on}</span>}
+        </p>
+      )}
+      <p className="text-base text-cl-muted">
+        {nc.reason} · {nc.phase}
+      </p>
+      <p className="text-sm text-cl-muted">
+        {nc.source === "seed" ? "From the scripted schedule. " : ""}
+        {nc.reason === "Clinician-set cadence" || nc.phase.startsWith("Clinician cadence")
+          ? "Clinician-set cadence."
+          : "Rise default schedule, not a clinical standard."}
+      </p>
+    </div>
+  )
+}
+
 const CONSENT_LABEL: Record<ConsentRecord["action"], string> = {
   joined: "Joined their crew",
   left: "Left their crew",
@@ -859,7 +1148,11 @@ function Audit({ s }: { s: SessionSnapshot }) {
               )}
               {a.reasonCode && (
                 <p className="text-base text-cl-muted">
-                  Reason: {(a.action === "crew_resumed" ? RESUME_REASON_LABEL : REASON_LABEL).get(a.reasonCode) ?? a.reasonCode}
+                  {a.action.startsWith("followup_") ? (
+                    <>Outcome: {outcomeLabel(a.reasonCode)}</>
+                  ) : (
+                    <>Reason: {(a.action === "crew_resumed" ? RESUME_REASON_LABEL : REASON_LABEL).get(a.reasonCode) ?? a.reasonCode}</>
+                  )}
                 </p>
               )}
               {a.freeText && <p className="text-base text-cl-muted">“{a.freeText}”</p>}

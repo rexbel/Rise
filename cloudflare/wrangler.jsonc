@@ -16,5 +16,7 @@
     "bindings": [{ "name": "RISE", "class_name": "RiseContainer" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RiseContainer"] }],
+  "vars": { "PUBLIC_ORIGIN": "https://rise.nextrex.health" },
+  // STORE_KEY is a secret (wrangler secret put STORE_KEY); the container gets it as RISE_STORE_KEY.
   "observability": { "enabled": true }
 }

@@ -43,6 +43,7 @@
     "next_today": "Today",
     "next_tomorrow": "Tomorrow",
     "next_in_days": "In {days} days",
+    "next_paused": "Your care team will let you know",
     "next_prefix": "Next"
   },
   "program": {

@@ -26,6 +26,7 @@ const summaries: PatientSummary[] = patients.map((p) => {
     episodeDay: p.monitoring_episode.day_in_episode,
     episodeLength: p.monitoring_episode.length_days,
     lastCheckIn: { label: last.label, postOpDay: last.post_op_day },
+    cadence: { inDays: p.cadence.next_checkin_in_days, phase: p.cadence.phase, reason: p.cadence.reason },
   }
 })
 

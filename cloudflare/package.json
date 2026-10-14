@@ -4,7 +4,8 @@
   "description": "Cloudflare Worker + Container that serves Rise at rise.nextrex.health (same pattern as otc-edge).",
   "scripts": {
     "deploy": "wrangler deploy",
-    "tail": "wrangler tail"
+    "tail": "wrangler tail",
+    "typecheck": "wrangler types && ../node_modules/.bin/tsc -p tsconfig.json"
   },
   "devDependencies": {
     "@cloudflare/containers": "0.3.7",

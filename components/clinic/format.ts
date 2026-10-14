@@ -25,6 +25,8 @@ export type PatientSummary = {
   episodeDay: number
   episodeLength: number
   lastCheckIn: { label: string; postOpDay: number }
+  /** The seed's scheduled next check-in (seed/patients.json cadence), used until a session sets one. */
+  cadence: { inDays: number; phase: string; reason: string }
 }
 
 export type Tone = "escalate" | "confirm" | "callback" | "ok" | "neutral"
@@ -191,6 +193,14 @@ export function auditActionLabel(a: AuditEntry): string {
       return "Patient answers changed"
     case "reset":
       return "Reset"
+    case "followup_opened":
+      return "Follow-up opened"
+    case "followup_attempt":
+      return "Follow-up updated"
+    case "followup_cancelled":
+      return "Follow-up cancelled"
+    case "followup_closed":
+      return "Follow-up closed"
   }
 }
 
@@ -210,6 +220,13 @@ export const NETWORK_ERROR = "Could not reach the Rise server. Check that it is 
 
 export function formatTime(ms: number): string {
   return new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+}
+
+/** Time if it was today, else weekday and date with the time ("Tue, Oct 13, 9:00 AM"): saved tasks can be days old. */
+export function formatWhen(ms: number, now = Date.now()): string {
+  const d = new Date(ms)
+  if (d.toDateString() === new Date(now).toDateString()) return formatTime(ms)
+  return d.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
 }
 
 export function formatAgo(ms: number, now: number): string {

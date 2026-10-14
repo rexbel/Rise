@@ -5,7 +5,8 @@
  * the patient list and the triage card. Reconnects with backoff; a snapshot on reconnect resyncs.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import type { ApprovalRequest, InviteResponse, SessionSnapshot, SessionStreamMessage, Surface } from "@/lib/types"
+import type { ApprovalRequest, FollowUpRequest, InviteResponse, SessionSnapshot, SessionStreamMessage, Surface } from "@/lib/types"
+import { followUpErrorMessage } from "./followup"
 import { apiErrorMessage, backoffMs, NETWORK_ERROR, type PatientSummary } from "./format"
 
 export const DEMO_USER = "Demo coordinator"
@@ -29,6 +30,8 @@ type Store = {
   decide: (sessionId: string, req: ApprovalRequest) => Promise<ApiResult<SessionSnapshot>>
   /** Return a paused patient to their crew (audited on the server). */
   resumeCrew: (sessionId: string, reasonCode: string, freeText?: string) => Promise<ApiResult<SessionSnapshot>>
+  /** Record how a follow-up call ended (protocol.followup.outcomes). */
+  recordFollowUp: (sessionId: string, req: FollowUpRequest) => Promise<ApiResult<SessionSnapshot>>
   reset: () => Promise<ApiResult<null>>
   refresh: () => Promise<void>
 }
@@ -41,7 +44,12 @@ export function useClinic(): Store {
   return s
 }
 
-async function call<T>(url: string, init: RequestInit, parse: (r: Response) => Promise<T>): Promise<ApiResult<T>> {
+async function call<T>(
+  url: string,
+  init: RequestInit,
+  parse: (r: Response) => Promise<T>,
+  errorMessage: (status: number, body: unknown) => string = apiErrorMessage,
+): Promise<ApiResult<T>> {
   let res: Response
   try {
     res = await fetch(url, { ...init, signal: AbortSignal.timeout(10_000) })
@@ -50,7 +58,7 @@ async function call<T>(url: string, init: RequestInit, parse: (r: Response) => P
   }
   if (!res.ok) {
     const body = await res.json().catch(() => null)
-    return { ok: false, status: res.status, message: apiErrorMessage(res.status, body) }
+    return { ok: false, status: res.status, message: errorMessage(res.status, body) }
   }
   return { ok: true, data: await parse(res) }
 }
@@ -169,6 +177,21 @@ export function ClinicProvider({ patients, children }: { patients: PatientSummar
     [upsert, refresh],
   )
 
+  const recordFollowUp = useCallback(
+    async (sessionId: string, req: FollowUpRequest) => {
+      const r = await call(
+        `/api/sessions/${encodeURIComponent(sessionId)}/followup`,
+        { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(req) },
+        (res) => res.json() as Promise<SessionSnapshot>,
+        followUpErrorMessage,
+      )
+      if (r.ok) upsert(r.data)
+      else if (r.status === 409 || r.status === 404) void refresh()
+      return r
+    },
+    [upsert, refresh],
+  )
+
   const reset = useCallback(async () => {
     const r = await call("/api/sessions/reset", { method: "POST" }, async () => null)
     if (r.ok) setSessions(new Map())
@@ -179,8 +202,8 @@ export function ClinicProvider({ patients, children }: { patients: PatientSummar
   const patient = useCallback((riseId: string) => byId.get(riseId), [byId])
 
   const value = useMemo<Store>(
-    () => ({ patients, patient, sessions, loaded, connection, retryNow, invite, decide, resumeCrew, reset, refresh }),
-    [patients, patient, sessions, loaded, connection, retryNow, invite, decide, resumeCrew, reset, refresh],
+    () => ({ patients, patient, sessions, loaded, connection, retryNow, invite, decide, resumeCrew, recordFollowUp, reset, refresh }),
+    [patients, patient, sessions, loaded, connection, retryNow, invite, decide, resumeCrew, recordFollowUp, reset, refresh],
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
