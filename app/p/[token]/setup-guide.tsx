@@ -1,17 +1,11 @@
 /**
- * Picture guide for the classic check-in's setup step, shown in the camera frame until the camera is on.
- * One illustration per safety check (chair, helper, phone); it follows the first check not yet ticked, which is
- * also the line the voice coach is reading. Neutral mannequin figures, flat colors, no motion.
+ * Picture guide for the classic check-in's safety-check screens, shown in the camera frame.
+ * One illustration per check (chair, helper, phone), on the same screen as the line the voice coach is reading.
+ * Neutral mannequin figures, flat colors, no motion.
  */
 
 export type SetupGuideStep = "chair" | "helper" | "phone"
 
-const ORDER: SetupGuideStep[] = ["chair", "helper", "phone"]
-
-/** The first unticked check, or the phone/framing picture once all are ticked (next: turn on the camera). */
-export function guideStepFor(checks: Record<string, boolean>): SetupGuideStep {
-  return ORDER.find((id) => !checks[id]) ?? "phone"
-}
 
 const DESC: Record<SetupGuideStep, string> = {
   chair: "A sturdy chair without armrests, pushed back against a wall.",
@@ -120,15 +114,11 @@ function PhoneScene() {
 }
 
 export function SetupGuide({ step }: { step: SetupGuideStep }) {
-  const n = ORDER.indexOf(step) + 1
   return (
     <figure className="absolute inset-0 m-0 flex flex-col bg-[#211E1B]">
       <svg viewBox="0 0 400 300" className="h-full w-full" role="img" aria-label={DESC[step]} preserveAspectRatio="xMidYMid slice">
         {step === "chair" ? <ChairScene /> : step === "helper" ? <HelperScene /> : <PhoneScene />}
       </svg>
-      <figcaption className="absolute left-3 top-3 rounded-full bg-black/70 px-3 py-1 text-xl font-medium text-white">
-        Step {n} of 3
-      </figcaption>
     </figure>
   )
 }
