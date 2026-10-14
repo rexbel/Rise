@@ -20,7 +20,8 @@ export function FrameGate({
   onOk,
 }: {
   demo: boolean
-  onOk: () => void
+  /** cameraFailed: the camera or tracker did not start here, so the set should not try again. */
+  onOk: (cameraFailed: boolean) => void
 }) {
   const [bodyOk, setBodyOk] = useState(false)
   const [fallbackHint, setFallbackHint] = useState<string | null>(null)
@@ -90,7 +91,7 @@ export function FrameGate({
         onClick={() => {
           speak(ui.frame.continue)
           stop()
-          onOk()
+          onOk(fallbackHint != null)
         }}
       >
         {ui.frame.continue}

@@ -21,6 +21,13 @@ describe("sessionMachine", () => {
     expect(s.finishedSet).toBeNull()
   })
 
+  it("carries a failed camera from the framing step into the set (no second camera or tracker load)", () => {
+    expect(run("rise-01", toLive).cameraFailed).toBe(false)
+    const failed = run("rise-01", [{ type: "BEGIN" }, { type: "READY_OK" }, { type: "FRAME_OK", cameraFailed: true }, { type: "COUNTDOWN_DONE" }])
+    expect(failed.phase).toBe("live")
+    expect(failed.cameraFailed).toBe(true)
+  })
+
   it("BEGIN in demo skips to countdown", () => {
     const s = run("rise-01", [{ type: "BEGIN" }], true)
     expect(s.phase).toBe("countdown")

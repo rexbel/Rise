@@ -90,6 +90,8 @@ export interface PlaySession {
   finishedSet: FinishedSet | null
   answers: QuestionAnswers
   exerciseId: ExerciseId
+  /** The framing step could not use the camera or the body tracker, so the set goes straight to demo replay. */
+  cameraFailed?: boolean
 }
 
 /** Clinic strip is this object — never hardcoded copy. */
@@ -98,7 +100,7 @@ export type ClinicStripView = PlaySession
 export type PlayAction =
   | { type: "BEGIN" }
   | { type: "READY_OK" }
-  | { type: "FRAME_OK" }
+  | { type: "FRAME_OK"; cameraFailed?: boolean }
   | { type: "FRAME_LOST" }
   | { type: "COUNTDOWN_DONE" }
   | { type: "TRACKING_LOST" }
