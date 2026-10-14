@@ -1,0 +1,20 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "rise-edge",
+  "main": "worker.ts",
+  "compatibility_date": "2026-09-01",
+  "routes": [{ "pattern": "rise.nextrex.health", "custom_domain": true }],
+  "containers": [
+    {
+      "class_name": "RiseContainer",
+      "image": "../Dockerfile",
+      "instance_type": "basic",
+      "max_instances": 1
+    }
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "RISE", "class_name": "RiseContainer" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RiseContainer"] }],
+  "observability": { "enabled": true }
+}

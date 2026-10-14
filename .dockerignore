@@ -1,0 +1,9 @@
+node_modules
+.next
+.git
+.demo-work
+.env*
+!.env.example
+cloudflare
+coverage
+*.log
