@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Python venv for the pose model export (scripts/export_pose_onnx.py).
     ".venv/**",
+    // Cloudflare edge Worker: its own package and types (cloudflare/package.json).
+    "cloudflare/**",
   ]),
 ]);
 
