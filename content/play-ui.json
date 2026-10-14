@@ -89,6 +89,7 @@
     "stop": "Stop",
     "pause": "Pause",
     "demo_badge": "Demo replay",
+    "video_badge": "AI-generated demo video",
     "reps_label": "Reps",
     "hold_label": "Hold"
   },

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { PoseEstimator } from "@/lib/pose"
 import { FpsMonitor, selectTier } from "@/lib/pose/select"
-import { loadFixture, seededFrames } from "@/lib/pose/seeded"
+import { DEMO_VIDEO_SRC, fromDemoVideo, loadFixture, seededFrames } from "@/lib/pose/seeded"
 import type { Keypoints17, PoseTier, SeedPatient } from "@/lib/types"
 
 /** COCO skeleton edges for the overlay. */
@@ -43,8 +43,6 @@ function draw(canvas: HTMLCanvasElement | null, kp: Keypoints17 | null, opaque: 
 
 export type FrameHandler = (kp: Keypoints17 | null) => void
 
-/** AI-generated demo footage (scripts/gen-demo-video.ts). Absent until generated: demo mode then stays keypoints-only. */
-export const DEMO_VIDEO_SRC = "/demo/sit-to-stand.mp4"
 
 /** Load the demo video into the camera <video>, held on its first (seated) frame. Resolves false when it isn't there. */
 async function loadDemoVideo(v: HTMLVideoElement | null): Promise<boolean> {
@@ -225,7 +223,7 @@ export function usePose() {
       void loadFixture(patient.rise_id).then(async (fx) => {
         if (!fx || my !== startGen.current || !seeded.current) return
         seeded.current = { frames: seededFrames(patient, fx), clock }
-        if (fx.source !== `video:${DEMO_VIDEO_SRC.split("/").pop()}`) return
+        if (!fromDemoVideo(fx)) return
         const ok = await loadDemoVideo(videoRef.current)
         if (my === startGen.current) setDemoVideo(ok)
       })

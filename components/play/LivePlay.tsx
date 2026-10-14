@@ -14,7 +14,9 @@ import { rulePack } from "@/lib/play/exerciseRules"
 import { createFindingTracker, type LiveVisual } from "@/lib/play/findings"
 import { createHitMissTracker, type HitMissEvent } from "@/lib/play/hitMiss"
 import { coachLine, exerciseById } from "@/lib/play/programs"
-import { createSyntheticBus, type SyntheticBus } from "@/lib/play/poseBus"
+import { createReplayBus, createSyntheticBus, type SyntheticBus } from "@/lib/play/poseBus"
+import { frameAt, LOOP_MS, VIDEO_LOOPS, videoReplayFrames } from "@/lib/play/videoReplay"
+import { DEMO_VIDEO_SRC, fromDemoVideo, loadFixture } from "@/lib/pose/seeded"
 import { speak } from "@/lib/play/speak"
 import { playTone } from "@/lib/play/tones"
 import { clientLog } from "@/lib/play/clientLog"
@@ -52,6 +54,19 @@ function startDemoBus(
   return bus
 }
 
+/** Keep the looping demo video in step with the replay clock (seek on drift, like the classic check-in). */
+function syncLoopVideo(v: HTMLVideoElement | null, tMs: number) {
+  if (!v || !v.src) return
+  const target = (((tMs % LOOP_MS) + LOOP_MS) % LOOP_MS) / 1000
+  if (Math.abs(v.currentTime - target) > 0.25) v.currentTime = target
+  if (v.paused) void v.play().catch(() => {})
+}
+
+/** ?replay=1 forces demo replay even when a camera is available (recording a demo on a laptop). */
+function replayForced(): boolean {
+  return new URLSearchParams(window.location.search).get("replay") === "1"
+}
+
 /** Full-viewport RehabNinja stage. */
 export function LivePlay() {
   const {
@@ -75,6 +90,9 @@ export function LivePlay() {
   const [fxEvents, setFxEvents] = useState<HitMissEvent[]>([])
   const [combo, setCombo] = useState(0)
   const [usingDemo, setUsingDemo] = useState(false)
+  /** Demo replay is driven by the AI demo video's keypoints, shown picture-in-picture. */
+  const [videoReplay, setVideoReplay] = useState(false)
+  const demoVideoRef = useRef<HTMLVideoElement>(null)
   const [camHint, setCamHint] = useState<string | null>(null)
   const [holdMs, setHoldMs] = useState(0)
   const [showCoach, setShowCoach] = useState(true)
@@ -100,6 +118,7 @@ export function LivePlay() {
       setFxEvents([])
       setHoldMs(0)
       setUsingDemo(false)
+      setVideoReplay(false)
       setCamHint(null)
       setShowCoach(true)
     }
@@ -206,6 +225,7 @@ export function LivePlay() {
   useEffect(() => {
     if (!inSet) return
     let cancelled = false
+    const demoVideo = demoVideoRef.current
     trackerRef.current.reset()
     hitMissRef.current.reset()
     resetHits()
@@ -216,7 +236,7 @@ export function LivePlay() {
 
     void (async () => {
       clientLog("info", "live set starting camera", { riseId: session.riseId, exerciseId: session.exerciseId })
-      const result = await camApi.current.start("user")
+      const result = replayForced() ? "forced" : await camApi.current.start("user")
       if (cancelled) return
       if (result === "live") {
         setUsingDemo(false)
@@ -228,18 +248,30 @@ export function LivePlay() {
       clientLog("warn", "falling back to demo replay", { result, err: camApi.current.error })
       setUsingDemo(true)
       setCamHint(camApi.current.error ?? ui.live.demo_badge)
+      const onDone = (durationMs: number) => () => {
+        if (phaseRef.current === "live" || phaseRef.current === "stepBack") dispatch({ type: "SET_COMPLETE", durationMs })
+      }
       busRef.current?.stop()
-      busRef.current = startDemoBus(
-        session.riseId,
-        session.exerciseId,
-        onPoseFrame,
-        () => {
-          if (phaseRef.current === "live" || phaseRef.current === "stepBack") {
-            dispatch({ type: "SET_COMPLETE", durationMs: pack.maxDurationMs })
-          }
-        },
-        phaseRef,
-      )
+      // Sit to stand with a fixture recorded from the AI demo video: replay her movement and show the video.
+      const fx = session.exerciseId === "sit_to_stand" ? await loadFixture(session.riseId) : null
+      if (cancelled) return
+      if (fx && fromDemoVideo(fx)) {
+        const frames = videoReplayFrames(fx)
+        const duration = LOOP_MS * VIDEO_LOOPS
+        const bus = createReplayBus((t) => frameAt(frames, t).kp, duration, onDone(duration))
+        bus.subscribe(onPoseFrame)
+        bus.subscribe((f) => syncLoopVideo(demoVideo, f.t))
+        if (demoVideo) {
+          demoVideo.src = DEMO_VIDEO_SRC
+          demoVideo.muted = true
+        }
+        setVideoReplay(true)
+        bus.start()
+        if (phaseRef.current === "paused" || phaseRef.current === "stepBack") bus.pause()
+        busRef.current = bus
+        return
+      }
+      busRef.current = startDemoBus(session.riseId, session.exerciseId, onPoseFrame, onDone(pack.maxDurationMs), phaseRef)
     })()
 
     return () => {
@@ -248,6 +280,8 @@ export function LivePlay() {
       camApi.current.stop()
       busRef.current?.stop()
       busRef.current = null
+      demoVideo?.pause()
+      demoVideo?.removeAttribute("src")
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inSet, session.riseId, session.exerciseId, dispatch, resetHits])
@@ -259,6 +293,8 @@ export function LivePlay() {
       if (freeze) bus.pause()
       else bus.resume()
     }
+    // The bus drives the demo video forward; it only needs stopping here.
+    if (freeze) demoVideoRef.current?.pause()
     if (camApi.current.status === "live") {
       if (freeze) camApi.current.pause()
       else camApi.current.resume()
@@ -291,6 +327,15 @@ export function LivePlay() {
         {usingDemo ? (
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,var(--pt-surface)_0%,var(--pt-bg)_70%)]" aria-hidden />
         ) : null}
+        {/* The person the replay comes from: the AI demo video, in step with the avatar (labelled by the badge top right). */}
+        <video
+          ref={demoVideoRef}
+          playsInline
+          muted
+          loop
+          aria-hidden
+          className={`absolute bottom-3 left-3 z-10 aspect-[9/16] h-[22%] max-h-80 w-auto rounded-xl border border-pt-ink/20 bg-black object-contain shadow-lg sm:h-[38%] ${videoReplay ? "" : "hidden"}`}
+        />
         <PixiLiveField
           keypoints={keypoints}
           visual={visual}
@@ -322,7 +367,7 @@ export function LivePlay() {
           <div className="flex shrink-0 flex-col items-end gap-2">
             {usingDemo ? (
               <span className="rounded-full border border-pt-accent/50 bg-pt-bg/85 px-3 py-0.5 text-xl text-pt-ink">
-                {ui.live.demo_badge}
+                {videoReplay ? ui.live.video_badge : ui.live.demo_badge}
               </span>
             ) : null}
             {/* Game progress toward the set target (not a test result). */}

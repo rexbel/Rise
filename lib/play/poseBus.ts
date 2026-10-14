@@ -20,16 +20,24 @@ export function createSyntheticBus(
   onComplete?: () => void,
   exerciseId: ExerciseId = "sit_to_stand",
 ): SyntheticBus {
+  return createReplayBus((t) => poseAtExercise(exerciseId, riseId, t), exerciseDurationMs(exerciseId, riseId), onComplete)
+}
+
+/** A bus over any keypoint source by time (synthetic script, or the demo video's recorded frames). */
+export function createReplayBus(
+  poseAt: (tMs: number) => Keypoints17 | null,
+  duration: number,
+  onComplete?: () => void,
+): SyntheticBus {
   const listeners = new Set<(f: PoseFrame) => void>()
   let timer: ReturnType<typeof setInterval> | null = null
   let t = 0
   let paused = false
   let started = false
-  const duration = exerciseDurationMs(exerciseId, riseId)
 
   function tick() {
     if (paused) return
-    const frame = estimate(poseAtExercise(exerciseId, riseId, t), t)
+    const frame = estimate(poseAt(t), t)
     for (const cb of listeners) cb(frame)
     t += STEP
     if (t > duration) {

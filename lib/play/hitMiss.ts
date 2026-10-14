@@ -253,8 +253,9 @@ export function createHitMissTracker(): HitMissTracker {
       rising = false
       sawSit = false
     }
-    // Backup streak only after a sit/squat — never while holding a stand
-    if (sawSit && s < apexMin) {
+    // Backup streak only part-way up after a sit/squat: never while holding a stand, and never while still seated
+    // (a patient resting between reps would otherwise earn a fruit every ~0.8 s).
+    if (sawSit && s > deepNeed && s < apexMin) {
       goodStreak += 1
       if (
         goodStreak >= HIT_STREAK_BACKUP &&
