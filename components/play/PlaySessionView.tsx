@@ -8,26 +8,36 @@ import { PlayProvider, usePlay } from "@/components/play/PlayProvider"
 import { PresenterBar } from "@/components/play/PresenterBar"
 import { isLiveShell } from "@/lib/play/phaseView"
 import { resolvePlaySessionId } from "@/lib/play/playResult"
-import type { SeedPatient } from "@/lib/types"
+import type { PatientInvite, SeedPatient } from "@/lib/types"
 
 export function PlaySessionView({
   patient,
   demo,
-  sessionParam,
+  invite,
   clinicName,
 }: {
   patient: SeedPatient
+  /** Demo for an unlinked visit (?demo=1). With an invite, the server's invite.demo decides instead. */
   demo: boolean
-  /** `?s=` from the invite link; validated here, otherwise a fresh id. */
-  sessionParam?: string
+  /** The console invite behind this link's ?i= token, resolved on the server; null for an unlinked visit. */
+  invite: PatientInvite | null
   clinicName: string
 }) {
+  const isDemo = invite ? invite.demo : demo
   const [restartKey, setRestartKey] = useState(0)
   // One id per page load: an invite's id when valid, else `<riseId>-<base36 time>`. Restart keeps it.
-  const [sessionId] = useState(() => resolvePlaySessionId(patient.rise_id, sessionParam, Date.now()))
+  const [sessionId] = useState(() => invite?.sessionId ?? resolvePlaySessionId(patient.rise_id, undefined, Date.now()))
   return (
-    <PlayProvider key={restartKey} patient={patient} sessionId={sessionId} invited={sessionId === sessionParam} clinicName={clinicName} demo={demo}>
-      <PlayShell patient={patient} demo={demo} onRestart={() => setRestartKey((k) => k + 1)} />
+    <PlayProvider
+      key={restartKey}
+      patient={patient}
+      sessionId={sessionId}
+      invited={!!invite}
+      inviteToken={invite?.token ?? null}
+      clinicName={clinicName}
+      demo={isDemo}
+    >
+      <PlayShell patient={patient} demo={isDemo} onRestart={() => setRestartKey((k) => k + 1)} />
     </PlayProvider>
   )
 }

@@ -5,6 +5,7 @@ import { useEffect, useId, useState } from "react"
 import {
   ArrowLeft,
   CalendarClock,
+  CameraOff,
   Check,
   CircleCheck,
   CircleMinus,
@@ -12,8 +13,13 @@ import {
   Hourglass,
   PauseCircle,
   PhoneMissed,
+  ShieldAlert,
+  ShieldCheck,
+  ShieldMinus,
+  ShieldQuestionMark,
   TriangleAlert,
   Users,
+  type LucideIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 import protocol from "@/config/protocol.default.json"
@@ -56,6 +62,7 @@ import {
   DemoBadge,
   Eyebrow,
   NeedsReview,
+  RealBadge,
   RECOMMENDATION_ICON,
   RedFlag,
   STATUS_ICON,
@@ -64,6 +71,7 @@ import {
   TONE_WASH,
   focusRing,
 } from "./status"
+import { checkInKind, COULD_NOT_COMPLETE_LABEL, couldNotCompleteText, setupSummary, type SetupSummary } from "./session-facts"
 import { DEMO_USER, useClinic, useNow } from "./store"
 
 const serif = "font-[family-name:var(--font-cl-serif)]"
@@ -126,9 +134,13 @@ function Detail({ s, p }: { s: SessionSnapshot; p: PatientSummary | undefined })
             {p.age} {p.sex} · {p.procedure} · post-op day {p.postOpDay} · episode day {p.episodeDay} of {p.episodeLength}
           </p>
         )}
+        <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2">
+          {checkInKind(s) === "real" ? <RealBadge /> : checkInKind(s) === "demo" ? <DemoBadge>Demo invite</DemoBadge> : null}
+          <SafetyChecks s={s} />
+        </div>
       </header>
 
-      {card ? <Decision s={s} card={card} /> : <Waiting s={s} />}
+      {card ? <Decision s={s} card={card} /> : s.couldNotComplete ? <CouldNotComplete s={s} /> : <Waiting s={s} />}
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
         <div className="grid min-w-0 gap-6">
@@ -138,10 +150,11 @@ function Detail({ s, p }: { s: SessionSnapshot; p: PatientSummary | undefined })
         </div>
         <aside className="grid min-w-0 gap-6">
           {card && card.approval === "pending" && <Actions s={s} card={card} />}
-          {card && card.approval !== "pending" && (s.followUp || s.nextCheckIn) && (
+          {/* A decided card, or a couldn't-complete (no card) that opened its own follow-up. */}
+          {((card && card.approval !== "pending") || (!card && s.followUp)) && (s.followUp || s.nextCheckIn) && (
             <FollowUpPanel s={s} followUp={s.followUp} nextCheckIn={s.nextCheckIn} />
           )}
-          {!card && <ActionsLocked />}
+          {!card && !s.followUp && <ActionsLocked couldNotComplete={!!s.couldNotComplete} />}
           <CrewPanel s={s} />
           <Audit s={s} />
         </aside>
@@ -165,6 +178,64 @@ function Waiting({ s }: { s: SessionSnapshot }) {
       </StatusText>
       {s.demoData && <DemoBadge />}
     </div>
+  )
+}
+
+const SETUP_ICON: Record<SetupSummary["state"], { icon: LucideIcon; tone: "ok" | "confirm" | "neutral" }> = {
+  confirmed: { icon: ShieldCheck, tone: "ok" },
+  partial: { icon: ShieldAlert, tone: "confirm" },
+  skipped: { icon: ShieldMinus, tone: "neutral" },
+  none: { icon: ShieldQuestionMark, tone: "neutral" },
+}
+
+/** Which safety checks the patient confirmed on the phone before the test (or that a demo skipped them). */
+function SafetyChecks({ s }: { s: SessionSnapshot }) {
+  const sum = setupSummary(s)
+  const { icon, tone } = SETUP_ICON[sum.state]
+  const at = s.setup?.at
+  return (
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-base">
+      <span className="text-cl-muted">Safety checks:</span>
+      <StatusText icon={icon} tone={tone}>
+        {sum.label}
+      </StatusText>
+      {at && sum.state !== "none" && (
+        <time className="text-sm text-cl-muted tabular-nums" dateTime={new Date(at).toISOString()}>
+          at {formatTime(at)}
+        </time>
+      )}
+    </p>
+  )
+}
+
+/** A real patient tried, the camera or body tracker failed, and they told the care team. No test, so no card. */
+function CouldNotComplete({ s }: { s: SessionSnapshot }) {
+  const c = s.couldNotComplete!
+  return (
+    <section
+      aria-labelledby="cnc-heading"
+      className={cn("grid gap-2 rounded-md border border-l-[8px] border-l-status-confirm p-5", TONE_WASH.confirm)}
+    >
+      <h2 id="cnc-heading" className={cn(serif, "flex flex-wrap items-center gap-x-3 gap-y-1 text-3xl font-semibold")}>
+        <CameraOff aria-hidden className={cn("size-8 shrink-0", TONE_TEXT.confirm)} strokeWidth={2.25} />
+        <span>{couldNotCompleteText(c.reason)}</span>
+      </h2>
+      <p className="text-lg">
+        The patient told the care team at{" "}
+        <time className="font-semibold tabular-nums" dateTime={new Date(c.at).toISOString()}>
+          {formatTime(c.at)}
+        </time>{" "}
+        that they couldn&apos;t do the check-in today ({COULD_NOT_COMPLETE_LABEL[c.reason]}).
+      </p>
+      <p className="text-lg">
+        <span className="font-semibold">No test was done</span>, so the rules did not run and there is no triage card. The
+        patient was not shown a demo replay.
+      </p>
+      <p className="text-lg">
+        <span className="font-semibold">Symptoms were not asked</span>, including the red-flag questions. The follow-up call
+        on Today is the chance to ask them.
+      </p>
+    </section>
   )
 }
 
@@ -434,13 +505,23 @@ function SymptomsAndNote({ card }: { card: TriageCard }) {
   )
 }
 
-function ActionsLocked() {
+function ActionsLocked({ couldNotComplete = false }: { couldNotComplete?: boolean }) {
   return (
     <section aria-labelledby="actions-heading" className="grid gap-3 rounded-md border border-cl-line bg-cl-surface p-5">
       <h2 id="actions-heading" className={cn(serif, "text-2xl font-semibold")}>
         Decision
       </h2>
-      <p className="text-base text-cl-muted">Approve and Downgrade unlock when the triage card arrives.</p>
+      {couldNotComplete ? (
+        <p className="text-base text-cl-muted">
+          There is no card to decide. To try again, send a new check-in from the{" "}
+          <Link href="/clinic" className={cn("rounded-sm text-cl-ink underline underline-offset-2", focusRing)}>
+            patient list
+          </Link>
+          .
+        </p>
+      ) : (
+        <p className="text-base text-cl-muted">Approve and Downgrade unlock when the triage card arrives.</p>
+      )}
       <div className="flex flex-wrap gap-2">
         <Button disabled className="h-12 text-base">
           Approve
@@ -795,7 +876,7 @@ function FollowUpForm({ s, f }: { s: SessionSnapshot; f: FollowUp }) {
           </p>
         )}
         <p className="text-base text-cl-muted">
-          For {RECOMMENDATION_LABEL[f.recommendation]}
+          {f.kind === "could_not_complete" ? "For a check-in the patient couldn't complete: call to help" : `For ${RECOMMENDATION_LABEL[f.recommendation]}`}
           {route ? ` → ${route}` : ""}. Recording as {DEMO_USER}.
         </p>
         <Attempts f={f} />
@@ -1150,6 +1231,8 @@ function Audit({ s }: { s: SessionSnapshot }) {
                 <p className="text-base text-cl-muted">
                   {a.action.startsWith("followup_") ? (
                     <>Outcome: {outcomeLabel(a.reasonCode)}</>
+                  ) : a.action === "could_not_complete" ? (
+                    <>Reason: {COULD_NOT_COMPLETE_LABEL[a.reasonCode as keyof typeof COULD_NOT_COMPLETE_LABEL] ?? a.reasonCode}</>
                   ) : (
                     <>Reason: {(a.action === "crew_resumed" ? RESUME_REASON_LABEL : REASON_LABEL).get(a.reasonCode) ?? a.reasonCode}</>
                   )}

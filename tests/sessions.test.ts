@@ -18,6 +18,19 @@ import {
 } from "../lib/sessions"
 import type { SessionStreamMessage } from "../lib/types"
 
+// Writes to an invited session need its invite token (lib/sessions checkInviteToken). These wrappers remember the
+// token each invite() returned and pass it on, so tests read like the phone: invite, then report with the link.
+const __tokens = new Map<string, string>()
+function inv(riseId: string, surface: Parameters<typeof invite>[1], user?: string, now?: number, demo = true) {
+  // Scripted seed results are demo data, so test invites are demo invites unless a test says otherwise.
+  const r = invite(riseId, surface, user, now, demo)
+  __tokens.set(r.sessionId, new URL(r.path, "https://x").searchParams.get("i")!)
+  return r
+}
+const res = (id: string, r: Parameters<typeof applyResult>[1], now?: number) => applyResult(id, r, now, __tokens.get(id))
+const ev = (id: string, e: Parameters<typeof applyEvent>[1], now?: number) => applyEvent(id, e, now, __tokens.get(id))
+
+
 const ellen = patients.find((p) => p.rise_id === "rise-01")!
 const gary = patients.find((p) => p.rise_id === "rise-04")!
 
@@ -31,15 +44,17 @@ describe("session store", () => {
   it("invite -> live events -> result -> card, all pushed to subscribers", () => {
     const seen: SessionStreamMessage[] = []
     const off = subscribe((m) => seen.push(m))
-    const { sessionId, path, sms } = invite("rise-01", "play", "Nurse A", 1000)
-    expect(path).toBe(`/play/rise-01?s=${sessionId}`)
+    const { sessionId, path, sms } = inv("rise-01", "play", "Nurse A", 1000)
+    // The link carries the unguessable invite token, never the session id.
+    expect(path).toMatch(/^\/play\/rise-01\?i=[A-Za-z0-9_-]{32}$/)
+    expect(path).not.toContain(sessionId)
     expect(sms).toEqual({ sent: false, demoData: true })
 
-    applyEvent(sessionId, { type: "status", sessionId, status: "testing", tier: "mediapipe", at: 1 }, 2000)
-    applyEvent(sessionId, { type: "rep", sessionId, count: 2, armsUsed: true, at: 2 }, 3000)
+    ev(sessionId, { type: "status", sessionId, status: "testing", tier: "mediapipe", at: 1 }, 2000)
+    ev(sessionId, { type: "rep", sessionId, count: 2, armsUsed: true, at: 2 }, 3000)
     expect(getSession(sessionId)).toMatchObject({ status: "testing", count: 2, armsUsed: true, tier: "mediapipe" })
 
-    const card = applyResult(sessionId, resultFor(ellen, sessionId), 4000)
+    const card = res(sessionId, resultFor(ellen, sessionId), 4000)
     expect(card).toMatchObject({ recommendation: "escalate_urgent", route: "surgeon_on_call", ruleFired: "red_flag", approval: "pending" })
     expect(getSession(sessionId)?.status).toBe("ready")
     expect(seen.filter((m) => m.type === "session")).toHaveLength(4)
@@ -49,45 +64,45 @@ describe("session store", () => {
   it("matches expected_triage for every seed patient through the server path", () => {
     for (const p of patients) {
       const sessionId = `${p.rise_id}-seedcheck`
-      const card = applyResult(sessionId, resultFor(p, sessionId))
+      const card = res(sessionId, resultFor(p, sessionId))
       expect(card.recommendation, p.rise_id).toBe(p.expected_triage.recommendation)
     }
   })
 
   it("accepts a phone that opened a link without an invite, but not an unknown patient", () => {
-    applyEvent("rise-02-abcd1234", { type: "status", sessionId: "rise-02-abcd1234", status: "setting_up", at: 1 })
+    ev("rise-02-abcd1234", { type: "status", sessionId: "rise-02-abcd1234", status: "setting_up", at: 1 })
     expect(getSession("rise-02-abcd1234")?.riseId).toBe("rise-02")
-    expect(() => applyEvent("rise-99-abcd1234", { type: "resume", sessionId: "rise-99-abcd1234", at: 1 })).toThrow(SessionError)
+    expect(() => ev("rise-99-abcd1234", { type: "resume", sessionId: "rise-99-abcd1234", at: 1 })).toThrow(SessionError)
     expect(riseIdOf("../etc-passwd")).toBeNull()
   })
 
   it("rejects a result whose ids don't match the URL", () => {
-    const { sessionId } = invite("rise-01", "classic")
-    expect(() => applyResult(sessionId, resultFor(ellen, "rise-01-other0000"))).toThrow(/mismatch/)
-    expect(() => applyResult(sessionId, resultFor(gary, sessionId))).toThrow(/does not match/)
+    const { sessionId } = inv("rise-01", "classic")
+    expect(() => res(sessionId, resultFor(ellen, "rise-01-other0000"))).toThrow(/mismatch/)
+    expect(() => res(sessionId, resultFor(gary, sessionId))).toThrow(/does not match/)
   })
 
   it("late phone events never move a finished card backwards", () => {
-    const { sessionId } = invite("rise-04", "classic")
-    applyResult(sessionId, resultFor(gary, sessionId))
-    applyEvent(sessionId, { type: "status", sessionId, status: "testing", at: 9 })
+    const { sessionId } = inv("rise-04", "classic")
+    res(sessionId, resultFor(gary, sessionId))
+    ev(sessionId, { type: "status", sessionId, status: "testing", at: 9 })
     expect(getSession(sessionId)?.status).toBe("ready")
   })
 
   it("posting the result again with a plain note keeps a human decision", () => {
-    const { sessionId } = invite("rise-04", "classic")
-    applyResult(sessionId, resultFor(gary, sessionId))
+    const { sessionId } = inv("rise-04", "classic")
+    res(sessionId, resultFor(gary, sessionId))
     approve(sessionId, { action: "approve", user: "Nurse A" })
-    const card = applyResult(sessionId, resultFor(gary, sessionId, { patientNote: "Knees a bit stiff today" }))
+    const card = res(sessionId, resultFor(gary, sessionId, { patientNote: "Knees a bit stiff today" }))
     expect(card.approval).toBe("approved")
     expect(card.patientNote).toBe("Knees a bit stiff today")
   })
 
   it("a newly flagged note reopens an approved card", () => {
-    const { sessionId } = invite("rise-04", "classic")
-    applyResult(sessionId, resultFor(gary, sessionId))
+    const { sessionId } = inv("rise-04", "classic")
+    res(sessionId, resultFor(gary, sessionId))
     approve(sessionId, { action: "approve", user: "Nurse A" })
-    const card = applyResult(sessionId, resultFor(gary, sessionId, { patientNote: "I had a fall yesterday" }))
+    const card = res(sessionId, resultFor(gary, sessionId, { patientNote: "I had a fall yesterday" }))
     expect(card.noteNeedsReview).toBe(true)
     expect(card.approval).toBe("pending")
     expect(getSession(sessionId)?.status).toBe("needs_confirmation")
@@ -95,56 +110,56 @@ describe("session store", () => {
   })
 
   it("any change beyond the note reopens an approved card, even at the same recommendation", () => {
-    const { sessionId } = invite("rise-04", "classic")
-    applyResult(sessionId, resultFor(gary, sessionId))
+    const { sessionId } = inv("rise-04", "classic")
+    res(sessionId, resultFor(gary, sessionId))
     approve(sessionId, { action: "approve", user: "Nurse A" })
-    const card = applyResult(sessionId, resultFor(gary, sessionId, { symptoms: { ...gary.scripted_today.symptoms, pain_0_10: 7 } }))
+    const card = res(sessionId, resultFor(gary, sessionId, { symptoms: { ...gary.scripted_today.symptoms, pain_0_10: 7 } }))
     expect(card.recommendation).toBe("continue_plan")
     expect(card.approval).toBe("pending")
     expect(card.warnings[0]).toMatch(/^Answers changed after the first report\. Earlier: continue_plan/)
   })
 
   it("a milder re-post never quietly replaces an escalation", () => {
-    const { sessionId } = invite("rise-01", "play")
-    applyResult(sessionId, resultFor(ellen, sessionId))
+    const { sessionId } = inv("rise-01", "play")
+    res(sessionId, resultFor(ellen, sessionId))
     approve(sessionId, { action: "approve", user: "Nurse A" })
     const benign = resultFor(gary, sessionId, { riseId: "rise-01" })
-    const card = applyResult(sessionId, benign)
+    const card = res(sessionId, benign)
     expect(card.approval).toBe("pending")
     expect(card.warnings.join(" ")).toMatch(/Earlier: escalate_urgent \(rule red_flag\)/)
     expect(getSession(sessionId)?.audit.map((a) => a.action)).toEqual(["invited", "approved", "followup_opened", "red_flag_retracted", "reopened"])
   })
 
   it("re-answering into a different rule reopens an approved card", () => {
-    const { sessionId } = invite("rise-01", "play")
-    applyResult(sessionId, resultFor(ellen, sessionId))
+    const { sessionId } = inv("rise-01", "play")
+    res(sessionId, resultFor(ellen, sessionId))
     approve(sessionId, { action: "approve", user: "Nurse A" })
     const noRedFlag = { ...ellen.scripted_today.symptoms, short_of_breath_or_chest_pain: false }
-    const card = applyResult(sessionId, resultFor(ellen, sessionId, { symptoms: noRedFlag }))
+    const card = res(sessionId, resultFor(ellen, sessionId, { symptoms: noRedFlag }))
     expect(card).toMatchObject({ recommendation: "escalate_urgent", ruleFired: "decline", approval: "pending" })
   })
 
   it("with a console key set, only invited sessions reach the board", () => {
     process.env.CONSOLE_KEY = "test-key"
     try {
-      expect(() => applyEvent("rise-02-abcd1234", { type: "resume", sessionId: "rise-02-abcd1234", at: 1 })).toThrow(/unknown session/)
-      const { sessionId } = invite("rise-02", "play")
-      expect(applyEvent(sessionId, { type: "resume", sessionId, at: 1 }).status).toBe("testing")
+      expect(() => ev("rise-02-abcd1234", { type: "resume", sessionId: "rise-02-abcd1234", at: 1 })).toThrow(/unknown session/)
+      const { sessionId } = inv("rise-02", "play")
+      expect(ev(sessionId, { type: "resume", sessionId, at: 1 }).status).toBe("testing")
     } finally {
       delete process.env.CONSOLE_KEY
     }
   })
 
   it("evicts decided sessions before cards still waiting for a person", () => {
-    const waiting = invite("rise-01", "play", "A", 1).sessionId
-    applyResult(waiting, resultFor(ellen, waiting), 2)
-    for (let i = 0; i < 100; i++) invite("rise-04", "classic", "A", 10 + i)
+    const waiting = inv("rise-01", "play", "A", 1).sessionId
+    res(waiting, resultFor(ellen, waiting), 2)
+    for (let i = 0; i < 100; i++) inv("rise-04", "classic", "A", 10 + i)
     expect(getSession(waiting)?.card?.approval).toBe("pending")
     expect(listSessions()).toHaveLength(100)
   })
 
   it("Reset demo clears every session", () => {
-    invite("rise-01", "play")
+    inv("rise-01", "play")
     resetSessions()
     expect(listSessions()).toHaveLength(0)
   })
@@ -152,8 +167,8 @@ describe("session store", () => {
 
 describe("human decision boundary", () => {
   function escalated() {
-    const { sessionId } = invite("rise-01", "play")
-    applyResult(sessionId, resultFor(ellen, sessionId))
+    const { sessionId } = inv("rise-01", "play")
+    res(sessionId, resultFor(ellen, sessionId))
     return sessionId
   }
 
@@ -169,7 +184,7 @@ describe("human decision boundary", () => {
   })
 
   it("cannot approve before a card exists", () => {
-    const { sessionId } = invite("rise-01", "play")
+    const { sessionId } = inv("rise-01", "play")
     expect(() => approve(sessionId, { action: "approve", user: "Nurse A" })).toThrow(/no triage card/)
   })
 
@@ -185,8 +200,8 @@ describe("human decision boundary", () => {
   })
 
   it("the audit log never copies patient answers or notes", () => {
-    const { sessionId } = invite("rise-04", "classic")
-    applyResult(sessionId, resultFor(gary, sessionId, { patientNote: "private words" }))
+    const { sessionId } = inv("rise-04", "classic")
+    res(sessionId, resultFor(gary, sessionId, { patientNote: "private words" }))
     const s = approve(sessionId, { action: "approve", user: "Nurse A" })
     expect(JSON.stringify(s.audit)).not.toMatch(/private words|pain_0_10/)
   })
@@ -202,7 +217,7 @@ describe("RehabNinja sets (play_set)", () => {
 
   it("never get a CDC cutoff on the card", () => {
     const sessionId = "rise-04-playset1"
-    const card = applyResult(sessionId, resultFor(gary, sessionId, { protocol: "play_set" }))
+    const card = res(sessionId, resultFor(gary, sessionId, { protocol: "play_set" }))
     expect(card.metrics.cdcCutoff).toBeNull()
     expect(card.warnings.join(" ")).toMatch(/not the CDC 30-second test/)
   })
@@ -222,28 +237,28 @@ describe("review fixes", () => {
 
   it("seed patients match expected route and rule through the server path too", () => {
     for (const p of patients) {
-      const card = applyResult(`${p.rise_id}-routecheck`, resultFor(p, `${p.rise_id}-routecheck`))
+      const card = res(`${p.rise_id}-routecheck`, resultFor(p, `${p.rise_id}-routecheck`))
       expect(card.route, p.rise_id).toBe(p.expected_triage.route)
     }
   })
 
   it("a retracted red flag stays on the record: audit entry plus a warning on every later card", () => {
-    const { sessionId } = invite("rise-01", "play")
-    applyResult(sessionId, resultFor(ellen, sessionId))
-    const card = applyResult(sessionId, resultFor(ellen, sessionId, { symptoms: noRedFlag }))
+    const { sessionId } = inv("rise-01", "play")
+    res(sessionId, resultFor(ellen, sessionId))
+    const card = res(sessionId, resultFor(ellen, sessionId, { symptoms: noRedFlag }))
     expect(card.ruleFired).toBe("decline")
     expect(card.warnings[0]).toMatch(/^Red flag retracted: .*911/)
     expect(getSession(sessionId)?.audit.map((a) => a.action)).toContain("red_flag_retracted")
-    const later = applyResult(sessionId, resultFor(ellen, sessionId, { symptoms: noRedFlag, patientNote: "ok now" }))
+    const later = res(sessionId, resultFor(ellen, sessionId, { symptoms: noRedFlag, patientNote: "ok now" }))
     expect(later.warnings.some((w) => w.startsWith("Red flag retracted"))).toBe(true)
   })
 
   it("an old downgrade never stands for a card that new input reopened", () => {
     const judith = patients.find((p) => p.rise_id === "rise-02")!
-    const { sessionId } = invite("rise-02", "play")
-    applyResult(sessionId, resultFor(judith, sessionId))
+    const { sessionId } = inv("rise-02", "play")
+    res(sessionId, resultFor(judith, sessionId))
     approve(sessionId, { action: "downgrade", to: "nurse_callback", reasonCode: "spoke_with_patient", user: "A" })
-    applyResult(sessionId, resultFor(judith, sessionId, { symptoms: { ...judith.scripted_today.symptoms, short_of_breath_or_chest_pain: true } }))
+    res(sessionId, resultFor(judith, sessionId, { symptoms: { ...judith.scripted_today.symptoms, short_of_breath_or_chest_pain: true } }))
     const s = getSession(sessionId)!
     expect(s.card?.approval).toBe("pending")
     expect(finalRecommendation(s)).toBe("escalate_urgent")
@@ -251,51 +266,51 @@ describe("review fixes", () => {
   })
 
   it("a decision made on an older card version is refused", () => {
-    const { sessionId } = invite("rise-01", "play")
-    applyResult(sessionId, resultFor(ellen, sessionId))
-    applyResult(sessionId, resultFor(ellen, sessionId, { symptoms: noRedFlag }))
+    const { sessionId } = inv("rise-01", "play")
+    res(sessionId, resultFor(ellen, sessionId))
+    res(sessionId, resultFor(ellen, sessionId, { symptoms: noRedFlag }))
     expect(() => approve(sessionId, { action: "approve", user: "A", expectRecommendation: "escalate_urgent", expectRule: "red_flag" })).toThrow(/card changed/)
     expect(approve(sessionId, { action: "approve", user: "A", expectRecommendation: "escalate_urgent", expectRule: "decline" }).card?.approval).toBe("approved")
   })
 
   it("downgrades must be strictly lower (confirm -> nurse callback is refused)", () => {
     const sessionId = "rise-04-confirm01"
-    applyResult(sessionId, resultFor(gary, sessionId, { stoppedEarly: true }))
+    res(sessionId, resultFor(gary, sessionId, { stoppedEarly: true }))
     expect(() => approve(sessionId, { action: "downgrade", to: "nurse_callback", reasonCode: "known_finding", user: "A" })).toThrow(/lower/)
   })
 
   it("re-answering without the note keeps the note the patient already sent", () => {
-    const { sessionId } = invite("rise-04", "classic")
-    applyResult(sessionId, resultFor(gary, sessionId, { patientNote: "I had a fall" }))
-    const card = applyResult(sessionId, resultFor(gary, sessionId))
+    const { sessionId } = inv("rise-04", "classic")
+    res(sessionId, resultFor(gary, sessionId, { patientNote: "I had a fall" }))
+    const card = res(sessionId, resultFor(gary, sessionId))
     expect(card.patientNote).toBe("I had a fall")
     expect(card.noteNeedsReview).toBe(true)
   })
 
   it("the live count never goes down within an attempt", () => {
-    const { sessionId } = invite("rise-01", "play")
-    applyEvent(sessionId, { type: "rep", sessionId, count: 3, armsUsed: false, at: 1 })
-    applyEvent(sessionId, { type: "rep", sessionId, count: 2, armsUsed: false, at: 2 })
+    const { sessionId } = inv("rise-01", "play")
+    ev(sessionId, { type: "rep", sessionId, count: 3, armsUsed: false, at: 1 })
+    ev(sessionId, { type: "rep", sessionId, count: 2, armsUsed: false, at: 2 })
     expect(getSession(sessionId)?.count).toBe(3)
   })
 
   it("a replayed demo set starts fresh; a red-flag demo or a real session's card is never cleared by the phone", () => {
-    const demo = invite("rise-04", "play").sessionId
-    applyResult(demo, resultFor(gary, demo))
-    applyEvent(demo, { type: "status", sessionId: demo, status: "setting_up", at: 1 })
+    const demo = inv("rise-04", "play").sessionId
+    res(demo, resultFor(gary, demo))
+    ev(demo, { type: "status", sessionId: demo, status: "setting_up", at: 1 })
     expect(getSession(demo)).toMatchObject({ status: "setting_up", count: 0 })
     expect(getSession(demo)?.card).toBeUndefined()
     expect(getSession(demo)?.audit.at(-1)?.action).toBe("restarted")
 
     // Ellen's red flag keeps her off her crew: a replay must not clear it; only a person does.
-    const flagged = invite("rise-01", "play").sessionId
-    applyResult(flagged, resultFor(ellen, flagged))
-    applyEvent(flagged, { type: "status", sessionId: flagged, status: "setting_up", at: 1 })
+    const flagged = inv("rise-01", "play").sessionId
+    res(flagged, resultFor(ellen, flagged))
+    ev(flagged, { type: "status", sessionId: flagged, status: "setting_up", at: 1 })
     expect(getSession(flagged)?.card?.ruleFired).toBe("red_flag")
 
-    const real = invite("rise-04", "classic").sessionId
-    applyResult(real, resultFor(gary, real, { demoData: false, scripted: [] }))
-    applyEvent(real, { type: "status", sessionId: real, status: "setting_up", at: 1 })
+    const real = inv("rise-04", "classic").sessionId
+    res(real, resultFor(gary, real, { demoData: false, scripted: [] }))
+    ev(real, { type: "status", sessionId: real, status: "setting_up", at: 1 })
     expect(getSession(real)?.card?.recommendation).toBe("continue_plan")
   })
 
@@ -307,9 +322,9 @@ describe("review fixes", () => {
   })
 
   it("live sessions say the non-surgical check was not evaluated; scripted fields are named", () => {
-    const live = applyResult("rise-04-livecheck", resultFor(gary, "rise-04-livecheck", { demoData: false, scripted: [] }))
+    const live = res("rise-04-livecheck", resultFor(gary, "rise-04-livecheck", { demoData: false, scripted: [] }))
     expect(live.warnings.join(" ")).toMatch(/Non-surgical check not evaluated/)
-    const demo = applyResult("rise-04-democheck", resultFor(gary, "rise-04-democheck"))
+    const demo = res("rise-04-democheck", resultFor(gary, "rise-04-democheck"))
     expect(demo.scripted).toEqual(["new_incontinence", "gait", "tandem"])
     expect(demo.warnings.join(" ")).toMatch(/Scripted, not measured/)
   })

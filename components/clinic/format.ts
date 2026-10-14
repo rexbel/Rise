@@ -61,6 +61,7 @@ export const STATUS_LABEL: Record<SessionStatus, string> = {
   scoring: "Scoring",
   ready: "Ready",
   needs_confirmation: "Needs confirmation",
+  could_not_complete: "Couldn't complete",
 }
 
 export const SURFACE_LABEL: Record<Surface, string> = {
@@ -112,10 +113,9 @@ export function statusText(s: Pick<SessionSnapshot, "status" | "count" | "surfac
 }
 
 /** Full patient link: public origin + API path, with &demo=1 when the coordinator asks for the demo recording. */
-export function buildPatientLink(origin: string, path: string, useDemoRecording: boolean): string {
-  const base = origin.replace(/\/+$/, "") + (path.startsWith("/") ? path : `/${path}`)
-  if (!useDemoRecording) return base
-  return base + (base.includes("?") ? "&" : "?") + "demo=1"
+/** The full link to share: origin + the server's path (which carries the invite token; demo is in the invite). */
+export function buildPatientLink(origin: string, path: string): string {
+  return origin.replace(/\/+$/, "") + (path.startsWith("/") ? path : `/${path}`)
 }
 
 /**
@@ -145,7 +145,8 @@ export function downgradeOptions(from: Recommendation): Recommendation[] {
 export function sessionTone(s: Pick<SessionSnapshot, "card" | "audit" | "status">): Tone {
   const rec = finalRecommendation(s)
   if (rec) return RECOMMENDATION_TONE[rec]
-  if (s.status === "needs_confirmation" || s.status === "paused") return "confirm"
+  // Couldn't complete: a real patient tried and the camera failed, so a person should look.
+  if (s.status === "needs_confirmation" || s.status === "paused" || s.status === "could_not_complete") return "confirm"
   return "neutral"
 }
 
@@ -199,6 +200,8 @@ export function auditActionLabel(a: AuditEntry): string {
       return "Follow-up updated"
     case "followup_cancelled":
       return "Follow-up cancelled"
+    case "could_not_complete":
+      return "Patient couldn't complete the check-in"
     case "followup_closed":
       return "Follow-up closed"
   }

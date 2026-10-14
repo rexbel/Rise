@@ -6,6 +6,7 @@ import {
   Activity,
   Calculator,
   Camera,
+  CameraOff,
   CircleCheck,
   CirclePause,
   ClipboardCheck,
@@ -15,6 +16,7 @@ import {
   Phone,
   Send,
   Siren,
+  Smartphone,
   TriangleAlert,
   UserCheck,
   type LucideIcon,
@@ -60,6 +62,7 @@ export const STATUS_ICON: Record<SessionStatus, LucideIcon> = {
   scoring: Calculator,
   ready: ClipboardCheck,
   needs_confirmation: UserCheck,
+  could_not_complete: CameraOff,
 }
 
 export const RECOMMENDATION_ICON: Record<Recommendation, LucideIcon> = {
@@ -143,4 +146,19 @@ export function DemoBadge({ className, children = "Demo data" }: { className?: s
 /** Small uppercase label for a section or field. */
 export function Eyebrow({ children, className, as: As = "p" }: { children: React.ReactNode; className?: string; as?: "p" | "h2" | "h3" | "dt" | "span" }) {
   return <As className={cn("text-sm font-semibold tracking-[0.06em] text-cl-muted uppercase", className)}>{children}</As>
+}
+
+/** "Real check-in": a console invite for the patient's own camera. Never shown with Demo data on the same session. */
+export function RealBadge({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-sm border border-cl-ink/30 px-1.5 py-0.5 text-sm font-medium text-cl-ink",
+        className,
+      )}
+    >
+      <Smartphone aria-hidden className="size-3.5" />
+      Real check-in
+    </span>
+  )
 }

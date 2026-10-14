@@ -18,6 +18,19 @@ import { applyEvent, applyResult, approve, getSession, invite, resetSessions, re
 import { patients, scriptedResult } from "../lib/seed"
 import { CheerResponse, CREW_CONSENT_VERSION, CrewBoard } from "../lib/types"
 
+// Writes to an invited session need its invite token (lib/sessions checkInviteToken). These wrappers remember the
+// token each invite() returned and pass it on, so tests read like the phone: invite, then report with the link.
+const __tokens = new Map<string, string>()
+function inv(riseId: string, surface: Parameters<typeof invite>[1], user?: string, now?: number, demo = true) {
+  // Scripted seed results are demo data, so test invites are demo invites unless a test says otherwise.
+  const r = invite(riseId, surface, user, now, demo)
+  __tokens.set(r.sessionId, new URL(r.path, "https://x").searchParams.get("i")!)
+  return r
+}
+const res = (id: string, r: Parameters<typeof applyResult>[1], now?: number) => applyResult(id, r, now, __tokens.get(id))
+const ev = (id: string, e: Parameters<typeof applyEvent>[1], now?: number) => applyEvent(id, e, now, __tokens.get(id))
+
+
 const NOW = new Date("2026-10-14T15:00:00").getTime() // a Wednesday
 const ellen = patients[0]
 const judith = patients.find((p) => p.rise_id === "rise-02")!
@@ -75,8 +88,8 @@ describe("crew board", () => {
     const before = you("rise-04")!
     const goalBefore = crewBoard("rise-04", NOW, true).goal.done
     for (const at of [NOW, NOW + 1000]) {
-      const sid = invite("rise-04", "play", "A", at).sessionId
-      applyResult(sid, scriptedResult(gary, { sessionId: sid }), at + 10)
+      const sid = inv("rise-04", "play", "A", at).sessionId
+      res(sid, scriptedResult(gary, { sessionId: sid }), at + 10)
     }
     const after = you("rise-04", NOW + 3000)!
     expect(after.activeDays).toBe(before.activeDays + 1)
@@ -94,8 +107,8 @@ describe("crew board", () => {
 
   it("a red-flag session never marks the day active; a self-started calm game set does", () => {
     join("rise-01")
-    const sid = invite("rise-01", "play", "A", NOW).sessionId
-    applyResult(sid, scriptedResult(ellen, { sessionId: sid }), NOW)
+    const sid = inv("rise-01", "play", "A", NOW).sessionId
+    res(sid, scriptedResult(ellen, { sessionId: sid }), NOW)
     decideAndResume(sid, NOW + 1) // back on the board, so her row is visible to check
     expect(you("rise-01", NOW + 2)?.activeToday).toBe(false)
     expect(recordSelfStartedSet(scriptedResult(ellen, { protocol: "steadi_30s", symptoms: calm }), NOW)).toBe(false)
@@ -175,8 +188,8 @@ describe("cheers", () => {
 describe("pause while the care team checks in", () => {
   function escalateJudith() {
     join("rise-02")
-    const sid = invite("rise-02", "play", "A", NOW).sessionId
-    applyResult(sid, scriptedResult(judith, { sessionId: sid }), NOW) // calf signal -> escalate_urgent
+    const sid = inv("rise-02", "play", "A", NOW).sessionId
+    res(sid, scriptedResult(judith, { sessionId: sid }), NOW) // calf signal -> escalate_urgent
     return sid
   }
 
@@ -194,10 +207,10 @@ describe("pause while the care team checks in", () => {
 
   it("a red flag pauses, and stays paused after the patient retracts it", () => {
     join("rise-01")
-    const sid = invite("rise-01", "play", "A", NOW).sessionId
-    applyResult(sid, scriptedResult(ellen, { sessionId: sid }), NOW)
+    const sid = inv("rise-01", "play", "A", NOW).sessionId
+    res(sid, scriptedResult(ellen, { sessionId: sid }), NOW)
     expect(isPaused("rise-01")).toBe(true)
-    applyResult(sid, scriptedResult(ellen, { sessionId: sid, symptoms: calm }), NOW + 10)
+    res(sid, scriptedResult(ellen, { sessionId: sid, symptoms: calm }), NOW + 10)
     expect(isPaused("rise-01")).toBe(true)
   })
 
@@ -212,8 +225,8 @@ describe("pause while the care team checks in", () => {
     expect(isPaused("rise-02")).toBe(false)
     expect(() => resumeCrew(sid, RESUME)).toThrow(/not paused/)
 
-    const sid2 = invite("rise-02", "play", "A", NOW + 100).sessionId
-    applyResult(sid2, scriptedResult(judith, { sessionId: sid2 }), NOW + 110)
+    const sid2 = inv("rise-02", "play", "A", NOW + 100).sessionId
+    res(sid2, scriptedResult(judith, { sessionId: sid2 }), NOW + 110)
     expect(isPaused("rise-02")).toBe(true)
     approve(sid2, { action: "downgrade", to: "continue_plan", reasonCode: "spoke_with_patient", user: "Nurse A" })
     expect(isPaused("rise-02")).toBe(false)
@@ -234,12 +247,12 @@ describe("pause while the care team checks in", () => {
 describe("review round 3", () => {
   it("new answers after a resume always pause again, even a red flag on the same session", () => {
     join("rise-02")
-    const sid = invite("rise-02", "play", "A", NOW).sessionId
-    applyResult(sid, scriptedResult(judith, { sessionId: sid }), NOW)
+    const sid = inv("rise-02", "play", "A", NOW).sessionId
+    res(sid, scriptedResult(judith, { sessionId: sid }), NOW)
     decideAndResume(sid, NOW + 1)
     expect(isPaused("rise-02")).toBe(false)
     const redFlag = { ...judith.scripted_today.symptoms, short_of_breath_or_chest_pain: true }
-    applyResult(sid, scriptedResult(judith, { sessionId: sid, symptoms: redFlag }), NOW + 10)
+    res(sid, scriptedResult(judith, { sessionId: sid, symptoms: redFlag }), NOW + 10)
     expect(isPaused("rise-02")).toBe(true)
     expect(crewBoard("rise-01", NOW + 11).members.some((m) => m.id === "rise-02")).toBe(false)
   })
@@ -253,15 +266,15 @@ describe("review round 3", () => {
 
   it("a demo Restart cannot clear a pause", () => {
     const sid = escalate("rise-02")
-    applyEvent(sid, { type: "status", sessionId: sid, status: "setting_up", at: 1 }, NOW + 5)
+    ev(sid, { type: "status", sessionId: sid, status: "setting_up", at: 1 }, NOW + 5)
     expect(isPaused("rise-02")).toBe(true)
     expect(getSession(sid)?.card).toBeDefined()
   })
 
   it("any of a patient's sessions keeps them paused; resuming one does not lift another", () => {
     const a = escalate("rise-02")
-    const b = invite("rise-02", "play", "A", NOW + 50).sessionId
-    applyResult(b, scriptedResult(judith, { sessionId: b }), NOW + 60)
+    const b = inv("rise-02", "play", "A", NOW + 50).sessionId
+    res(b, scriptedResult(judith, { sessionId: b }), NOW + 60)
     decideAndResume(b, NOW + 70)
     expect(isPaused("rise-02")).toBe(true)
     decideAndResume(a, NOW + 80)
@@ -302,8 +315,8 @@ describe("review round 3", () => {
 
 function escalate(riseId: "rise-02") {
   join(riseId)
-  const sid = invite(riseId, "play", "A", NOW).sessionId
-  applyResult(sid, scriptedResult(judith, { sessionId: sid }), NOW)
+  const sid = inv(riseId, "play", "A", NOW).sessionId
+  res(sid, scriptedResult(judith, { sessionId: sid }), NOW)
   return sid
 }
 

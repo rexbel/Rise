@@ -4,6 +4,7 @@
  * a person approves or downgrades it through approve(). Patient answers and notes stay on the card and
  * are never copied into the audit log.
  */
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto"
 import protocol from "@/config/protocol.default.json"
 import { markActive, resetCrew, syncPause } from "@/lib/crew"
 import { cadenceInputFor, dueOn, nextCheckIn } from "@/lib/cadence"
@@ -19,6 +20,7 @@ import {
   type AuditEntry,
   type FollowUp,
   type FollowUpRequest,
+  type PatientInvite,
   type NextCheckIn,
   type Recommendation,
   type RepEvent,
@@ -49,7 +51,7 @@ const store: Store = (g.__riseSessions ??= { sessions: new Map(), listeners: new
 export class SessionError extends Error {
   constructor(
     message: string,
-    readonly status: 400 | 404 | 409,
+    readonly status: 400 | 403 | 404 | 409,
   ) {
     super(message)
   }
@@ -114,10 +116,14 @@ function put(next: SessionSnapshot) {
   store.sessions.set(s.sessionId, s)
   syncPause(s.riseId, s.sessionId, s.crewPaused)
   if (store.sessions.size > MAX_SESSIONS) {
-    // Cards waiting for a person, and open follow-ups, are evicted last.
-    const waiting = (x: SessionSnapshot) => (x.card?.approval === "pending" || x.followUp?.status === "open" ? 1 : 0)
+    // Unlinked visits go first; invited sessions after; anything a person still owes (a pending card, an open
+    // follow-up) last. Unlinked posts can't push a patient's invite out of the store.
+    const waiting = (x: SessionSnapshot) =>
+      x.card?.approval === "pending" || x.followUp?.status === "open" ? 2 : x.inviteTokenHash ? 1 : 0
     const oldest = [...store.sessions.values()].sort((a, b) => waiting(a) - waiting(b) || a.updatedAt - b.updatedAt)[0]
     store.sessions.delete(oldest.sessionId)
+    // An evicted invite's id must never come back as an unlinked session that takes writes without the token.
+    if (oldest.inviteTokenHash) retireId(oldest.sessionId)
     // An evicted session can no longer be resumed from the console, so it stops holding a pause.
     syncPause(oldest.riseId, oldest.sessionId, false)
   }
@@ -140,13 +146,79 @@ function blank(sessionId: string, riseId: string, now: number, surface: Surface 
     invitedAt: null,
     updatedAt: now,
     demoData: false,
+    inviteDemo: null,
+    inviteTokenHash: null,
+    setup: { confirmed: [], skipped: false, at: null },
   }
 }
 
+function hashToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex")
+}
+
+function sameHash(a: string, b: string): boolean {
+  const x = Buffer.from(a, "hex")
+  const y = Buffer.from(b, "hex")
+  return x.length === y.length && timingSafeEqual(x, y)
+}
+
+/**
+ * Writes to a session sent from the console need its invite token (x-rise-invite). Knowing the session id, which
+ * the board shows, is not enough. Unlinked visits (no invite) stay open, as before: they are labeled, not trusted.
+ */
+export function checkInviteToken(sessionId: string, token: string | null | undefined) {
+  const s = store.sessions.get(sessionId)
+  if (!s?.inviteTokenHash) return
+  if (!token || !sameHash(hashToken(token), s.inviteTokenHash)) throw new SessionError("this check-in link is not valid here", 403)
+}
+
+/** True when `token` is this session's invite token (crew join uses it to verify the patient). */
+export function inviteTokenMatches(sessionId: string, token: string | null | undefined): boolean {
+  const s = store.sessions.get(sessionId)
+  return !!s?.inviteTokenHash && !!token && sameHash(hashToken(token), s.inviteTokenHash)
+}
+
+/** "Your week" page: the invite behind a token for any patient (it learns the patient from the invite). */
+export function resolveInviteToken(token: string | undefined): (PatientInvite & { riseId: string }) | null {
+  if (!token || token.length > 100) return null
+  const h = hashToken(token)
+  for (const s of store.sessions.values()) {
+    if (s.inviteTokenHash && s.surface && sameHash(h, s.inviteTokenHash)) {
+      return { sessionId: s.sessionId, token, demo: !!s.inviteDemo, surface: s.surface, riseId: s.riseId }
+    }
+  }
+  return null
+}
+
+/**
+ * Patient page: the invite behind a link token, or null if it isn't valid for this patient. The server decides demo
+ * or real from the invite; the link's own parameters never can.
+ */
+export function resolveInvite(riseId: string, token: string | undefined): PatientInvite | null {
+  if (!token || token.length > 100) return null
+  const h = hashToken(token)
+  for (const s of store.sessions.values()) {
+    if (s.riseId === riseId && s.inviteTokenHash && s.surface && sameHash(h, s.inviteTokenHash)) {
+      return { sessionId: s.sessionId, token, demo: !!s.inviteDemo, surface: s.surface }
+    }
+  }
+  return null
+}
+
 /** Existing session, or a new one for a phone that opened a link without an invite. */
+/** Ids of evicted invited sessions: never recreated as unlinked sessions. Bounded; oldest forgotten first. */
+const RETIRED_MAX = 2000
+const gr = globalThis as typeof globalThis & { __riseRetired?: Set<string> }
+const retired = (gr.__riseRetired ??= new Set<string>())
+function retireId(id: string) {
+  retired.add(id)
+  if (retired.size > RETIRED_MAX) retired.delete(retired.values().next().value as string)
+}
+
 function ensure(sessionId: string, now: number): SessionSnapshot {
   const existing = store.sessions.get(sessionId)
   if (existing) return existing
+  if (retired.has(sessionId)) throw new SessionError("this check-in link is not valid here", 403)
   const riseId = riseIdOf(sessionId)
   if (!riseId) throw new SessionError("unknown session", 404)
   // On the public tunnel (console key set) only invited sessions reach the board.
@@ -154,18 +226,74 @@ function ensure(sessionId: string, now: number): SessionSnapshot {
   return blank(sessionId, riseId, now, null)
 }
 
-export function invite(riseId: string, surface: Surface, user = "Demo coordinator", now = Date.now()) {
+export function invite(riseId: string, surface: Surface, user = "Demo coordinator", now = Date.now(), demo = false) {
   if (!getPatient(riseId)) throw new SessionError("unknown patient", 404)
   const sessionId = newSessionId(riseId, now)
+  // 192 random bits, URL-safe. Only its hash is stored (and saved); the token itself lives in the link.
+  const token = randomBytes(24).toString("base64url")
   const entry: AuditEntry = { sessionId, riseId, action: "invited", user, at: now }
-  put({ ...blank(sessionId, riseId, now, surface), invitedAt: now, audit: [entry] })
+  put({ ...blank(sessionId, riseId, now, surface), invitedAt: now, inviteDemo: demo, inviteTokenHash: hashToken(token), demoData: demo, audit: [entry] })
   const base = surface === "play" ? `/play/${riseId}` : `/p/${riseId}`
-  return { sessionId, path: `${base}?s=${sessionId}`, sms: { sent: false, demoData: true } }
+  return { sessionId, path: `${base}?i=${token}`, sms: { sent: false, demoData: true } }
 }
 
-export function applyEvent(sessionId: string, e: RepEvent, now = Date.now()): SessionSnapshot {
+export function applyEvent(sessionId: string, e: RepEvent, now = Date.now(), token?: string | null): SessionSnapshot {
   if (e.sessionId !== sessionId) throw new SessionError("session id mismatch", 400)
+  checkInviteToken(sessionId, token)
   const s = ensure(sessionId, now)
+  const setup = s.setup ?? { confirmed: [], skipped: false, at: null }
+  if (e.type === "setup_confirmed") {
+    const confirmed = setup.confirmed.includes(e.check) ? setup.confirmed : [...setup.confirmed, e.check]
+    return put({ ...s, setup: { ...setup, confirmed, at: now }, updatedAt: now })
+  }
+  if (e.type === "setup_skipped") {
+    if (s.inviteDemo === false) throw new SessionError("safety checks can't be skipped on a real check-in", 409)
+    return put({ ...s, setup: { ...setup, skipped: true, at: now }, updatedAt: now })
+  }
+  if (e.type === "could_not_complete") {
+    // Only a real invite reports this; a demo or unlinked visit would look like a real patient on the board.
+    if (s.inviteDemo !== false) throw new SessionError("only a real check-in can report this", 409)
+    // The phone must never tell the patient "your care team will see it" when nothing new was recorded.
+    if (s.card) throw new SessionError("this check-in already has a result", 409)
+    // The phone retries until acknowledged: a repeat while the report stands changes nothing and isn't audited twice.
+    if (s.status === "could_not_complete" && s.couldNotComplete?.reason === e.reason) return s
+    const entry: AuditEntry = { sessionId, riseId: s.riseId, action: "could_not_complete", reasonCode: e.reason, user: "Patient phone", at: now }
+    const audit = [...s.audit, entry]
+    // Someone owns it: a follow-up on Today (a call to help), unless one is already open for this session.
+    let followUp = s.followUp
+    if (followUp?.status !== "open") {
+      followUp = {
+        status: "open",
+        kind: "could_not_complete",
+        recommendation: "nurse_callback",
+        route: "care_coordinator",
+        openedAt: now,
+        attempts: 0,
+        awaitingClearance: false,
+        lastAttemptAt: null,
+        outcome: null,
+        note: null,
+        closedAt: null,
+        closedBy: null,
+      }
+      audit.push({ sessionId, riseId: s.riseId, action: "followup_opened", to: "nurse_callback", reasonCode: "could_not_complete", user: "Rise", at: now })
+    }
+    return put({
+      ...s,
+      status: "could_not_complete",
+      couldNotComplete: { reason: e.reason, at: now },
+      followUp,
+      nextCheckIn: waitingFor(WAITING_CALL),
+      // A real attempt: nothing from a replay is involved.
+      demoData: false,
+      audit: audit.slice(-MAX_AUDIT),
+      updatedAt: now,
+    })
+  }
+  // After a reported couldn't-complete, stray phone events (a voice "stop", a late status) can't hide it. Only an
+  // explicit new attempt (status setting_up) starts over; the report stays in the audit trail and on Today.
+  if (s.status === "could_not_complete" && !(e.type === "status" && e.status === "setting_up")) return s
+  if (s.status === "could_not_complete") return put({ ...s, status: "setting_up", couldNotComplete: undefined, updatedAt: now })
   // A demo replay may restart a set, but never one that is keeping the patient off their crew: only a person
   // lifts that (crew_resumed or a downgrade).
   if (s.card && e.type === "status" && e.status === "setting_up" && s.card.demoData && !crewPause(s)) {
@@ -260,10 +388,13 @@ export function buildCard(result: SessionResult): TriageCard {
  * Rules run here, on the server. Idempotent per session: the phone posts again when the patient adds a note,
  * and a decision a person already made is kept.
  */
-export function applyResult(sessionId: string, result: SessionResult, now = Date.now()): TriageCard {
+export function applyResult(sessionId: string, result: SessionResult, now = Date.now(), token?: string | null): TriageCard {
   if (result.sessionId !== sessionId) throw new SessionError("session id mismatch", 400)
   if (riseIdOf(sessionId) !== result.riseId) throw new SessionError("session does not match patient", 400)
+  checkInviteToken(sessionId, token)
   const s = ensure(sessionId, now)
+  // A real invite never takes a replayed result: the card would show demo numbers for a real patient.
+  if (s.inviteDemo === false && result.demoData) throw new SessionError("this check-in takes the patient's own camera only, not a demo", 409)
   const prev = s.card
   // Re-answering resends the result without the note the patient already sent; keep it.
   const fresh = buildCard(prev?.patientNote && !result.patientNote ? { ...result, patientNote: prev.patientNote } : result)
@@ -395,10 +526,11 @@ function trendOf(card: TriageCard): Trend {
   return card.metrics.rawStands > prev ? "better" : "same"
 }
 
-function schedule(card: TriageCard, rec: Recommendation, now: number): NextCheckIn | undefined {
-  const patient = getPatient(card.riseId)
+function schedule(card: TriageCard | undefined, rec: Recommendation, now: number, riseId = card?.riseId): NextCheckIn | undefined {
+  const patient = riseId ? getPatient(riseId) : undefined
   if (!patient) return undefined
-  const c = nextCheckIn(cadenceInputFor(patient, rec, trendOf(card)))
+  // No card (couldn't complete): no measurement, so the trend can't move the schedule.
+  const c = nextCheckIn(cadenceInputFor(patient, rec, card ? trendOf(card) : "same"))
   return { inDays: c.inDays, dueOn: dueOn(now, c.inDays), phase: c.phase, reason: c.reason, paused: false, source: "session" }
 }
 
@@ -463,8 +595,11 @@ function afterDecision(s: SessionSnapshot, now: number, user: string): SessionSn
 export function recordFollowUp(sessionId: string, req: FollowUpRequest, now = Date.now()): SessionSnapshot {
   const s = store.sessions.get(sessionId)
   if (!s) throw new SessionError("unknown session", 404)
-  if (!s.card || s.followUp?.status !== "open") throw new SessionError("no open follow-up", 409)
-  if (s.card.approval === "pending") throw new SessionError("the card was reopened; decide it first", 409)
+  if (s.followUp?.status !== "open") throw new SessionError("no open follow-up", 409)
+  // A couldn't-complete follow-up has no card; any other needs its card decided.
+  if (s.followUp.kind !== "could_not_complete" && (!s.card || s.card.approval === "pending")) {
+    throw new SessionError("the card was reopened; decide it first", 409)
+  }
   const f = s.followUp
   const outcome = FOLLOW.outcomes.find((o) => o.code === req.outcome)
   if (!outcome) throw new SessionError("unknown outcome", 400)
@@ -494,7 +629,7 @@ export function recordFollowUp(sessionId: string, req: FollowUpRequest, now = Da
     })
   }
 
-  const next = schedule(s.card, f.recommendation, now)
+  const next = schedule(s.card, f.recommendation, now, s.riseId)
   // Only a recorded clearance may say the clinician cleared the patient.
   const cleared = outcome.code === "clinician_cleared"
   const nextCheckIn = next && !cleared && (f.recommendation === "escalate_urgent" || f.recommendation === "human_confirm")

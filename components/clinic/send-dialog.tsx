@@ -66,13 +66,14 @@ function SendForm({ patient }: { patient: PatientSummary }) {
     e.preventDefault()
     setBusy(true)
     setError(null)
-    const r = await invite(patient.riseId, surface)
+    // Demo or real is decided on the server and baked into the invite; the link can't change it.
+    const r = await invite(patient.riseId, surface, demo)
     setBusy(false)
     if (!r.ok) {
       setError(r.message)
       return
     }
-    setSent({ link: buildPatientLink(window.location.origin, r.data.path, demo), surface, demo })
+    setSent({ link: buildPatientLink(window.location.origin, r.data.path), surface, demo })
     toast.success(`Check-in created for ${patient.name}. Share the link to start.`)
   }
 

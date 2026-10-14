@@ -26,7 +26,7 @@ type Store = {
   loaded: boolean
   connection: Connection
   retryNow: () => void
-  invite: (riseId: string, surface: Surface) => Promise<ApiResult<InviteResponse>>
+  invite: (riseId: string, surface: Surface, demo?: boolean) => Promise<ApiResult<InviteResponse>>
   decide: (sessionId: string, req: ApprovalRequest) => Promise<ApiResult<SessionSnapshot>>
   /** Return a paused patient to their crew (audited on the server). */
   resumeCrew: (sessionId: string, reasonCode: string, freeText?: string) => Promise<ApiResult<SessionSnapshot>>
@@ -132,10 +132,10 @@ export function ClinicProvider({ patients, children }: { patients: PatientSummar
   }, [])
 
   const invite = useCallback(
-    async (riseId: string, surface: Surface) => {
+    async (riseId: string, surface: Surface, demo = false) => {
       const r = await call(
         "/api/sessions",
-        { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ riseId, surface }) },
+        { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ riseId, surface, demo }) },
         (res) => res.json() as Promise<InviteResponse>,
       )
       // The stream normally delivers the new tile; refresh covers a paused stream.

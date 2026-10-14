@@ -21,6 +21,7 @@ import { speak, speakLines } from "@/lib/play/speak"
 import type { QuestionId } from "@/lib/play/types"
 import type { SeedPatient } from "@/lib/types"
 import { weekHref } from "@/lib/play/crewView"
+import { sendEvent } from "@/lib/session-client"
 import { cn } from "@/lib/utils"
 
 export function PhoneColumn({ patient }: { patient: SeedPatient }) {
@@ -72,7 +73,7 @@ export function PhoneColumn({ patient }: { patient: SeedPatient }) {
 }
 
 function PhoneBody({ patient }: { patient: SeedPatient }) {
-  const { session, dispatch, begin, voiceStopOn, setVoiceStopOn, sessionId, invited } = usePlay()
+  const { session, dispatch, begin, voiceStopOn, setVoiceStopOn, inviteToken, sessionId } = usePlay()
   const { phase } = session
   const home = useMemo(() => playerHome(patient), [patient])
   const missionKey = home.missions.map((m) => m.id).join("|")
@@ -100,7 +101,11 @@ function PhoneBody({ patient }: { patient: SeedPatient }) {
               <Button
                 type="button"
                 className={cn(ptCta, playDisplay.className, "h-16 min-h-16 motion-safe:active:scale-[0.98] lg:max-w-md")}
-                onClick={begin}
+                onClick={() => {
+                  // A demo goes straight to the countdown: the board shows the safety card was skipped (demo).
+                  if (session.demo) sendEvent({ type: "setup_skipped", sessionId, at: Date.now() })
+                  begin()
+                }}
               >
                 {ui.home.begin}
               </Button>
@@ -114,7 +119,7 @@ function PhoneBody({ patient }: { patient: SeedPatient }) {
                   Voice Stop {voiceStopOn ? "on" : "off"}
                 </Button>
               ) : null}
-              <Link href={weekHref(patient.rise_id, sessionId, invited)} className={cn(ptLink, "inline-flex min-h-14 items-center self-start")}>
+              <Link href={weekHref(inviteToken)} className={cn(ptLink, "inline-flex min-h-14 items-center self-start")}>
                 {ui.home.back_week}
               </Link>
             </>
@@ -126,11 +131,19 @@ function PhoneBody({ patient }: { patient: SeedPatient }) {
   if (phase === "ready") {
     return (
       <Screen title={ui.ready.title} body={ui.ready.body}>
-        <Button type="button" className={ptCta} onClick={() => dispatch({ type: "READY_OK" })}>
+        <Button
+          type="button"
+          className={ptCta}
+          onClick={() => {
+            // The combined card covers chair, someone nearby and feeling OK: one "ready" confirmation.
+            sendEvent({ type: "setup_confirmed", sessionId, check: "ready", at: Date.now() })
+            dispatch({ type: "READY_OK" })
+          }}
+        >
           {ui.ready.continue}
         </Button>
         <Button asChild className={ptSecondary}>
-          <Link href="/play">{ui.ready.not_now}</Link>
+          <Link href={weekHref(inviteToken)}>{ui.ready.not_now}</Link>
         </Button>
       </Screen>
     )

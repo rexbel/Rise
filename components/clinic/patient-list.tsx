@@ -17,6 +17,7 @@ import {
 } from "./format"
 import { nextCheckInView, seedNextCheckIn } from "./followup"
 import { SendCheckInDialog } from "./send-dialog"
+import { COULD_NOT_COMPLETE_LABEL } from "./session-facts"
 import { Eyebrow, RecommendationText, STATUS_ICON, StatusText, focusRing } from "./status"
 import { useClinic, useNow } from "./store"
 
@@ -201,9 +202,16 @@ function SessionCell({ session, loaded }: { session: SessionSnapshot | undefined
       className={cn("group inline-grid gap-0.5 rounded-sm", focusRing)}
       aria-label={`Open session: ${statusText(session)}${final ? `, ${RECOMMENDATION_LABEL[final]}` : ""}`}
     >
-      <StatusText icon={STATUS_ICON[session.status]} tone="neutral" className="group-hover:underline">
+      <StatusText
+        icon={STATUS_ICON[session.status]}
+        tone={session.status === "could_not_complete" ? "confirm" : "neutral"}
+        className="group-hover:underline"
+      >
         {statusText(session)}
       </StatusText>
+      {session.status === "could_not_complete" && session.couldNotComplete && (
+        <span className="text-cl-muted">{COULD_NOT_COMPLETE_LABEL[session.couldNotComplete.reason]}</span>
+      )}
       {final && <RecommendationText rec={final}>{RECOMMENDATION_LABEL[final]}</RecommendationText>}
     </Link>
   )

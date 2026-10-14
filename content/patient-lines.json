@@ -20,5 +20,23 @@
     "mistap_confirm": "Did you mean to say you are short of breath or have chest pain?",
     "follow_up": "Please keep your phone nearby."
   },
-  "note_prompt": "Is there anything you'd like your nurse to know? You can skip this."
+  "note_prompt": "Is there anything you'd like your nurse to know? You can skip this.",
+  "could_not_complete": {
+    "title": "We couldn't start your camera",
+    "body": "That's okay. It happens, and you didn't do anything wrong. These often help:",
+    "spoken": "We couldn't start your camera. That's okay. You can try again, or tell your care team you couldn't do it today.",
+    "tips": {
+      "permission": "Allow camera access for this page in your browser settings.",
+      "other_camera": "Try the other camera, front or back.",
+      "other_apps": "Close other apps that might be using the camera."
+    },
+    "retry": "Try again",
+    "use_front": "Use the front camera",
+    "use_back": "Use the back camera",
+    "tell": "Tell my care team I couldn't do it today",
+    "sending": "Letting your care team know…",
+    "send_failed": "That didn't go through yet. Check your connection, then try again.",
+    "done_title": "Thank you for letting us know",
+    "done": "Your care team will see that the check-in didn't work today. There's nothing else you need to do right now."
+  }
 }
