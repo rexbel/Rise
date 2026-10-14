@@ -383,7 +383,10 @@ export function CheckIn({
       <div className={cn("relative overflow-hidden rounded-xl bg-black", showCamera ? "block" : "hidden", step === "test" || step === "paused" ? "aspect-[3/4]" : "aspect-[4/3]")}>
         <video ref={videoRef} playsInline muted className={cn("h-full w-full", demo ? "object-contain" : "object-cover", demo && !demoVideo && "hidden", facing === "user" && !demo && "-scale-x-100")} />
         {demo && demoVideo && (
-          <span className="absolute right-3 top-3 z-10 rounded-full bg-black/70 px-3 py-1 text-base font-medium text-white">AI-generated demo video</span>
+          // Top right in setup (the framing pill owns the bottom); bottom centre in the test, clear of the timer ring.
+          <span className={cn("absolute z-10 whitespace-nowrap rounded-full bg-black/70 px-3 py-1 text-base font-medium text-white", step === "test" || step === "paused" ? "bottom-3 left-1/2 -translate-x-1/2" : "right-3 top-3")}>
+            AI-generated demo video
+          </span>
         )}
         <canvas ref={canvasRef} className={cn("pointer-events-none absolute inset-0 h-full w-full", facing === "user" && !demo && "-scale-x-100")} />
         {/* Until the camera is on, show what each safety check looks like (follows the first unticked check). */}
