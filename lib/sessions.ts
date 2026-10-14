@@ -225,7 +225,8 @@ export function applyEvent(sessionId: string, e: RepEvent, now = Date.now(), tok
     return put({ ...s, setup: { ...setup, skipped: true, at: now }, updatedAt: now })
   }
   if (e.type === "could_not_complete") {
-    if (s.card) return s
+    // The phone retries until acknowledged: a repeat of the same report changes nothing and isn't audited twice.
+    if (s.card || s.couldNotComplete?.reason === e.reason) return s
     const entry: AuditEntry = { sessionId, riseId: s.riseId, action: "could_not_complete", reasonCode: e.reason, user: "Patient phone", at: now }
     return put({
       ...s,

@@ -64,5 +64,8 @@ describe("safety confirmations and couldn't-complete (plan A)", () => {
     const s = applyEvent(sessionId, { type: "could_not_complete", sessionId, reason: "camera", at: 1 }, 5000, tokenOf(path))
     expect(s).toMatchObject({ status: "could_not_complete", couldNotComplete: { reason: "camera", at: 5000 }, demoData: false })
     expect(s.audit.at(-1)).toMatchObject({ action: "could_not_complete", reasonCode: "camera", user: "Patient phone" })
+    // A retried report (the phone retries until acknowledged) isn't audited twice.
+    applyEvent(sessionId, { type: "could_not_complete", sessionId, reason: "camera", at: 2 }, 6000, tokenOf(path))
+    expect(getSession(sessionId)!.audit.filter((x) => x.action === "could_not_complete")).toHaveLength(1)
   })
 })

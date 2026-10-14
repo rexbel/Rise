@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { patients, scriptedResult } from "../lib/seed"
-import { applyResult, approve, getSession, invite, resetSessions, applyEvent } from "../lib/sessions"
+import { applyResult, approve, getSession, invite, resetSessions } from "../lib/sessions"
 import { __test, loadSnapshot } from "../lib/persist"
 
 // Writes to an invited session need its invite token (lib/sessions checkInviteToken). These wrappers remember the
@@ -13,7 +13,6 @@ function inv(riseId: string, surface: Parameters<typeof invite>[1], user?: strin
   return r
 }
 const res = (id: string, r: Parameters<typeof applyResult>[1], now?: number) => applyResult(id, r, now, __tokens.get(id))
-const ev = (id: string, e: Parameters<typeof applyEvent>[1], now?: number) => applyEvent(id, e, now, __tokens.get(id))
 
 
 const ellen = patients.find((p) => p.rise_id === "rise-01")!

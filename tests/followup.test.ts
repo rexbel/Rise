@@ -14,7 +14,8 @@ import {
   patientNextCheckIn,
   recordFollowUp,
   resetSessions,
-  SessionError, applyEvent } from "../lib/sessions"
+  SessionError,
+} from "../lib/sessions"
 
 // Writes to an invited session need its invite token (lib/sessions checkInviteToken). These wrappers remember the
 // token each invite() returned and pass it on, so tests read like the phone: invite, then report with the link.
@@ -26,7 +27,6 @@ function inv(riseId: string, surface: Parameters<typeof invite>[1], user?: strin
   return r
 }
 const res = (id: string, r: Parameters<typeof applyResult>[1], now?: number) => applyResult(id, r, now, __tokens.get(id))
-const ev = (id: string, e: Parameters<typeof applyEvent>[1], now?: number) => applyEvent(id, e, now, __tokens.get(id))
 
 
 const ellen = patients.find((p) => p.rise_id === "rise-01")!
