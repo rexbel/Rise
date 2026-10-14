@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { Lock } from "lucide-react"
 import { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { Button } from "@/components/ui/button"
 import { LobbyStage } from "@/components/play/LobbyStage"
@@ -28,14 +29,14 @@ const CHROME: Record<LobbyScene, { main: string; ink: string; demo: string; clin
     ink: "text-[var(--rn-ink)]",
     // The mark's green band and blue mask, darkened so white text passes AA (6.2:1 and 6.5:1).
     demo: "bg-[#0F6E56] text-white hover:bg-[#0B5A46] focus-visible:ring-[var(--rn-ink)] focus-visible:ring-offset-[#F3EEE6]",
-    clinic: "bg-[#185FA5] text-white hover:bg-[#134D87] focus-visible:ring-[var(--rn-ink)] focus-visible:ring-offset-[#F3EEE6]",
+    clinic: "border-[#185FA5]/50 bg-white/60 text-[#185FA5] hover:bg-white focus-visible:ring-[var(--rn-ink)] focus-visible:ring-offset-[#F3EEE6]",
     ring: "focus-visible:ring-[var(--rn-ink)] focus-visible:ring-offset-[#F3EEE6]",
   },
   rooftops: {
     main: "bg-[#2B3554] text-white",
     ink: "text-white",
     demo: "border-2 border-[#1F2742] bg-white text-[#1F2742] hover:bg-white/90 focus-visible:ring-white focus-visible:ring-offset-[#2B3554]",
-    clinic: "border-2 border-[#1F2742] bg-white text-[#1F2742] hover:bg-white/90 focus-visible:ring-white focus-visible:ring-offset-[#2B3554]",
+    clinic: "border-white/40 bg-[#1F2742]/60 text-white/90 hover:bg-[#1F2742] focus-visible:ring-white focus-visible:ring-offset-[#2B3554]",
     ring: "focus-visible:ring-white focus-visible:ring-offset-[#2B3554]",
   },
 }
@@ -112,10 +113,19 @@ export function GameLobby() {
             >
               <Link href="/play/rise-01?demo=1">{ui.lobby.pitch_demo}</Link>
             </Button>
-            <Button asChild size="lg" className={cn(ptCta, c.clinic)}>
-              <Link href="/clinic">{ui.lobby.clinic}</Link>
-            </Button>
           </div>
+
+          {/* Staff entry: deliberately quieter than the patient actions above. */}
+          <Link
+            href="/clinic"
+            className={cn(
+              "inline-flex min-h-11 items-center gap-2 self-center whitespace-nowrap rounded-lg border px-3 py-2 text-sm font-semibold tracking-wide outline-none focus-visible:ring-[3px] focus-visible:ring-offset-2",
+              c.clinic,
+            )}
+          >
+            <Lock className="size-3.5 shrink-0" aria-hidden />
+            {ui.lobby.clinic}
+          </Link>
         </div>
       </div>
     </main>
