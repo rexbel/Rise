@@ -22,17 +22,20 @@ function currentScene(): LobbyScene {
 }
 
 /** Chrome colors per scene: dark text on the bright gym, light text on the night sky. */
-const CHROME: Record<LobbyScene, { main: string; ink: string; demo: string; ring: string }> = {
+const CHROME: Record<LobbyScene, { main: string; ink: string; demo: string; clinic: string; ring: string }> = {
   gym: {
     main: "bg-[#F3EEE6] text-[var(--rn-ink)]",
     ink: "text-[var(--rn-ink)]",
-    demo: "border-2 border-[var(--rn-ink)]/40 bg-white/90 text-[var(--rn-ink)] hover:bg-white focus-visible:ring-[var(--rn-ink)] focus-visible:ring-offset-[#F3EEE6]",
+    // The mark's green band and blue mask, darkened so white text passes AA (6.2:1 and 6.5:1).
+    demo: "bg-[#0F6E56] text-white hover:bg-[#0B5A46] focus-visible:ring-[var(--rn-ink)] focus-visible:ring-offset-[#F3EEE6]",
+    clinic: "bg-[#185FA5] text-white hover:bg-[#134D87] focus-visible:ring-[var(--rn-ink)] focus-visible:ring-offset-[#F3EEE6]",
     ring: "focus-visible:ring-[var(--rn-ink)] focus-visible:ring-offset-[#F3EEE6]",
   },
   rooftops: {
     main: "bg-[#2B3554] text-white",
     ink: "text-white",
     demo: "border-2 border-[#1F2742] bg-white text-[#1F2742] hover:bg-white/90 focus-visible:ring-white focus-visible:ring-offset-[#2B3554]",
+    clinic: "border-2 border-[#1F2742] bg-white text-[#1F2742] hover:bg-white/90 focus-visible:ring-white focus-visible:ring-offset-[#2B3554]",
     ring: "focus-visible:ring-white focus-visible:ring-offset-[#2B3554]",
   },
 }
@@ -109,7 +112,7 @@ export function GameLobby() {
             >
               <Link href="/play/rise-01?demo=1">{ui.lobby.pitch_demo}</Link>
             </Button>
-            <Button asChild size="lg" className={cn(ptCta, c.demo)}>
+            <Button asChild size="lg" className={cn(ptCta, c.clinic)}>
               <Link href="/clinic">{ui.lobby.clinic}</Link>
             </Button>
           </div>
