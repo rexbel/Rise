@@ -112,7 +112,7 @@ describe("session store", () => {
     const card = applyResult(sessionId, benign)
     expect(card.approval).toBe("pending")
     expect(card.warnings.join(" ")).toMatch(/Earlier: escalate_urgent \(rule red_flag\)/)
-    expect(getSession(sessionId)?.audit.map((a) => a.action)).toEqual(["invited", "approved", "red_flag_retracted", "reopened"])
+    expect(getSession(sessionId)?.audit.map((a) => a.action)).toEqual(["invited", "approved", "followup_opened", "red_flag_retracted", "reopened"])
   })
 
   it("re-answering into a different rule reopens an approved card", () => {
@@ -162,7 +162,9 @@ describe("human decision boundary", () => {
     expect(getSession(id)?.card?.approval).toBe("pending")
     const s = approve(id, { action: "approve", user: "Nurse A" }, 5000)
     expect(s.card?.approval).toBe("approved")
-    expect(s.audit.at(-1)).toMatchObject({ action: "approved", from: "escalate_urgent", user: "Nurse A", at: 5000 })
+    // The approval, then the follow-up it opens (close-the-loop).
+    expect(s.audit.at(-2)).toMatchObject({ action: "approved", from: "escalate_urgent", user: "Nurse A", at: 5000 })
+    expect(s.audit.at(-1)).toMatchObject({ action: "followup_opened", to: "escalate_urgent" })
     expect(() => approve(id, { action: "approve", user: "Nurse B" })).toThrow(/already decided/)
   })
 
@@ -245,7 +247,7 @@ describe("review fixes", () => {
     const s = getSession(sessionId)!
     expect(s.card?.approval).toBe("pending")
     expect(finalRecommendation(s)).toBe("escalate_urgent")
-    expect(s.audit.map((a) => a.action)).toEqual(["invited", "downgraded", "reopened"])
+    expect(s.audit.map((a) => a.action)).toEqual(["invited", "downgraded", "followup_opened", "reopened"])
   })
 
   it("a decision made on an older card version is refused", () => {
