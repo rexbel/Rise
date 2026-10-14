@@ -14,7 +14,7 @@ import {
   type ProcedureFamily,
   type ProgramExercise,
 } from "@/lib/play/programs"
-import type { CrewMember, SeedPatient, Trend } from "@/lib/types"
+import { PatientNextCheckIn, type CrewMember, type NextCheckIn, type SeedPatient, type Trend } from "@/lib/types"
 
 export type PlayerHomeModel = {
   riseId: string
@@ -45,6 +45,47 @@ export function nextSessionLabel(days: number): string {
   if (days <= 0) return ui.home.next_today
   if (days === 1) return ui.home.next_tomorrow
   return ui.home.next_in_days.replace("{days}", String(days))
+}
+
+/** Shown instead of a day while check-ins are paused (e.g. sent for urgent care). No date, no reason, no numbers. */
+export const NEXT_PAUSED_LABEL = "Your care team will let you know"
+
+const DAY_MS = 86_400_000
+
+function startOfDay(ms: number): number {
+  const d = new Date(ms)
+  d.setHours(0, 0, 0, 0)
+  return d.getTime()
+}
+
+/**
+ * The patient's "Next check-in" words from the care team's schedule: "Today", "Tomorrow", "In N days", or the paused
+ * line. Counts from dueOn (local midnight) so the label stays right as days pass; an overdue day reads as Today.
+ */
+export function patientNextCheckInLabel(nc: Pick<NextCheckIn, "paused" | "inDays" | "dueOn">, now: number): string {
+  if (nc.paused) return NEXT_PAUSED_LABEL
+  const days = nc.dueOn !== null ? Math.round((startOfDay(nc.dueOn) - startOfDay(now)) / DAY_MS) : (nc.inDays ?? 0)
+  return nextSessionLabel(Math.max(0, days))
+}
+
+type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
+
+/** GET /api/patients/[riseId]/next-checkin. Throws on timeout, a non-2xx, or an unexpected shape; callers keep the seed value. */
+export async function fetchNextCheckIn(
+  riseId: string,
+  opts: { signal?: AbortSignal; fetchImpl?: FetchLike; timeoutMs?: number } = {},
+): Promise<NextCheckIn> {
+  const doFetch = opts.fetchImpl ?? ((input, init) => fetch(input, init))
+  const timeout = AbortSignal.timeout(opts.timeoutMs ?? 5000)
+  const res = await doFetch(`/api/patients/${encodeURIComponent(riseId)}/next-checkin`, {
+    cache: "no-store",
+    credentials: "same-origin",
+    signal: opts.signal ? AbortSignal.any([opts.signal, timeout]) : timeout,
+  })
+  if (!res.ok) throw new Error(`next-checkin ${res.status}`)
+  const parsed = PatientNextCheckIn.safeParse(await res.json())
+  if (!parsed.success || parsed.data.riseId !== riseId) throw new Error("next-checkin shape")
+  return parsed.data.nextCheckIn
 }
 
 /** Prescribed dose in plain words, e.g. "1 × 6" or "Hold 20s". */
