@@ -34,3 +34,9 @@ export function withTimeout<T>(p: Promise<T>, ms: number, label: string, onLate?
     )
   })
 }
+
+/** getUserMedia outcomes a real phone hits routinely (no camera, denied, busy, insecure page) or our own timeout. */
+const EXPECTED = new Set(["NotFoundError", "NotAllowedError", "NotReadableError", "OverconstrainedError", "SecurityError", "StartTimeout"])
+export function isExpectedCameraFailure(e: unknown): boolean {
+  return typeof e === "object" && e !== null && "name" in e && EXPECTED.has(String((e as { name: unknown }).name))
+}

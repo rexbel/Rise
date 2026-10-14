@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import type { PoseEstimator } from "@/lib/pose"
 import { FpsMonitor, selectTier } from "@/lib/pose/select"
-import { CAMERA_TIMEOUT_MS, TRACKER_TIMEOUT_MS, withTimeout } from "@/lib/pose/timeout"
+import { CAMERA_TIMEOUT_MS, isExpectedCameraFailure, TRACKER_TIMEOUT_MS, withTimeout } from "@/lib/pose/timeout"
 import { clientLog } from "@/lib/play/clientLog"
 import { toPlayKeypoints } from "@/lib/play/keypointsAdapt"
 import type { PoseFrame } from "@/lib/play/types"
@@ -116,7 +116,9 @@ export function usePlayCamera(onFrame: (frame: PoseFrame) => void) {
           clientLog("warn", "camera play aborted (likely remount)", msg)
           return "cancelled"
         }
-        clientLog("error", "camera getUserMedia failed", msg)
+        // No camera, permission denied, camera busy, or a hung prompt are expected on real phones and are handled
+        // (help screen or demo replay): a warning, not an error. Anything else stays an error.
+        clientLog(isExpectedCameraFailure(e) ? "warn" : "error", "camera getUserMedia failed", msg)
         setError("Camera permission needed to see yourself in the game.")
         setStatus("error")
         return "error"
@@ -199,7 +201,7 @@ export function usePlayCamera(onFrame: (frame: PoseFrame) => void) {
         return "live"
       } catch (e) {
         if (my !== startGen.current) return "cancelled"
-        clientLog("error", "pose selectTier failed", String(e))
+        clientLog(isExpectedCameraFailure(e) ? "warn" : "error", "pose selectTier failed", String(e))
         setError("Body tracker did not load. Using demo replay.")
         setStatus("error")
         return "error"
