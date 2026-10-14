@@ -32,7 +32,7 @@ const CHROME: Record<LobbyScene, { main: string; ink: string; demo: string; ring
   rooftops: {
     main: "bg-[#2B3554] text-white",
     ink: "text-white",
-    demo: "border-2 border-white/60 bg-[#1F2742]/90 text-white hover:bg-[#1F2742] focus-visible:ring-white focus-visible:ring-offset-[#2B3554]",
+    demo: "border-2 border-[#1F2742] bg-white text-[#1F2742] hover:bg-white/90 focus-visible:ring-white focus-visible:ring-offset-[#2B3554]",
     ring: "focus-visible:ring-white focus-visible:ring-offset-[#2B3554]",
   },
 }
@@ -109,16 +109,10 @@ export function GameLobby() {
             >
               <Link href="/play/rise-01?demo=1">{ui.lobby.pitch_demo}</Link>
             </Button>
+            <Button asChild size="lg" className={cn(ptCta, c.demo)}>
+              <Link href="/clinic">{ui.lobby.clinic}</Link>
+            </Button>
           </div>
-
-          <nav className="pt-1 text-xl">
-            <Link
-              href="/clinic"
-              className={cn("inline-flex min-h-11 items-center rounded-md px-2 underline underline-offset-4 outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--rn-orange)]", c.ink)}
-            >
-              Clinic
-            </Link>
-          </nav>
         </div>
       </div>
     </main>
