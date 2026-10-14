@@ -18,6 +18,14 @@ export interface Fixture {
   frames: { t_ms: number; keypoints: Keypoints17 }[]
 }
 
+/** AI-generated demo footage (scripts/gen-demo-video.ts); rise-01's fixture is recorded from it. */
+export const DEMO_VIDEO_SRC = "/demo/sit-to-stand.mp4"
+
+/** True when the fixture's keypoints come from the demo video, so the video can be shown in step with them. */
+export function fromDemoVideo(fx: Fixture | null): boolean {
+  return !!fx && fx.source === `video:${DEMO_VIDEO_SRC.split("/").pop()}`
+}
+
 /** The three fallback recordings (fixtures/README.md). They match each patient's scripted_today. */
 export const FIXTURE_TARGETS = [
   { file: "rise-01-arms", riseId: "rise-01", variant: "arms", movement: "3 slow stands, push off with your hands from rep 2.", expected: { rawStands: 3, armsUsed: true, armsFromRep: 2, asymmetryPct: null } },

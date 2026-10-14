@@ -15,6 +15,7 @@ export function scriptedResult(p: SeedPatient, overrides: Partial<SessionResult>
   return {
     sessionId: `seed-${p.rise_id}`,
     riseId: p.rise_id,
+    protocol: "steadi_30s",
     rawStands: t.raw,
     armsUsed: t.arms,
     armsFromRep: t.arms ? t.arms_from_rep : undefined,
@@ -29,6 +30,7 @@ export function scriptedResult(p: SeedPatient, overrides: Partial<SessionResult>
     symptoms: t.symptoms,
     tier: "seeded",
     demoData: true,
+    scripted: ["new_incontinence", "gait", "tandem"],
     startedAt: 0,
     finishedAt: 30_000,
     ...overrides,

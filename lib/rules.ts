@@ -12,6 +12,8 @@
  *  8. On track                                                       -> continue_plan (physical_therapy if arms still needed)
  *
  * Non-surgical is checked before Decline because it is a narrower case of it (the plan's table lists it after).
+ * RehabNinja sets (protocol "play_set") have a fixed rep target and no 30 s clock, so the count drop in rule 5
+ * is skipped for them; new arm use and every symptom rule still apply.
  * Acceptance: reproduces expected_triage for all 7 seed patients (tests/rules.test.ts; oracle in tests/seed.test.ts).
  */
 import protocol from "@/config/protocol.default.json"
@@ -29,7 +31,14 @@ export function triage(result: SessionResult, previous: CheckIn | undefined, pos
     return decide({ recommendation: "escalate_urgent", route: surgicalRoute, ruleFired: "red_flag", reasons: ["Short of breath or chest pain"] }, true)
   }
   if (result.stoppedEarly) {
-    return decide({ recommendation: "human_confirm", route: "care_coordinator", ruleFired: "stopped_early", reasons: ["Finished early: was this a safety event?"] })
+    // Stopped early wins, but never hides a signal a later rule would have acted on (routing unchanged).
+    const also = alsoPresent(result, previous)
+    return decide({
+      recommendation: "human_confirm",
+      route: "care_coordinator",
+      ruleFired: "stopped_early",
+      reasons: ["Finished early: was this a safety event?", ...also.map((r) => `Also present: ${r}`)],
+    })
   }
   if (s.calf_pain_or_swelling) {
     return decide({ recommendation: "escalate_urgent", route: "surgeon_on_call", ruleFired: "clot_signal", reasons: ["New calf pain or swelling"] })
@@ -37,7 +46,8 @@ export function triage(result: SessionResult, previous: CheckIn | undefined, pos
 
   const decline: string[] = []
   if (previous) {
-    const drop = previous.raw_stands > 0 ? ((previous.raw_stands - result.rawStands) / previous.raw_stands) * 100 : 0
+    const comparable = result.protocol !== "play_set"
+    const drop = comparable && previous.raw_stands > 0 ? ((previous.raw_stands - result.rawStands) / previous.raw_stands) * 100 : 0
     if (drop >= T.decline_pct_vs_last) decline.push(`${result.rawStands} stands vs ${previous.raw_stands} last time`)
     if (result.armsUsed && !previous.arms_used) decline.push(result.armsFromRep ? `Arms used from rep ${result.armsFromRep}` : "New arm use")
   }
@@ -63,4 +73,18 @@ export function triage(result: SessionResult, previous: CheckIn | undefined, pos
     ruleFired: "on_track",
     reasons: result.armsUsed ? ["Still using arms to stand; arm-assisted count tracked"] : ["No rule fired"],
   })
+}
+
+/** Signals the later rules check, listed when an earlier rule (stopped early) already decided. */
+function alsoPresent(result: SessionResult, previous: CheckIn | undefined): string[] {
+  const s = result.symptoms
+  const out: string[] = []
+  if (s.calf_pain_or_swelling) out.push("new calf pain or swelling")
+  if (previous && result.armsUsed && !previous.arms_used) out.push("new arm use")
+  if (previous && result.protocol !== "play_set" && previous.raw_stands > 0) {
+    const drop = ((previous.raw_stands - result.rawStands) / previous.raw_stands) * 100
+    if (drop >= T.decline_pct_vs_last) out.push(`${result.rawStands} stands vs ${previous.raw_stands} last time`)
+  }
+  if (s.dizzy) out.push("dizzy or lightheaded")
+  return out
 }

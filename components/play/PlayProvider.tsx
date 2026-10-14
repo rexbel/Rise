@@ -1,11 +1,20 @@
 "use client"
 
+/**
+ * RehabNinja session state + the care-team relay. Every transition goes through `apply`, which reduces the
+ * pure machine and sends the matching RepEvents (fire-and-forget, lib/session-client). Reaching close or
+ * emergency builds the play_set SessionResult and sends it; re-answering resends it.
+ */
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import type { CosmosLook } from "@/lib/play/cosmosClient"
+import { rulePack } from "@/lib/play/exerciseRules"
+import { buildPlayResult, playStatusFor } from "@/lib/play/playResult"
 import { createPlaySession, reducePlaySession } from "@/lib/play/sessionMachine"
 import type { PlayAction, PlaySession } from "@/lib/play/types"
 import { subscribeCaption, subscribeSpeaking, unlockPlayback } from "@/lib/play/speak"
 import { setVoiceStopEnabled } from "@/lib/play/voiceStop"
+import { sendEvent, sendResult } from "@/lib/session-client"
+import type { PoseTier, SeedPatient, SessionResult, SessionStatus } from "@/lib/types"
 
 export type HitLogKind = "hit" | "miss"
 
@@ -29,20 +38,40 @@ type PlayContextValue = {
   cosmosLooks: CosmosLook[]
   addCosmosLook: (look: CosmosLook) => void
   resolveCosmosLook: (id: string, look: CosmosLook) => void
+  sessionId: string
+  /** True when sessionId came from the console invite (?s=), the same on the server render and in the browser. */
+  invited: boolean
+  clinicName: string
+  /** Last result sent to the care team (null until close or emergency). */
+  result: SessionResult | null
+  /** LivePlay: a rep finished (any form). `count` = completed reps so far. */
+  recordRep: (count: number) => void
+  /** LivePlay: which pose source feeds the set. */
+  setSetSource: (tier: PoseTier, seeded: boolean) => void
+  /** Re-send the result with the patient's note. Resolves true once the server acknowledged it. */
+  sendNote: (note: string) => Promise<boolean>
+  /** Delivery of the latest result: the emergency screen says "your care team is being told" only when "ok". */
+  delivery: "idle" | "sending" | "ok" | "failed"
 }
 
 const PlayContext = createContext<PlayContextValue | null>(null)
 
 export function PlayProvider({
-  riseId,
+  patient,
+  sessionId,
+  invited,
+  clinicName,
   demo,
   children,
 }: {
-  riseId: string
+  patient: SeedPatient
+  sessionId: string
+  invited: boolean
+  clinicName: string
   demo: boolean
   children: ReactNode
 }) {
-  const [session, setSession] = useState(() => createPlaySession(riseId, demo))
+  const [session, setSession] = useState(() => createPlaySession(patient.rise_id, demo))
   const sessionRef = useRef(session)
   useLayoutEffect(() => {
     sessionRef.current = session
@@ -54,6 +83,28 @@ export function PlayProvider({
   const [hitCount, setHitCount] = useState(0)
   const [hitLog, setHitLog] = useState<HitLogKind[]>([])
   const [cosmosLooks, setCosmosLooks] = useState<CosmosLook[]>([])
+  const [result, setResult] = useState<SessionResult | null>(null)
+  const resultRef = useRef<SessionResult | null>(null)
+  const [delivery, setDelivery] = useState<"idle" | "sending" | "ok" | "failed">("idle")
+  const deliverySeq = useRef(0)
+  /** Send a result; only the newest send may update the delivery state. */
+  const deliver = useCallback(async (out: SessionResult) => {
+    const seq = ++deliverySeq.current
+    setDelivery("sending")
+    const ok = await sendResult(out)
+    if (seq === deliverySeq.current) setDelivery(ok ? "ok" : "failed")
+    return ok
+  }, [])
+  const relay = useRef({
+    lastStatus: null as SessionStatus | null,
+    reps: 0,
+    armsFromRep: undefined as number | undefined,
+    resumed: false,
+    startedAt: 0,
+    finishedAt: 0,
+    tier: "seeded" as PoseTier,
+    seeded: demo,
+  })
 
   const addCosmosLook = useCallback((look: CosmosLook) => {
     setCosmosLooks((prev) => [...prev.filter((l) => l.id !== look.id), look].slice(-5))
@@ -72,17 +123,108 @@ export function PlayProvider({
     setHitCount(0)
     setHitLog([])
     setCosmosLooks([])
+    relay.current.reps = 0
+    relay.current.armsFromRep = undefined
   }, [])
 
-  const dispatch = useCallback((action: PlayAction) => {
-    sessionRef.current = reducePlaySession(sessionRef.current, action)
-    setSession(sessionRef.current)
-  }, [])
+  /** Side effects of one transition: board events, then the result on close / emergency. */
+  const observe = useCallback(
+    (before: PlaySession, next: PlaySession, action: PlayAction) => {
+      const r = relay.current
+      const now = Date.now()
+      if (next.phase === "live" && r.startedAt === 0) r.startedAt = now
+      if (action.type === "STOP" && before.phase !== next.phase) {
+        sendEvent({ type: "stop", sessionId, reason: "button", at: now })
+      }
+      if (action.type === "RESUME" && before.phase === "paused" && next.phase === "live") {
+        r.resumed = true
+        sendEvent({ type: "resume", sessionId, at: now })
+      }
+      if (!before.findings.some((f) => f.id === "arms") && next.findings.some((f) => f.id === "arms")) {
+        r.armsFromRep = r.reps + 1
+      }
+      if (!before.finishedSet && next.finishedSet) {
+        r.finishedAt = now
+        if (next.finishedSet.endedBy === "finish_here") sendEvent({ type: "finished_early", sessionId, at: now })
+      }
+      const status = playStatusFor(next.phase)
+      if (status && status !== r.lastStatus) {
+        r.lastStatus = status
+        sendEvent({ type: "status", sessionId, status, tier: r.startedAt ? r.tier : undefined, at: now })
+      }
+      const closing = next.phase === "close" || next.phase === "emergency"
+      if (closing && before.phase !== next.phase && next.finishedSet) {
+        const out = buildPlayResult({
+          sessionId,
+          patient,
+          finishedSet: next.finishedSet,
+          answers: next.answers,
+          reps: r.reps,
+          targetReps: rulePack(next.finishedSet.exerciseId).targetReps,
+          armsFromRep: r.armsFromRep,
+          resumedAfterPause: r.resumed,
+          tier: r.tier,
+          demo,
+          seeded: r.seeded,
+          startedAt: r.startedAt,
+          finishedAt: r.finishedAt || now,
+        })
+        resultRef.current = out
+        setResult(out)
+        void deliver(out)
+      }
+    },
+    [sessionId, patient, demo, deliver],
+  )
 
-  const dispatchMany = useCallback((actions: PlayAction[]) => {
-    sessionRef.current = actions.reduce(reducePlaySession, sessionRef.current)
-    setSession(sessionRef.current)
-  }, [])
+  const apply = useCallback(
+    (actions: PlayAction[]) => {
+      let state = sessionRef.current
+      for (const action of actions) {
+        const next = reducePlaySession(state, action)
+        if (next !== state) observe(state, next, action)
+        state = next
+      }
+      sessionRef.current = state
+      setSession(state)
+    },
+    [observe],
+  )
+
+  const dispatch = useCallback((action: PlayAction) => apply([action]), [apply])
+  const dispatchMany = useCallback((actions: PlayAction[]) => apply(actions), [apply])
+
+  const recordRep = useCallback(
+    (count: number) => {
+      const r = relay.current
+      if (count <= r.reps) return
+      r.reps = count
+      const armsUsed = sessionRef.current.findings.some((f) => f.id === "arms")
+      sendEvent({ type: "rep", sessionId, count, armsUsed, at: Date.now() })
+    },
+    [sessionId],
+  )
+
+  const setSetSource = useCallback(
+    (tier: PoseTier, seeded: boolean) => {
+      relay.current.tier = tier
+      relay.current.seeded = demo || seeded
+    },
+    [demo],
+  )
+
+  const sendNote = useCallback(
+    async (note: string) => {
+      const base = resultRef.current
+      const text = note.trim()
+      if (!base || !text) return false
+      const out = { ...base, patientNote: text.slice(0, 2000) }
+      resultRef.current = out
+      setResult(out)
+      return deliver(out)
+    },
+    [deliver],
+  )
 
   useEffect(() => subscribeCaption(setCaption), [])
   useEffect(() => subscribeSpeaking(setSpeaking), [])
@@ -121,6 +263,14 @@ export function PlayProvider({
       cosmosLooks,
       addCosmosLook,
       resolveCosmosLook,
+      sessionId,
+      invited,
+      clinicName,
+      result,
+      delivery,
+      recordRep,
+      setSetSource,
+      sendNote,
     }),
     [
       session,
@@ -139,6 +289,14 @@ export function PlayProvider({
       cosmosLooks,
       addCosmosLook,
       resolveCosmosLook,
+      sessionId,
+      invited,
+      clinicName,
+      result,
+      delivery,
+      recordRep,
+      setSetSource,
+      sendNote,
     ],
   )
 

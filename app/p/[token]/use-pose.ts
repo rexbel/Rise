@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { PoseEstimator } from "@/lib/pose"
 import { FpsMonitor, selectTier } from "@/lib/pose/select"
-import { loadFixture, seededFrames } from "@/lib/pose/seeded"
+import { DEMO_VIDEO_SRC, fromDemoVideo, loadFixture, seededFrames } from "@/lib/pose/seeded"
 import type { Keypoints17, PoseTier, SeedPatient } from "@/lib/types"
 
 /** COCO skeleton edges for the overlay. */
@@ -43,6 +43,47 @@ function draw(canvas: HTMLCanvasElement | null, kp: Keypoints17 | null, opaque: 
 
 export type FrameHandler = (kp: Keypoints17 | null) => void
 
+
+/** Load the demo video into the camera <video>, held on its first (seated) frame. Resolves false when it isn't there. */
+async function loadDemoVideo(v: HTMLVideoElement | null): Promise<boolean> {
+  if (!v) return false
+  try {
+    const head = await fetch(DEMO_VIDEO_SRC, { method: "HEAD", signal: AbortSignal.timeout(4000) })
+    if (!head.ok) return false
+  } catch {
+    return false
+  }
+  ;(v.srcObject as MediaStream | null)?.getTracks().forEach((t) => t.stop())
+  v.srcObject = null
+  v.muted = true
+  v.playsInline = true
+  v.loop = false
+  v.src = DEMO_VIDEO_SRC
+  v.currentTime = 0
+  v.pause()
+  return true
+}
+
+/**
+ * Keep the demo video on the seeded clock (ms from Go): held on the first frame before Go, then playing in step.
+ * Drift over a quarter second is corrected by seeking, so the footage and the counted stands stay together.
+ */
+function syncDemoVideo(v: HTMLVideoElement | null, tMs: number) {
+  if (!v || !v.src || v.srcObject) return
+  const target = Math.max(0, tMs) / 1000
+  if (tMs <= 0) {
+    if (!v.paused) v.pause()
+    if (v.currentTime !== 0) v.currentTime = 0
+    return
+  }
+  if (Number.isFinite(v.duration) && target >= v.duration) {
+    if (!v.paused) v.pause()
+    return
+  }
+  if (Math.abs(v.currentTime - target) > 0.25) v.currentTime = target
+  if (v.paused) void v.play().catch(() => {})
+}
+
 /**
  * Camera + pose tier + frame loop for the patient phone. Live: camera -> selected tier -> onFrame, with the
  * mid-test swap to preloaded MediaPipe. Seeded: replays the patient's frames against `seededClock()` (ms from Go).
@@ -62,6 +103,8 @@ export function usePose() {
   const [visible, setVisible] = useState(false)
   const [fps, setFps] = useState(0)
   const [ready, setReady] = useState(false)
+  /** True when demo mode is showing the AI-generated demo video (public/demo/sit-to-stand.mp4) in the camera frame. */
+  const [demoVideo, setDemoVideo] = useState(false)
   const tierChange = useRef<(tier: PoseTier, fps: number) => void>(() => {})
 
   const stopAll = useCallback(() => {
@@ -92,7 +135,10 @@ export function usePose() {
           else hi = m - 1
         }
         kp = frames[lo]?.kp ?? null
-        draw(canvasRef.current, kp, true)
+        const v = videoRef.current
+        syncDemoVideo(v, t)
+        // The demo video is the picture; its keypoints still drive the count, but no skeleton is drawn over her.
+        draw(canvasRef.current, v?.src && !v.srcObject ? null : kp, !(v?.src && !v.srcObject))
       } else if (est.current && videoRef.current) {
         kp = await est.current.primary.estimate(videoRef.current)
         const now = performance.now()
@@ -122,6 +168,11 @@ export function usePose() {
       setReady(false)
       stopAll()
       seeded.current = null
+      setDemoVideo(false)
+      if (videoRef.current) {
+        videoRef.current.removeAttribute("src")
+        videoRef.current.loop = false
+      }
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 640 }, height: { ideal: 480 } }, audio: false })
         const v = videoRef.current!
@@ -160,14 +211,21 @@ export function usePose() {
       const my = ++startGen.current
       stopAll()
       seeded.current = { frames: seededFrames(patient), clock }
+      setDemoVideo(false)
+      videoRef.current?.removeAttribute("src")
       setTier("seeded")
       setError(null)
       setStatus("")
       setReady(true)
       loop()
-      // Swap in the recorded fixture when this patient has one (it loads well before Go).
-      void loadFixture(patient.rise_id).then((fx) => {
-        if (fx && my === startGen.current && seeded.current) seeded.current = { frames: seededFrames(patient, fx), clock }
+      // Swap in the recorded fixture when this patient has one (it loads well before Go). The demo video shows in
+      // the camera frame only when that fixture was recorded from it, so the picture and the count always agree.
+      void loadFixture(patient.rise_id).then(async (fx) => {
+        if (!fx || my !== startGen.current || !seeded.current) return
+        seeded.current = { frames: seededFrames(patient, fx), clock }
+        if (!fromDemoVideo(fx)) return
+        const ok = await loadDemoVideo(videoRef.current)
+        if (my === startGen.current) setDemoVideo(ok)
       })
     },
     [loop, stopAll],
@@ -176,5 +234,5 @@ export function usePose() {
   const setFrameHandler = useCallback((fn: FrameHandler) => void (onFrame.current = fn), [])
   const setTierHandler = useCallback((fn: (tier: PoseTier, fps: number) => void) => void (tierChange.current = fn), [])
 
-  return { videoRef, canvasRef, setFrameHandler, setTierHandler, tier, status, error, visible, fps, ready, startLive, startSeeded, stop: stopAll }
+  return { videoRef, canvasRef, setFrameHandler, setTierHandler, tier, status, error, visible, fps, ready, demoVideo, startLive, startSeeded, stop: stopAll }
 }

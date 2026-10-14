@@ -1,53 +1,27 @@
 {
-  "$comment": "Display-only RehabNinja board peers (same track as you). Not playable seed patients.",
+  "$comment": "Synthetic RehabNinja crew peers (display only, not playable). Engagement fields only: no reps, hits, procedures, or post-op days. cheers_for are seeded cheers to the playable patients (Demo data).",
   "peers": [
-    {
-      "id": "rise-08",
-      "display_name": "Margaret Chen",
-      "family": "tka",
-      "procedure": "Right total knee arthroplasty",
-      "post_op_day": 5,
-      "hits": 14
-    },
-    {
-      "id": "rise-09",
-      "display_name": "Robert Hayes",
-      "family": "tka",
-      "procedure": "Left total knee arthroplasty",
-      "post_op_day": 12,
-      "hits": 9
-    },
-    {
-      "id": "rise-10",
-      "display_name": "Patricia Novak",
-      "family": "tka",
-      "procedure": "Right total knee arthroplasty",
-      "post_op_day": 4,
-      "hits": 5
-    },
-    {
-      "id": "rise-11",
-      "display_name": "Frank Delgado",
-      "family": "tka",
-      "procedure": "Left total knee arthroplasty",
-      "post_op_day": 18,
-      "hits": 16
-    },
-    {
-      "id": "rise-12",
-      "display_name": "Helen Okonkwo",
-      "family": "tka",
-      "procedure": "Right total knee arthroplasty",
-      "post_op_day": 9,
-      "hits": 7
-    },
-    {
-      "id": "rise-13",
-      "display_name": "Arthur Kim",
-      "family": "tka",
-      "procedure": "Left total knee arthroplasty",
-      "post_op_day": 2,
-      "hits": 2
-    }
+    { "id": "rise-08", "display_name": "Margaret Chen", "family": "tka", "photo": true, "active_days": 4, "active_today": true, "cheers_received": 6 },
+    { "id": "rise-09", "display_name": "Robert Hayes", "family": "tka", "photo": true, "active_days": 3, "active_today": false, "cheers_received": 4 },
+    { "id": "rise-10", "display_name": "Patricia Novak", "family": "tka", "photo": true, "active_days": 2, "active_today": true, "cheers_received": 3 },
+    { "id": "rise-11", "display_name": "Frank Delgado", "family": "tka", "photo": true, "active_days": 3, "active_today": false, "cheers_received": 2 },
+    { "id": "rise-12", "display_name": "Helen Okonkwo", "family": "tka", "photo": true, "active_days": 1, "active_today": false, "cheers_received": 5 },
+    { "id": "rise-13", "display_name": "Arthur Kim", "family": "tka", "photo": true, "active_days": 2, "active_today": false, "cheers_received": 1 },
+    { "id": "rise-14", "display_name": "Lorraine Baptiste", "family": "tha", "photo": false, "active_days": 3, "active_today": true, "cheers_received": 4 },
+    { "id": "rise-15", "display_name": "Samuel Ortiz", "family": "tha", "photo": false, "active_days": 2, "active_today": false, "cheers_received": 2 },
+    { "id": "rise-16", "display_name": "Joan Whitfield", "family": "tha", "photo": false, "active_days": 4, "active_today": false, "cheers_received": 3 },
+    { "id": "rise-17", "display_name": "Evelyn Park", "family": "hip_fracture", "photo": false, "active_days": 2, "active_today": true, "cheers_received": 5 },
+    { "id": "rise-18", "display_name": "Thomas Reilly", "family": "hip_fracture", "photo": false, "active_days": 1, "active_today": false, "cheers_received": 2 },
+    { "id": "rise-19", "display_name": "Mae Holloway", "family": "hip_fracture", "photo": false, "active_days": 3, "active_today": false, "cheers_received": 3 }
+  ],
+  "cheers_for": [
+    { "from": "rise-08", "to": "rise-01", "cheer_id": "keep_going", "minutes_ago": 40 },
+    { "from": "rise-12", "to": "rise-01", "cheer_id": "proud_of_you", "minutes_ago": 300 },
+    { "from": "rise-09", "to": "rise-02", "cheer_id": "nice_work", "minutes_ago": 90 },
+    { "from": "rise-10", "to": "rise-03", "cheer_id": "keep_going", "minutes_ago": 150 },
+    { "from": "rise-11", "to": "rise-05", "cheer_id": "nice_work", "minutes_ago": 60 },
+    { "from": "rise-14", "to": "rise-04", "cheer_id": "proud_of_you", "minutes_ago": 75 },
+    { "from": "rise-16", "to": "rise-07", "cheer_id": "keep_going", "minutes_ago": 200 },
+    { "from": "rise-17", "to": "rise-06", "cheer_id": "nice_work", "minutes_ago": 30 }
   ]
 }

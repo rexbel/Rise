@@ -102,11 +102,15 @@ export const SeedFile = z.object({
  * Shared by rex/pose and jeremiah/vast. Change only by PR to main; the other person rebases right away.
  * Every payload that crosses the network is a Zod schema so the receiving route can .parse() it.
  *
- *   Phone  -> POST /api/sessions/[id]/events   RepEvent           (Rex sends, Jeremiah serves)
- *   Phone  -> POST /api/sessions/[id]/clip     multipart clip     -> ClipRef
- *   Phone  -> POST /api/sessions/[id]/result   SessionResult      -> TriageCard (rules -> Cosmos -> agent)
- *   Server -> GET  /api/sessions/stream        SSE of SessionSnapshot
- *   Console-> GET  /api/search?q=              SearchHit[]
+ *   Console-> POST /api/sessions                InviteRequest      -> InviteResponse
+ *   Console-> GET  /api/sessions                -> SessionSnapshot[]
+ *   Phone  -> POST /api/sessions/[id]/events   RepEvent           -> 204
+ *   Phone  -> POST /api/sessions/[id]/clip     multipart clip     -> ClipRef (not built yet)
+ *   Phone  -> POST /api/sessions/[id]/result   SessionResult      -> TriageCard (rules on the server; idempotent per session)
+ *   Console-> POST /api/sessions/[id]/approval ApprovalRequest    -> SessionSnapshot
+ *   Console-> POST /api/sessions/reset         -> 204 (Reset demo)
+ *   Server -> GET  /api/sessions/stream        SSE of SessionStreamMessage
+ *   Console-> GET  /api/search?q=              SearchHit[] (not built yet)
  */
 
 export const PoseTier = z.enum(["yolo-onnx", "mediapipe", "remote-yolo", "seeded"])
@@ -137,10 +141,26 @@ export const RepEvent = z.discriminatedUnion("type", [
 ])
 export type RepEvent = z.infer<typeof RepEvent>
 
+/**
+ * What produced the numbers. steadi_30s = CDC 30-Second Chair Stand (classic /p flow).
+ * play_set = a RehabNinja set: a fixed rep target, not timed, so it is never compared to CDC norms or
+ * to a 30 s count, and the count-based decline rule does not apply (lib/rules.ts).
+ */
+export const SessionProtocol = z.enum(["steadi_30s", "play_set"])
+export type SessionProtocol = z.infer<typeof SessionProtocol>
+
+/** Session ids are `<riseId>-<suffix>` so the server can tie a phone's first event to a seed patient. */
+export const SESSION_ID = /^rise-\d{2}-[a-z0-9]{4,24}$/
+export const SessionId = z.string().regex(SESSION_ID)
+
 /** What the phone knows when the test and questions are done. Rex owns this shape. */
 export const SessionResult = z.object({
   sessionId: z.string(),
   riseId: z.string(),
+  protocol: SessionProtocol.default("steadi_30s"),
+  /** RehabNinja only: which exercise and its rep target. */
+  exerciseId: z.string().max(40).optional(),
+  targetReps: z.number().int().min(0).optional(),
   /** Full stands in 30 s, including arm-assisted ones and a final stand past halfway. */
   rawStands: z.number().int().min(0),
   armsUsed: z.boolean(),
@@ -163,6 +183,8 @@ export const SessionResult = z.object({
   tier: PoseTier,
   /** True when any part came from a seeded fallback; shows the "Demo data" badge. */
   demoData: z.boolean(),
+  /** Fields copied from the patient's scripted session instead of measured or asked (demo runs only). */
+  scripted: z.array(z.enum(["new_incontinence", "gait", "tandem"])).default([]),
   startedAt: At,
   finishedAt: At,
 })
@@ -284,6 +306,8 @@ export type ApprovalState = z.infer<typeof ApprovalState>
 export const TriageCard = TriageDecision.extend({
   sessionId: z.string(),
   riseId: z.string(),
+  protocol: SessionProtocol,
+  exerciseId: z.string().optional(),
   metrics: z.object({
     rawStands: z.number().int(),
     steadiScore: z.number().int(),
@@ -301,6 +325,8 @@ export const TriageCard = TriageDecision.extend({
   patientNote: z.string().optional(),
   /** Phrase screen hit on the patient note ("chest pain", "fell", ...) -> amber "Note needs review". */
   noteNeedsReview: z.boolean(),
+  /** Copied from SessionResult.scripted so each scripted row can say so. */
+  scripted: z.array(z.enum(["new_incontinence", "gait", "tandem"])),
   observation: CosmosObservation.optional(),
   careTeamNote: z.string().optional(),
   clip: ClipRef.optional(),
@@ -312,19 +338,96 @@ export const TriageCard = TriageDecision.extend({
 })
 export type TriageCard = z.infer<typeof TriageCard>
 
+/** Which patient surface the invite opens. */
+export const Surface = z.enum(["play", "classic"])
+export type Surface = z.infer<typeof Surface>
+
+/** Console -> POST /api/sessions. Creates an "invited" session and its link. */
+export const InviteRequest = z.object({ riseId: z.string().regex(/^rise-\d{2}$/), surface: Surface })
+export type InviteRequest = z.infer<typeof InviteRequest>
+
+export const InviteResponse = z.object({
+  sessionId: z.string(),
+  /** Path on this app, e.g. /play/rise-01?s=rise-01-abc123. The console prefixes the public origin. */
+  path: z.string(),
+  /** Twilio is not wired yet: always { sent: false, demoData: true } until it is. */
+  sms: z.object({ sent: z.boolean(), demoData: z.boolean() }),
+})
+export type InviteResponse = z.infer<typeof InviteResponse>
+
+/** Console -> POST /api/sessions/[id]/approval. A person decides; nothing escalates without this. */
+/** The card version the coordinator read. A mismatch (the patient re-answered meanwhile) returns 409. */
+const ExpectedCard = {
+  expectRecommendation: Recommendation.optional(),
+  expectRule: z.string().max(40).optional(),
+}
+
+export const ApprovalRequest = z.discriminatedUnion("action", [
+  z.object({
+    ...ExpectedCard,
+    action: z.literal("approve"),
+    /** Coordinator's edit of the care-team note, if any. */
+    careTeamNote: z.string().max(2000).optional(),
+    user: z.string().min(1).max(80),
+  }),
+  z.object({
+    ...ExpectedCard,
+    action: z.literal("downgrade"),
+    to: Recommendation,
+    /** Code from config/protocol.default.json -> downgrade_reasons. */
+    reasonCode: z.string().min(1).max(40),
+    freeText: z.string().max(500).optional(),
+    user: z.string().min(1).max(80),
+  }),
+])
+export type ApprovalRequest = z.infer<typeof ApprovalRequest>
+
+/** Append-only record of every human decision on a card. No patient answers or notes are copied in. */
+export const AuditEntry = z.object({
+  sessionId: z.string(),
+  riseId: z.string(),
+  /**
+   * reopened = new answers or a flagged note sent a decided card back to pending; restarted = a demo set was replayed;
+   * red_flag_retracted = the patient answered Yes to breath/chest pain, saw the 911 screen, then said it was a mistake.
+   */
+  action: z.enum(["invited", "approved", "downgraded", "reopened", "answers_changed", "restarted", "red_flag_retracted", "crew_resumed", "reset"]),
+  from: Recommendation.optional(),
+  to: Recommendation.optional(),
+  reasonCode: z.string().optional(),
+  freeText: z.string().optional(),
+  user: z.string(),
+  at: At,
+})
+export type AuditEntry = z.infer<typeof AuditEntry>
+
 /** One tile on the live board (C2), pushed over SSE on every change. */
 export const SessionSnapshot = z.object({
   sessionId: z.string(),
   riseId: z.string(),
+  surface: Surface.nullable(),
   status: SessionStatus,
+  /** Live count: stands (classic) or clean reps (RehabNinja). Care-team only. */
   count: z.number().int().min(0),
   armsUsed: z.boolean(),
   tier: PoseTier.nullable(),
   card: TriageCard.optional(),
+  audit: z.array(AuditEntry),
+  /** True while this session keeps the patient off their crew (red flag, escalation, human confirm). */
+  crewPaused: z.boolean(),
+  invitedAt: At.nullable(),
   updatedAt: At,
   demoData: z.boolean(),
 })
 export type SessionSnapshot = z.infer<typeof SessionSnapshot>
+
+/**
+ * GET /api/sessions/stream (text/event-stream). First message is `snapshot` with every session,
+ * then `session` on each change and `reset` after Reset demo.
+ */
+export type SessionStreamMessage =
+  | { type: "snapshot"; sessions: SessionSnapshot[] }
+  | { type: "session"; session: SessionSnapshot }
+  | { type: "reset" }
 
 export interface OverrideLogEntry {
   setting: string
@@ -335,3 +438,122 @@ export interface OverrideLogEntry {
   user: string
   at: string
 }
+
+/* ---------- Crew board (RehabNinja socialization) ----------
+ * Social motivation without clinical comparison. These shapes carry no reps, hits, stands, scores, symptoms,
+ * procedures, post-op days, or triage: only engagement (days active this week) and fixed-phrase cheers.
+ *
+ * Membership is opt-in: joining records consent and sets an httpOnly device token (cookie rise_crew_<riseId>)
+ * that every write must carry, so the sender is authenticated, not claimed. Crews have neutral names so
+ * membership does not reveal a diagnosis. A patient whose current card is a red flag, escalation, or
+ * human-confirm is paused: hidden from the crew, out of the goal, and unable to receive cheers.
+ *
+ *   Phone   -> GET  /api/crew/[riseId]          -> CrewBoard (viewer = riseId; "joined" only with that patient's token)
+ *   Phone   -> POST /api/crew/join              CrewJoinRequest -> CrewBoard (sets the token cookie, records consent)
+ *   Phone   -> POST /api/crew/leave             { riseId } -> 204 (token required; records consent withdrawal)
+ *   Phone   -> POST /api/crew/photo             { riseId, showPhoto } -> CrewBoard (token required; recorded)
+ *   Phone   -> POST /api/crew/cheers            CheerRequest -> CheerResponse (token for `from` required)
+ *   Console -> POST /api/sessions/[id]/crew     { action: "resume", user } -> SessionSnapshot (ends a pause; audited)
+ *   Console -> GET  /api/crew/consent/[riseId]  -> ConsentRecord[]
+ */
+
+/** Fixed cheer phrases (copy in content/play-ui.json crew.cheers). No free text, so nothing needs moderation. */
+export const CheerId = z.enum(["nice_work", "keep_going", "proud_of_you"])
+export type CheerId = z.infer<typeof CheerId>
+
+const RiseIdLike = z.string().regex(/^rise-\d{2}$/)
+
+export const CrewMember = z.object({
+  id: RiseIdLike,
+  /** First name, plus last initial for everyone but you ("Margaret C."). */
+  name: z.string(),
+  /** Photo, or null to show initials. */
+  avatarSrc: z.string().nullable(),
+  initials: z.string().max(3),
+  isYou: z.boolean(),
+  /** Distinct days with a finished check-in this week (0-7). Engagement only, never performance. */
+  activeDays: z.number().int().min(0).max(7),
+  activeToday: z.boolean(),
+  cheersReceived: z.number().int().min(0),
+  /** Whether you already cheered this member today (the button is spent until tomorrow). */
+  cheeredByYouToday: z.boolean(),
+})
+export type CrewMember = z.infer<typeof CrewMember>
+
+/** Membership state of the viewer. */
+/** joined_elsewhere = a member whose token is not on this phone (cleared cookie, new device). */
+export const CrewStatus = z.enum(["not_joined", "joined", "joined_elsewhere", "paused"])
+export type CrewStatus = z.infer<typeof CrewStatus>
+
+export const CrewBoard = z.object({
+  riseId: RiseIdLike,
+  /** Neutral crew name ("Maple crew"): never the procedure or track. */
+  crewName: z.string(),
+  /**
+   * not_joined: show the join card (members are still listed so the patient sees who they would join).
+   * paused: the care team is checking in; show the pause note, no cheers, no goal pressure.
+   */
+  status: CrewStatus,
+  /** The viewer's own photo preference (only meaningful when joined). */
+  showPhoto: z.boolean(),
+  /** Week start, epoch ms (Monday 00:00 server time). */
+  weekStart: At,
+  /** Joined, unpaused members (you included when joined), sorted by activeDays then name. No places shown. */
+  members: z.array(CrewMember),
+  /** Shared goal over the listed members (paused and not-joined people are excluded). */
+  goal: z.object({ done: z.number().int().min(0), target: z.number().int().min(1) }),
+  /** Latest cheers you received, newest first. */
+  cheersForYou: z.array(z.object({ fromName: z.string(), cheerId: CheerId, at: At })).max(10),
+  /** Peers and their cheers are synthetic. */
+  demoData: z.boolean(),
+})
+export type CrewBoard = z.infer<typeof CrewBoard>
+
+/** `from` must match the device token cookie for that patient; the server refuses it otherwise (401). */
+export const CheerRequest = z.object({ from: RiseIdLike, to: RiseIdLike, cheerId: CheerId })
+export type CheerRequest = z.infer<typeof CheerRequest>
+
+export const CheerResponse = z.object({
+  /** False when you had already cheered this member today (idempotent; nothing new recorded). */
+  recorded: z.boolean(),
+  member: CrewMember,
+})
+export type CheerResponse = z.infer<typeof CheerResponse>
+
+/** Version of the consent text shown on the join card; bump when content/play-ui.json crew.join changes. */
+export const CREW_CONSENT_VERSION = "2026-10-13"
+
+export const CrewJoinRequest = z.object({
+  riseId: RiseIdLike,
+  /** Omitted on a re-join from another phone: keeps the current photo choice. */
+  showPhoto: z.boolean().optional(),
+  /** The console invite's session id (?s=). Required when the console key is set (public tunnel). */
+  sessionId: z.string().max(40).optional(),
+  /** The consent text version the patient saw; must equal CREW_CONSENT_VERSION. */
+  consentVersion: z.string().max(20),
+})
+export type CrewJoinRequest = z.infer<typeof CrewJoinRequest>
+
+export const CrewLeaveRequest = z.object({ riseId: RiseIdLike })
+export const CrewPhotoRequest = z.object({ riseId: RiseIdLike, showPhoto: z.boolean() })
+
+/** Append-only consent log. Holds no clinical data. */
+export const ConsentRecord = z.object({
+  riseId: RiseIdLike,
+  action: z.enum(["joined", "left", "photo_shown", "photo_hidden"]),
+  consentVersion: z.string(),
+  /** invited_link = joined from the patient's console invite link; unverified_phone = local dev without an invite. */
+  source: z.enum(["invited_link", "unverified_phone", "synthetic_seed"]),
+  at: At,
+})
+export type ConsentRecord = z.infer<typeof ConsentRecord>
+
+/** Overrides the pause default, so it needs a reason code (config crew.resume_reasons) like any override. */
+export const CrewResumeRequest = z.object({
+  action: z.literal("resume"),
+  reasonCode: z.string().min(1).max(40),
+  freeText: z.string().max(500).optional(),
+  user: z.string().min(1).max(80),
+})
+export type CrewResumeRequest = z.infer<typeof CrewResumeRequest>
+

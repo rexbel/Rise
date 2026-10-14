@@ -31,10 +31,38 @@
   --status-callback: oklch(0.546 0.245 262.881);
   --status-ok: oklch(0.527 0.154 150.069);
 
-  /* RehabNinja journey tokens */
+  /* RehabNinja journey tokens (lobby art) */
   --rn-cream: #fef1e1;
   --rn-ink: #18181b;
   --rn-orange: #f97316;
+
+  /* Patient surfaces (/play, /p): warm, dark, high contrast. Ratios checked against --pt-bg / --pt-surface.
+     Text 20px+, buttons 56px+. Hit/miss and status always carry an icon or word, never color alone. */
+  --pt-bg: #0c0a09;
+  --pt-surface: #1c1917;
+  --pt-surface-2: #292524;
+  --pt-line: rgb(255 255 255 / 0.14);
+  --pt-ink: #fafaf9;
+  --pt-muted: #a8a29e; /* 6.9:1 on surface */
+  --pt-accent: #f97316; /* accent text and rings, 7:1 on bg */
+  --pt-cta: #c2410c; /* filled buttons; white text 5.2:1 */
+  --pt-cta-hover: #9a3412;
+  --pt-cta-ink: #ffffff;
+  --pt-hit: #34d399;
+  --pt-miss: #fb923c;
+  --pt-danger: #f87171; /* danger text on dark */
+  --pt-danger-fill: #b91c1c; /* Stop and emergency panels; white text 6.5:1 */
+  --pt-danger-fill-hover: #991b1b;
+  --pt-focus: #fdba74;
+
+  /* Clinic console (/clinic): light editorial workbench, legible on a 1280x720 projector. */
+  --cl-paper: #f7f6f3;
+  --cl-surface: #ffffff;
+  --cl-ink: #1a1a19;
+  --cl-muted: #5f5e5a; /* 6.0:1 on paper */
+  --cl-line: #e4e2dc;
+  --cl-accent: #1f4fd1; /* 6.8:1 on white */
+  --cl-focus: #1f4fd1;
 }
 
 .dark {
@@ -88,6 +116,29 @@
   --color-status-confirm: var(--status-confirm);
   --color-status-callback: var(--status-callback);
   --color-status-ok: var(--status-ok);
+  --color-pt-bg: var(--pt-bg);
+  --color-pt-surface: var(--pt-surface);
+  --color-pt-surface-2: var(--pt-surface-2);
+  --color-pt-line: var(--pt-line);
+  --color-pt-ink: var(--pt-ink);
+  --color-pt-muted: var(--pt-muted);
+  --color-pt-accent: var(--pt-accent);
+  --color-pt-cta: var(--pt-cta);
+  --color-pt-cta-hover: var(--pt-cta-hover);
+  --color-pt-cta-ink: var(--pt-cta-ink);
+  --color-pt-hit: var(--pt-hit);
+  --color-pt-miss: var(--pt-miss);
+  --color-pt-danger: var(--pt-danger);
+  --color-pt-danger-fill: var(--pt-danger-fill);
+  --color-pt-danger-fill-hover: var(--pt-danger-fill-hover);
+  --color-pt-focus: var(--pt-focus);
+  --color-cl-paper: var(--cl-paper);
+  --color-cl-surface: var(--cl-surface);
+  --color-cl-ink: var(--cl-ink);
+  --color-cl-muted: var(--cl-muted);
+  --color-cl-line: var(--cl-line);
+  --color-cl-accent: var(--cl-accent);
+  --color-cl-focus: var(--cl-focus);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

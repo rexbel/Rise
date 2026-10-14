@@ -6,7 +6,7 @@ Recorded keypoint streams that the `seeded` pose tier replays through the same c
 
 | File | Clip | Movement | Expected counter output |
 | --- | --- | --- | --- |
-| `rise-01-arms.json` | `rise-01-arms` | 3 slow stands, push off with hands from rep 2 | raw 3, arms used from rep 2 → STEADI 0 |
+| `rise-01-arms.json` | `/demo/sit-to-stand.mp4` (AI-generated) | 3 slow stands, push off with hands from rep 2 | raw 3, arms used from rep 2 → STEADI 0 |
 | `rise-02-asym.json` | `rise-02-asym` | 6 stands, weight shifted onto the right leg | raw 6, no arms, asymmetry ≥ 15%, favoring right |
 | `rise-06-arms.json` | `rise-06-arms` | 6 stands, arms on every rep | raw 6, arms every rep → STEADI 0 |
 
@@ -33,4 +33,4 @@ These match each patient's `scripted_today` in `seed/patients.json`, so the repl
 
 Keypoint order is COCO-17: nose, left/right eye, left/right ear, left/right shoulder, left/right elbow, left/right wrist, left/right hip, left/right knee, left/right ankle. MediaPipe's 33 landmarks are mapped to these 17 before saving.
 
-All recordings are of Rex, used only to drive the synthetic demo patients.
+`rise-01-arms.json` is recorded from the AI-generated demo video (`scripts/gen-demo-video.ts`, a synthetic person, filmed front-on): open `/dev/fixtures?clip=/demo/sit-to-stand.mp4` and record from the first frame. Clip mode times frames by the video's own clock, so demo mode can play the video in the camera frame in step with the count. Re-record it whenever the video changes. The other recordings are of Rex, used only to drive the synthetic demo patients.

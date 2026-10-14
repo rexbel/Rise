@@ -1,6 +1,7 @@
 /**
  * RehabNinja scoring: clean rep apex → hit; form break → bomb/miss.
- * Never emits stand counts or STEADI.
+ * Also counts completed reps regardless of form (snapshot().repCount) for the care-team result.
+ * Never computes STEADI, and nothing here is rendered as a count to the patient except game progress.
  */
 
 import type { LiveVisual } from "@/lib/play/findings"
@@ -41,6 +42,12 @@ export type HitMissState = {
   lastMissAt: number
   wasBent: boolean
   holdCleanMs: number
+  /**
+   * Completed reps, clean or not: every sit-then-stand (or squat-then-rise) apex, including arm-assisted
+   * and knees-in reps that score a miss instead of a hit. Hold exercises count clean hold intervals (= hits).
+   * Care-team only (SessionResult.rawStands); never shown to the patient.
+   */
+  repCount: number
 }
 
 export type HitMissTracker = {
@@ -125,6 +132,9 @@ export function createHitMissTracker(): HitMissTracker {
   let rising = false
   let sawSit = false
   let prevT: number | null = null
+  let repCount = 0
+  /** Independent of quality: saw the low point since the last completed rep. */
+  let repSawLow = false
 
   function reset() {
     hitCount = 0
@@ -137,10 +147,12 @@ export function createHitMissTracker(): HitMissTracker {
     rising = false
     sawSit = false
     prevT = null
+    repCount = 0
+    repSawLow = false
   }
 
   function snapshot(): HitMissState {
-    return { hitCount, goodStreak, lastHitAt, lastMissAt, wasBent, holdCleanMs }
+    return { hitCount, goodStreak, lastHitAt, lastMissAt, wasBent, holdCleanMs, repCount }
   }
 
   function emitHit(tMs: number, kp: Keypoints17 | null, exerciseId: ExerciseId, events: HitMissEvent[]) {
@@ -150,6 +162,25 @@ export function createHitMissTracker(): HitMissTracker {
     hitCount += 1
     lastHitAt = tMs
     goodStreak = 0
+    if (exerciseId === "single_leg_balance") {
+      repCount += 1
+    } else if (repSawLow) {
+      // Backup-streak hit without a clean apex crossing still completes this rep, once.
+      repCount += 1
+      repSawLow = false
+    }
+  }
+
+  /** Rep completion regardless of form: low point, then up through the apex line. */
+  function trackRep(s: number, exerciseId: ExerciseId) {
+    if (exerciseId === "single_leg_balance") return
+    const apexMin = exerciseId === "mini_squat" ? SQUAT_APEX_MIN : APEX_MIN
+    const deepNeed = exerciseId === "mini_squat" ? SQUAT_DEEP : SIT_FOR_BACKUP
+    if (s <= deepNeed) repSawLow = true
+    if (repSawLow && prevStand < apexMin && s >= apexMin) {
+      repCount += 1
+      repSawLow = false
+    }
   }
 
   function push(
@@ -174,6 +205,7 @@ export function createHitMissTracker(): HitMissTracker {
 
     const bent = quality === "bent"
     if (bent) {
+      trackRep(visual.standAmount, exerciseId)
       goodStreak = 0
       rising = false
       holdCleanMs = 0
@@ -188,6 +220,7 @@ export function createHitMissTracker(): HitMissTracker {
     }
 
     wasBent = false
+    trackRep(visual.standAmount, exerciseId)
 
     if (exerciseId === "single_leg_balance") {
       holdCleanMs += dt
@@ -220,8 +253,9 @@ export function createHitMissTracker(): HitMissTracker {
       rising = false
       sawSit = false
     }
-    // Backup streak only after a sit/squat — never while holding a stand
-    if (sawSit && s < apexMin) {
+    // Backup streak only part-way up after a sit/squat: never while holding a stand, and never while still seated
+    // (a patient resting between reps would otherwise earn a fruit every ~0.8 s).
+    if (sawSit && s > deepNeed && s < apexMin) {
       goodStreak += 1
       if (
         goodStreak >= HIT_STREAK_BACKUP &&
@@ -239,4 +273,11 @@ export function createHitMissTracker(): HitMissTracker {
   }
 
   return { push, reset, snapshot }
+}
+
+/** Screen-reader summary for a hit timeline, e.g. "2 hits, 1 miss". */
+export function hitSummary(log: HitMissKind[]): string {
+  const hits = log.filter((k) => k === "hit").length
+  const misses = log.length - hits
+  return `${hits} ${hits === 1 ? "hit" : "hits"}, ${misses} ${misses === 1 ? "miss" : "misses"}`
 }

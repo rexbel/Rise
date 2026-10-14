@@ -7,6 +7,10 @@
  * - Stand = progress reaches STAND_AT from below SIT_AT (hysteresis). Counted on reaching full standing.
  * - Arm use = during a rise, a confident wrist leaves the chest (far from the shoulders, in torso lengths)
  *   for ARM_FRAMES frames in a row. CDC rule: arms used -> STEADI score 0; the raw count is kept.
+ *   The "far" line is set from the seated arms-crossed pose during calibration (ARM_BASELINE_FACTOR x the seated
+ *   wrist distance, within ARM_AWAY_TORSO..ARM_AWAY_MAX): side-on, crossed wrists sit on the shoulders and the line
+ *   stays at ARM_AWAY_TORSO; filmed from the front, crossed hands rest by the opposite shoulders (~0.6 torso), so
+ *   a fixed 0.55 would flag every rep. The cap keeps hands already resting on the thighs at Go from hiding arm use.
  * - Half-way rule: at 30 s, a rise that is past halfway counts.
  * - Pause after standing longer than pauseS -> pausesOver3s (orthostatic signal).
  * - No rise started for stopNoStandS (sitting still, or out of frame) -> one "no_stand" stop event
@@ -28,6 +32,8 @@ const HALFWAY = 0.5
 const STAND_ANGLE = 170
 const DEFAULT_SIT_ANGLE = 95
 const ARM_AWAY_TORSO = 0.55
+const ARM_AWAY_MAX = 1.1
+const ARM_BASELINE_FACTOR = 1.6
 const ARM_FRAMES = 2
 
 export interface CounterOptions {
@@ -79,6 +85,17 @@ export function jointAngle(a: number[], b: number[], c: number[]) {
 }
 
 /** Knee angle per side, or null when that leg isn't visible. */
+/** Farthest confident wrist from the shoulders, in torso lengths; null without shoulders, hips and a wrist. */
+function wristReach(kp: Keypoints17): number | null {
+  const ls = kp[KP.lShoulder], rs = kp[KP.rShoulder], lh = kp[KP.lHip], rh = kp[KP.rHip]
+  const sh = ok(ls) && ok(rs) ? mid(ls, rs) : ok(ls) ? ls : ok(rs) ? rs : null
+  const hp = ok(lh) && ok(rh) ? mid(lh, rh) : ok(lh) ? lh : ok(rh) ? rh : null
+  if (!sh || !hp) return null
+  const torso = dist(sh, hp)
+  const d = [kp[KP.lWrist], kp[KP.rWrist]].filter(ok).map((w) => dist(w, sh) / torso)
+  return d.length ? Math.max(...d) : null
+}
+
 function kneeAngles(kp: Keypoints17) {
   const side = (h: number, k: number, a: number) => (ok(kp[h]) && ok(kp[k]) && ok(kp[a]) ? jointAngle(kp[h], kp[k], kp[a]) : null)
   return { left: side(KP.lHip, KP.lKnee, KP.lAnkle), right: side(KP.rHip, KP.rKnee, KP.rAnkle) }
@@ -104,6 +121,7 @@ export class StandCounter {
   private standingSince = 0
   private stoppedForNoStand = false
   private armFrames = 0
+  private armAway = ARM_AWAY_TORSO
   private armThisRep = false
   private armsFromRep: number | undefined
   private pauses = 0
@@ -129,6 +147,8 @@ export class StandCounter {
       this.sitHipY = median(legs.map((l) => l.hip[1]))
       this.thigh = median(legs.map((l) => dist(l.hip, l.knee)))
     }
+    const wrists = this.calib.map((f) => wristReach(f.kp)).filter((d): d is number => d !== null)
+    if (wrists.length) this.armAway = Math.min(ARM_AWAY_MAX, Math.max(ARM_AWAY_TORSO, ARM_BASELINE_FACTOR * median(wrists)))
     this.phase = "seated"
     this.startT = this.lastActiveT = t
   }
@@ -231,12 +251,9 @@ export class StandCounter {
   }
 
   private trackArms(kp: Keypoints17, t: number, events: CounterEvent[]) {
-    const ls = kp[KP.lShoulder], rs = kp[KP.rShoulder], lh = kp[KP.lHip], rh = kp[KP.rHip]
-    const sh = ok(ls) && ok(rs) ? mid(ls, rs) : ok(ls) ? ls : ok(rs) ? rs : null
-    const hp = ok(lh) && ok(rh) ? mid(lh, rh) : ok(lh) ? lh : ok(rh) ? rh : null
-    if (!sh || !hp) return
-    const torso = dist(sh, hp)
-    const away = [kp[KP.lWrist], kp[KP.rWrist]].some((w) => ok(w) && dist(w, sh) / torso > ARM_AWAY_TORSO)
+    const reach = wristReach(kp)
+    if (reach === null) return
+    const away = reach > this.armAway
     this.armFrames = away ? this.armFrames + 1 : 0
     if (this.armFrames >= ARM_FRAMES && !this.armThisRep) {
       this.armThisRep = true

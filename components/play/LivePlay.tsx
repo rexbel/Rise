@@ -1,18 +1,22 @@
 "use client"
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
-import { Pause as PauseIcon, Zap } from "lucide-react"
+import { Pause as PauseIcon, Square, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { HitTimeline } from "@/components/play/HitTimeline"
 import { PixiLiveField } from "@/components/play/PixiLiveField"
 import { FrameSilhouette } from "@/components/play/FrameSilhouette"
 import { usePlay } from "@/components/play/PlayProvider"
-import { playBody, playDisplay } from "@/components/play/playTheme"
+import { playBody, playDisplay, ptCta, ptSecondary, ptStop } from "@/components/play/playTheme"
+import { PoseTier } from "@/lib/types"
 import ui from "@/content/play-ui.json"
 import { rulePack } from "@/lib/play/exerciseRules"
 import { createFindingTracker, type LiveVisual } from "@/lib/play/findings"
 import { createHitMissTracker, type HitMissEvent } from "@/lib/play/hitMiss"
 import { coachLine, exerciseById } from "@/lib/play/programs"
-import { createSyntheticBus, type SyntheticBus } from "@/lib/play/poseBus"
+import { createReplayBus, createSyntheticBus, type SyntheticBus } from "@/lib/play/poseBus"
+import { frameAt, LOOP_MS, VIDEO_LOOPS, videoReplayFrames } from "@/lib/play/videoReplay"
+import { DEMO_VIDEO_SRC, fromDemoVideo, loadFixture } from "@/lib/pose/seeded"
 import { speak } from "@/lib/play/speak"
 import { playTone } from "@/lib/play/tones"
 import { clientLog } from "@/lib/play/clientLog"
@@ -50,9 +54,35 @@ function startDemoBus(
   return bus
 }
 
+/** Keep the looping demo video in step with the replay clock (seek on drift, like the classic check-in). */
+function syncLoopVideo(v: HTMLVideoElement | null, tMs: number) {
+  if (!v || !v.src) return
+  const target = (((tMs % LOOP_MS) + LOOP_MS) % LOOP_MS) / 1000
+  if (Math.abs(v.currentTime - target) > 0.25) v.currentTime = target
+  if (v.paused) void v.play().catch(() => {})
+}
+
+/** ?replay=1 forces demo replay even when a camera is available (recording a demo on a laptop). */
+function replayForced(): boolean {
+  return new URLSearchParams(window.location.search).get("replay") === "1"
+}
+
 /** Full-viewport RehabNinja stage. */
 export function LivePlay() {
-  const { session, dispatch, setElapsedMs, elapsedMs, hitCount, hitLog, pushHitLog, resetHits, addCosmosLook, resolveCosmosLook } = usePlay()
+  const {
+    session,
+    dispatch,
+    setElapsedMs,
+    elapsedMs,
+    hitCount,
+    hitLog,
+    pushHitLog,
+    resetHits,
+    addCosmosLook,
+    resolveCosmosLook,
+    recordRep,
+    setSetSource,
+  } = usePlay()
   const pack = rulePack(session.exerciseId)
   const ex = exerciseById(session.exerciseId)
   const [keypoints, setKeypoints] = useState<Keypoints17 | null>(null)
@@ -60,6 +90,9 @@ export function LivePlay() {
   const [fxEvents, setFxEvents] = useState<HitMissEvent[]>([])
   const [combo, setCombo] = useState(0)
   const [usingDemo, setUsingDemo] = useState(false)
+  /** Demo replay is driven by the AI demo video's keypoints, shown picture-in-picture. */
+  const [videoReplay, setVideoReplay] = useState(false)
+  const demoVideoRef = useRef<HTMLVideoElement>(null)
   const [camHint, setCamHint] = useState<string | null>(null)
   const [holdMs, setHoldMs] = useState(0)
   const [showCoach, setShowCoach] = useState(true)
@@ -85,6 +118,7 @@ export function LivePlay() {
       setFxEvents([])
       setHoldMs(0)
       setUsingDemo(false)
+      setVideoReplay(false)
       setCamHint(null)
       setShowCoach(true)
     }
@@ -134,6 +168,8 @@ export function LivePlay() {
         const events = hitMissRef.current.push(vis, frame.keypoints, frame.t, session.exerciseId)
         const snap = hitMissRef.current.snapshot()
         setHoldMs(snap.holdCleanMs)
+        // Every completed rep (clean or not) goes to the care team; the provider ignores repeats.
+        recordRep(snap.repCount)
         if (events.length) {
           setFxEvents(events)
           for (const e of events) {
@@ -150,7 +186,7 @@ export function LivePlay() {
         maybeComplete(frame.t, hitCountRef.current, snap.holdCleanMs)
       }
     },
-    [dispatch, setElapsedMs, pushHitLog, session.exerciseId, maybeComplete],
+    [dispatch, setElapsedMs, pushHitLog, recordRep, session.exerciseId, maybeComplete],
   )
 
   const { videoRef: camVideoRef, start: camStart, stop: camStop, pause: camPause, resume: camResume, status: camStatus, error: camError, tier: camTier } =
@@ -176,9 +212,20 @@ export function LivePlay() {
     secondLookRef.current = triggerSecondLook
   }, [triggerSecondLook])
 
+  // Tell the relay which pose source feeds this set (seeded replay -> Demo data on the card).
+  useEffect(() => {
+    if (!inSet) return
+    if (usingDemo) setSetSource("seeded", true)
+    else {
+      const parsed = PoseTier.safeParse(camTier)
+      if (parsed.success) setSetSource(parsed.data, false)
+    }
+  }, [inSet, usingDemo, camTier, setSetSource])
+
   useEffect(() => {
     if (!inSet) return
     let cancelled = false
+    const demoVideo = demoVideoRef.current
     trackerRef.current.reset()
     hitMissRef.current.reset()
     resetHits()
@@ -189,7 +236,7 @@ export function LivePlay() {
 
     void (async () => {
       clientLog("info", "live set starting camera", { riseId: session.riseId, exerciseId: session.exerciseId })
-      const result = await camApi.current.start("user")
+      const result = replayForced() ? "forced" : await camApi.current.start("user")
       if (cancelled) return
       if (result === "live") {
         setUsingDemo(false)
@@ -201,18 +248,30 @@ export function LivePlay() {
       clientLog("warn", "falling back to demo replay", { result, err: camApi.current.error })
       setUsingDemo(true)
       setCamHint(camApi.current.error ?? ui.live.demo_badge)
+      const onDone = (durationMs: number) => () => {
+        if (phaseRef.current === "live" || phaseRef.current === "stepBack") dispatch({ type: "SET_COMPLETE", durationMs })
+      }
       busRef.current?.stop()
-      busRef.current = startDemoBus(
-        session.riseId,
-        session.exerciseId,
-        onPoseFrame,
-        () => {
-          if (phaseRef.current === "live" || phaseRef.current === "stepBack") {
-            dispatch({ type: "SET_COMPLETE", durationMs: pack.maxDurationMs })
-          }
-        },
-        phaseRef,
-      )
+      // Sit to stand with a fixture recorded from the AI demo video: replay her movement and show the video.
+      const fx = session.exerciseId === "sit_to_stand" ? await loadFixture(session.riseId) : null
+      if (cancelled) return
+      if (fx && fromDemoVideo(fx)) {
+        const frames = videoReplayFrames(fx)
+        const duration = LOOP_MS * VIDEO_LOOPS
+        const bus = createReplayBus((t) => frameAt(frames, t).kp, duration, onDone(duration))
+        bus.subscribe(onPoseFrame)
+        bus.subscribe((f) => syncLoopVideo(demoVideo, f.t))
+        if (demoVideo) {
+          demoVideo.src = DEMO_VIDEO_SRC
+          demoVideo.muted = true
+        }
+        setVideoReplay(true)
+        bus.start()
+        if (phaseRef.current === "paused" || phaseRef.current === "stepBack") bus.pause()
+        busRef.current = bus
+        return
+      }
+      busRef.current = startDemoBus(session.riseId, session.exerciseId, onPoseFrame, onDone(pack.maxDurationMs), phaseRef)
     })()
 
     return () => {
@@ -221,6 +280,8 @@ export function LivePlay() {
       camApi.current.stop()
       busRef.current?.stop()
       busRef.current = null
+      demoVideo?.pause()
+      demoVideo?.removeAttribute("src")
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inSet, session.riseId, session.exerciseId, dispatch, resetHits])
@@ -232,6 +293,8 @@ export function LivePlay() {
       if (freeze) bus.pause()
       else bus.resume()
     }
+    // The bus drives the demo video forward; it only needs stopping here.
+    if (freeze) demoVideoRef.current?.pause()
     if (camApi.current.status === "live") {
       if (freeze) camApi.current.pause()
       else camApi.current.resume()
@@ -253,7 +316,7 @@ export function LivePlay() {
   const softTracking = !visual.trackingOk && !stepBack && !paused
 
   return (
-    <div className={`relative flex h-full min-h-0 flex-1 flex-col bg-black text-zinc-50 ${playBody.className}`}>
+    <div className={`relative flex h-full min-h-0 flex-1 flex-col bg-black text-pt-ink ${playBody.className}`}>
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <video
           ref={camVideoRef}
@@ -262,8 +325,17 @@ export function LivePlay() {
           className={`absolute inset-0 h-full w-full object-cover -scale-x-100 ${usingDemo ? "opacity-0" : softTracking ? "opacity-60" : "opacity-100"}`}
         />
         {usingDemo ? (
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,#1c1917_0%,#0a0a0c_70%)]" aria-hidden />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,var(--pt-surface)_0%,var(--pt-bg)_70%)]" aria-hidden />
         ) : null}
+        {/* The person the replay comes from: the AI demo video, in step with the avatar (labelled by the badge top right). */}
+        <video
+          ref={demoVideoRef}
+          playsInline
+          muted
+          loop
+          aria-hidden
+          className={`absolute bottom-3 left-3 z-10 aspect-[9/16] h-[22%] max-h-80 w-auto rounded-xl border border-pt-ink/20 bg-black object-contain shadow-lg sm:h-[38%] ${videoReplay ? "" : "hidden"}`}
+        />
         <PixiLiveField
           keypoints={keypoints}
           visual={visual}
@@ -279,66 +351,64 @@ export function LivePlay() {
           dimmed={softTracking}
         />
 
-        <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-3 bg-gradient-to-b from-black/75 to-transparent p-4 pt-[max(1rem,env(safe-area-inset-top))]">
-          <div>
-            <p className={`${playDisplay.className} text-lg font-bold text-zinc-50 sm:text-xl`}>{ex.name}</p>
+        <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-3 bg-gradient-to-b from-black/80 to-transparent p-4 pt-[max(1rem,env(safe-area-inset-top))]">
+          <div className="min-w-0">
+            <p className={`${playDisplay.className} text-2xl font-bold text-pt-ink`}>{ex.name}</p>
             {showCoach ? (
-              <p className="mt-1 max-w-md text-base font-medium text-amber-100" aria-live="polite">
+              <p className="mt-1 max-w-md text-xl font-semibold leading-snug text-pt-ink" aria-live="polite">
                 {coachLine(session.exerciseId, ui.live)}
               </p>
             ) : null}
+            {/* Camera error only; the "Demo replay" pill on the right already says the replay is running. */}
+            {camHint && usingDemo && camHint !== ui.live.demo_badge ? (
+              <p className="mt-2 max-w-md rounded-md border border-pt-accent/40 bg-pt-bg/85 px-3 py-2 text-xl text-pt-ink">{camHint}</p>
+            ) : null}
           </div>
-          <div className="flex flex-col items-end gap-2">
+          <div className="flex shrink-0 flex-col items-end gap-2">
             {usingDemo ? (
-              <span className="rounded-full border border-orange-500/40 bg-zinc-950/80 px-2 py-0.5 text-xs text-orange-200">
-                {ui.live.demo_badge}
+              <span className="rounded-full border border-pt-accent/50 bg-pt-bg/85 px-3 py-0.5 text-xl text-pt-ink">
+                {videoReplay ? ui.live.video_badge : ui.live.demo_badge}
               </span>
             ) : null}
-            <div className={`${playDisplay.className} rounded-full bg-zinc-950/80 px-3 py-1.5 text-base font-bold text-zinc-100`}>
+            {/* Game progress toward the set target (not a test result). */}
+            <div className={`${playDisplay.className} rounded-full bg-pt-bg/85 px-3 py-1.5 text-xl font-bold text-pt-ink`}>
               {pack.progressMode === "hold"
                 ? `${ui.live.hold_label} ${Math.min(pack.holdSec, Math.floor(holdMs / 1000))}s / ${pack.holdSec}s`
                 : `${ui.live.reps_label} ${hitCount} / ${pack.targetReps}`}
             </div>
             {combo > 1 ? (
-              <div className="flex items-center gap-2 rounded-full bg-zinc-950/80 px-3 py-1.5 text-lg font-semibold text-orange-400">
-                <Zap className="size-5 fill-orange-400" aria-hidden />
-                x{combo}
+              <div className="flex items-center gap-2 rounded-full bg-pt-bg/85 px-3 py-1.5 text-xl font-semibold text-pt-accent">
+                <Zap className="size-5 fill-current" aria-hidden />x{combo}
               </div>
             ) : null}
           </div>
         </div>
 
         {softTracking ? (
-          <div className="pointer-events-none absolute inset-x-0 top-28 flex justify-center px-4">
-            <p className="rounded-lg bg-zinc-950/80 px-3 py-2 text-sm text-amber-100">{ui.live.tracking_soft}</p>
+          <div className="pointer-events-none absolute inset-x-0 top-32 flex justify-center px-4">
+            <p className="rounded-lg bg-pt-bg/85 px-3 py-2 text-xl text-pt-ink" role="status">
+              {ui.live.tracking_soft}
+            </p>
           </div>
         ) : null}
 
         {loadingCam && !usingDemo ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-zinc-950/70 px-6 text-center">
-            <div className="size-12 animate-pulse rounded-full border-4 border-orange-500/40 border-t-orange-500" />
-            <p className={`${playDisplay.className} text-2xl font-bold text-zinc-50`}>{ui.loading.camera}</p>
-            <p className="text-base text-zinc-300">{ui.loading.tip}</p>
-          </div>
-        ) : null}
-        {camHint && usingDemo ? (
-          <div className="absolute left-4 top-28 max-w-sm rounded-md border border-orange-500/30 bg-zinc-950/80 px-3 py-2 text-sm text-orange-100">
-            {camHint}
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-pt-bg/75 px-6 text-center" role="status">
+            <div className="size-12 animate-pulse rounded-full border-4 border-pt-accent/40 border-t-pt-accent motion-reduce:animate-none" aria-hidden />
+            <p className={`${playDisplay.className} text-2xl font-bold text-pt-ink`}>{ui.loading.camera}</p>
+            <p className="text-xl text-pt-muted">{ui.loading.tip}</p>
           </div>
         ) : null}
 
         {paused ? (
-          <div className="absolute inset-0 flex flex-col justify-center gap-3 bg-zinc-950/85 p-6 sm:mx-auto sm:max-w-md">
-            <h2 className={`${playDisplay.className} text-2xl font-bold leading-snug sm:text-3xl`}>
-              {ui.paused.title}
-            </h2>
-            <Button type="button" className="h-14 min-h-14 w-full text-lg" onClick={() => dispatch({ type: "RESUME" })}>
+          <div className="absolute inset-0 flex flex-col justify-center gap-3 bg-pt-bg/90 p-6 sm:mx-auto sm:max-w-md">
+            <h2 className={`${playDisplay.className} text-3xl font-bold leading-snug`}>{ui.paused.title}</h2>
+            <Button type="button" className={ptCta} onClick={() => dispatch({ type: "RESUME" })}>
               {ui.paused.keep_going}
             </Button>
             <Button
               type="button"
-              variant="outline"
-              className="h-14 min-h-14 w-full border-zinc-700 bg-transparent text-lg text-zinc-100"
+              className={ptSecondary}
               onClick={() => dispatch({ type: "FINISH_HERE", durationMs: elapsed || 12_000 })}
             >
               {ui.paused.finish_here}
@@ -347,17 +417,17 @@ export function LivePlay() {
         ) : null}
 
         {stepBack ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-zinc-950/90 px-6">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-pt-bg/90 px-6">
             <FrameSilhouette />
-            <p className={`${playDisplay.className} max-w-md text-center text-2xl font-bold text-amber-100`}>
+            <p className={`${playDisplay.className} max-w-md text-center text-2xl font-bold text-pt-ink`}>
               {ui.live.step_back}
             </p>
-            <p className="text-center text-base text-zinc-400">
-              {visual.trackingOk ? "Looking good — continue when ready." : "We need to see your hips and knees."}
+            <p className="text-center text-xl text-pt-muted" role="status">
+              {visual.trackingOk ? ui.live.step_back_ok : ui.live.step_back_wait}
             </p>
             <Button
               type="button"
-              className="h-14 min-h-14 w-full max-w-sm text-lg"
+              className={`${ptCta} max-w-sm`}
               disabled={!visual.trackingOk}
               onClick={() => {
                 if (!visual.trackingOk) return
@@ -370,36 +440,24 @@ export function LivePlay() {
         ) : null}
       </div>
 
-      <div className="flex h-2.5 shrink-0 gap-0.5 bg-zinc-950" aria-label="Hit timeline">
-        {hitLog.length === 0 ? (
-          <div className="h-full w-full bg-zinc-800" />
-        ) : (
-          hitLog.map((kind, i) => (
-            <div
-              key={`${kind}-${i}`}
-              className={kind === "hit" ? "min-w-1 flex-1 bg-emerald-500" : "min-w-1 flex-1 bg-orange-500"}
-            />
-          ))
-        )}
-      </div>
+      <HitTimeline hitLog={hitLog} size="sm" className="shrink-0 bg-pt-bg px-3 pt-2" />
 
-      <div className="grid shrink-0 grid-cols-2 gap-3 bg-zinc-950 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="grid shrink-0 grid-cols-2 gap-3 bg-pt-bg p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <Button
           type="button"
-          variant="destructive"
-          className="h-16 min-h-16 text-xl sm:h-20 sm:text-2xl"
+          className={`${ptStop} h-16 min-h-16 text-2xl sm:h-20`}
           onClick={() => {
             speak(ui.live.stop)
             playTone("stop")
             dispatch({ type: "STOP" })
           }}
         >
+          <Square className="size-6 fill-current" aria-hidden />
           {ui.live.stop}
         </Button>
         <Button
           type="button"
-          variant="outline"
-          className="h-16 min-h-16 border-zinc-700 bg-zinc-900 text-xl text-zinc-50 hover:bg-zinc-800 sm:h-20 sm:text-2xl"
+          className={`${ptSecondary} h-16 min-h-16 text-2xl sm:h-20`}
           onClick={() => dispatch({ type: "PAUSE" })}
         >
           <PauseIcon className="size-7" aria-hidden />

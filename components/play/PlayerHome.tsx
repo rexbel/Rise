@@ -2,13 +2,20 @@
 
 import type { ReactNode } from "react"
 import Image from "next/image"
+import { Check } from "lucide-react"
 import ui from "@/content/play-ui.json"
-import { playDisplay } from "@/components/play/playTheme"
-import { playerHome } from "@/lib/play/playerHome"
+import { useCrewBoard } from "@/components/play/CrewBoard"
+import { playDisplay, ptFocus } from "@/components/play/playTheme"
+import { homeChipsRow } from "@/lib/play/crewView"
+import { crewChips, missionDose, playerHome } from "@/lib/play/playerHome"
 import type { ProgramExercise } from "@/lib/play/programs"
 import type { SeedPatient } from "@/lib/types"
+import { cn } from "@/lib/utils"
 
-/** Pre-game player home — web-first layout, stacks on small screens. */
+/**
+ * Pre-game player home: the patient's own progress, plus their own crew chips (days active, cheers) once the crew
+ * loads. The chips never block Begin and simply stay hidden if the crew is unavailable. Web-first, stacks on mobile.
+ */
 export function PlayerHome({
   patient,
   selectedId,
@@ -24,106 +31,95 @@ export function PlayerHome({
   actions?: ReactNode
 }) {
   const home = playerHome(patient)
-  const trendLine = ui.home.trend[home.trend]
+  const { state: crew } = useCrewBoard(patient.rise_id)
+  // Chips only while the patient is on the crew: never when paused or not joined.
+  const chips = crewChips(homeChipsRow(crew.status === "ready" ? crew.board : undefined))
 
   return (
     <div className="rn-home-enter grid gap-6 motion-reduce:animate-none lg:grid-cols-12 lg:gap-8">
-      {/* Identity + progress */}
-      <section className="rounded-2xl border border-zinc-700/80 bg-zinc-900/70 p-5 sm:p-6 lg:col-span-5 lg:p-8">
+      {/* Identity + own progress */}
+      <section className="rounded-2xl border border-pt-line bg-pt-surface p-5 sm:p-6 lg:col-span-5 lg:p-8">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-xl font-semibold tracking-wide text-orange-400">{ui.home.eyebrow}</p>
+          <p className="text-xl font-semibold tracking-wide text-pt-accent">{ui.home.eyebrow}</p>
           {showDemoBadge ? (
-            <span className="rounded-full bg-orange-500/20 px-3 py-1 text-xl font-semibold text-orange-200">
+            <span className="rounded-full border border-pt-accent/50 px-3 py-1 text-xl font-semibold text-pt-ink">
               {ui.home.demo_chip}
             </span>
           ) : null}
         </div>
 
         <div className="mt-6 flex items-center gap-4 sm:gap-5">
-          <div className="relative size-20 shrink-0 overflow-hidden rounded-full ring-2 ring-orange-500 sm:size-24 lg:size-28">
-            <Image
-              src={home.avatarSrc}
-              alt={home.displayName}
-              fill
-              className="object-cover"
-              sizes="(min-width: 1024px) 112px, 96px"
-              priority
-            />
+          <div className="relative size-20 shrink-0 overflow-hidden rounded-full ring-2 ring-pt-accent sm:size-24 lg:size-28">
+            <Image src={home.avatarSrc} alt="" fill className="object-cover" sizes="(min-width: 1024px) 112px, 96px" priority />
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-baseline gap-2">
-              <h2 className={`${playDisplay.className} text-3xl font-bold text-zinc-50 sm:text-4xl`}>
-                {home.firstName}
-              </h2>
-              <span className="rounded-full bg-orange-500/20 px-2.5 py-0.5 text-xl font-semibold uppercase tracking-wide text-orange-300">
+              <h2 className={`${playDisplay.className} text-3xl font-bold text-pt-ink sm:text-4xl`}>{home.firstName}</h2>
+              <span className="rounded-full bg-pt-surface-2 px-2.5 py-0.5 text-xl font-semibold text-pt-ink">
                 {ui.home.you_badge}
               </span>
             </div>
-            <p className="mt-1 text-xl text-zinc-300">
-              {home.dayLabel} · {home.recoveryLabel}
+            <p className="mt-1 text-xl text-pt-ink">
+              {home.sinceSurgeryLabel} · {home.recoveryLabel}
             </p>
-            <p className="mt-0.5 text-xl text-zinc-500">{home.trackLabel}</p>
           </div>
         </div>
 
-        <ul className="mt-6 grid grid-cols-2 gap-3">
-          <Chip label={ui.home.chips.rank} value={home.rankPlace} />
-          <Chip label={ui.home.chips.hits} value={String(home.weekHits)} />
-        </ul>
+        <dl className="mt-6 grid grid-cols-2 gap-3">
+          <Fact label={ui.week.checkins_label} value={String(home.checkInsDone)} />
+          <Fact label={ui.week.next_label} value={home.nextSessionLabel} />
+          {chips.map((c) => (
+            <Fact key={c.key} label={c.label} value={c.value} />
+          ))}
+        </dl>
 
-        <p className="mt-4 text-xl leading-snug text-zinc-400">
-          {ui.home.meta_checkins.replace("{n}", String(home.checkInsDone))}
-          <span className="mx-2 text-zinc-600" aria-hidden>
-            ·
-          </span>
-          {ui.home.next_prefix} {home.nextSessionLabel}
-        </p>
-        <p className="mt-2 text-xl leading-snug text-zinc-400">{trendLine}</p>
+        <div className="mt-4">
+          <p className="text-xl text-pt-muted">{ui.week.last_time_label}</p>
+          <p className="mt-1 text-xl font-semibold leading-snug text-pt-ink">{home.trendLabel}</p>
+        </div>
       </section>
 
       {/* Missions + actions */}
-      <section className="flex flex-col rounded-2xl border border-zinc-700/80 bg-zinc-900/70 p-5 sm:p-6 lg:col-span-7 lg:p-8">
-        <p className={`${playDisplay.className} text-2xl font-bold text-zinc-50 sm:text-3xl`}>
-          {ui.home.missions_label}
-        </p>
+      <section className="flex flex-col rounded-2xl border border-pt-line bg-pt-surface p-5 sm:p-6 lg:col-span-7 lg:p-8">
+        <h3 className={`${playDisplay.className} text-2xl font-bold text-pt-ink sm:text-3xl`}>{ui.home.missions_label}</h3>
 
         <ul className="mt-4 flex flex-1 flex-col gap-3">
           {home.missions.map((w) => {
             const selected = selectedId === w.id
-            const repsLabel =
-              w.endRule === "hold"
-                ? ui.program.hold.replace("{sec}", String(w.holdSec ?? 20))
-                : ui.program.sets_reps
-                    .replace("{sets}", String(w.sets))
-                    .replace("{reps}", String(w.reps))
             return (
               <li key={w.id}>
                 <button
                   type="button"
                   disabled={!onSelect}
+                  aria-pressed={onSelect ? selected : undefined}
                   onClick={() => onSelect?.(w.id)}
-                  className={`w-full rounded-2xl border px-5 py-5 text-left motion-safe:transition-[border-color,background-color,transform] motion-safe:duration-200 motion-reduce:transition-none ${
-                    selected
-                      ? "border-orange-500 bg-orange-500/15 motion-safe:scale-[1.01] motion-reduce:scale-100"
-                      : "border-zinc-700 bg-zinc-950/50 hover:border-zinc-500"
-                  } ${onSelect ? "cursor-pointer" : "cursor-default"}`}
+                  className={cn(
+                    ptFocus,
+                    "w-full rounded-2xl border px-5 py-5 text-left motion-safe:transition-[border-color,background-color] motion-safe:duration-200",
+                    selected ? "border-pt-accent bg-pt-surface-2" : "border-pt-line bg-pt-bg/60 hover:border-pt-muted",
+                    onSelect ? "cursor-pointer" : "cursor-default",
+                  )}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <span className={`${playDisplay.className} text-2xl font-bold text-zinc-50`}>
-                      {w.name}
-                    </span>
-                    <span className="shrink-0 rounded-full bg-orange-500 px-3 py-1 text-xl font-semibold text-white">
+                    <span className={`${playDisplay.className} text-2xl font-bold text-pt-ink`}>{w.name}</span>
+                    <span
+                      className={cn(
+                        "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xl font-semibold",
+                        selected ? "bg-pt-cta text-pt-cta-ink" : "border border-pt-line text-pt-ink",
+                      )}
+                    >
+                      {selected ? <Check className="size-5" aria-hidden /> : null}
                       {selected ? ui.home.mission_badge_selected : ui.home.mission_badge_today}
                     </span>
                   </div>
-                  <p className="mt-2 text-xl text-zinc-400">{repsLabel}</p>
+                  <p className="mt-2 text-xl text-pt-muted">{missionDose(w)}</p>
                 </button>
               </li>
             )
           })}
         </ul>
 
-        <p className="mt-4 text-xl leading-snug text-zinc-400">{ui.home.hint}</p>
+        <p className="mt-4 text-xl leading-snug text-pt-muted">{ui.home.hint}</p>
 
         {actions ? <div className="mt-6 flex flex-col gap-3">{actions}</div> : null}
       </section>
@@ -131,13 +127,11 @@ export function PlayerHome({
   )
 }
 
-function Chip({ label, value }: { label: string; value: string }) {
+function Fact({ label, value }: { label: string; value: string }) {
   return (
-    <li className="rounded-2xl border border-zinc-700 bg-zinc-950/60 px-4 py-3">
-      <p className="text-xl font-medium text-zinc-500">{label}</p>
-      <p className={`${playDisplay.className} mt-1 text-2xl font-bold leading-tight text-zinc-50`}>
-        {value}
-      </p>
-    </li>
+    <div className="rounded-2xl border border-pt-line bg-pt-bg/60 px-4 py-3">
+      <dt className="text-xl text-pt-muted">{label}</dt>
+      <dd className={`${playDisplay.className} mt-1 text-2xl font-bold leading-tight text-pt-ink`}>{value}</dd>
+    </div>
   )
 }

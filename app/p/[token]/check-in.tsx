@@ -19,10 +19,13 @@ import lines from "@/content/patient-lines.json"
 import { closingLines } from "@/lib/feedback"
 import { StandCounter, type CounterSummary } from "@/lib/pose/counter"
 import { triage } from "@/lib/rules"
+import { resolvePlaySessionId } from "@/lib/play/playResult"
+import { guideStepFor, SetupGuide } from "./setup-guide"
 import { sendEvent, sendResult } from "@/lib/session-client"
 import { steadiScore } from "@/lib/steadi"
 import type { CheckIn as PriorCheckIn, Recommendation, SeedPatient, SessionResult, SessionStatus, Symptoms, Trend } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { ptCta, ptSecondary, ptStop } from "@/components/play/ptClasses"
 import { usePose } from "./use-pose"
 import { useVoice } from "./use-voice"
 
@@ -47,17 +50,31 @@ function trendVsPrevious(s: CounterSummary, prev: PriorCheckIn | undefined, fini
   return "same"
 }
 
-const btn = "h-14 w-full text-xl"
+// Patient tokens (app/globals.css pt-*): 56px buttons, 20px text, visible focus.
+const btn = ptCta
+const btn2 = ptSecondary
 
-export function CheckIn({ patient, clinicName }: { patient: SeedPatient; clinicName: string }) {
+export function CheckIn({
+  patient,
+  clinicName,
+  sessionParam,
+  demoParam = false,
+}: {
+  patient: SeedPatient
+  clinicName: string
+  /** ?s= from the console invite; ignored unless it is a valid id for this patient. */
+  sessionParam?: string
+  /** ?demo=1: start with the demo recording switched on. */
+  demoParam?: boolean
+}) {
   const firstName = patient.display_name.split(" ")[0]
   const prev = patient.checkins[patient.checkins.length - 1]
-  const [sessionId] = useState(() => `${patient.rise_id}-${Date.now().toString(36)}`)
+  const [sessionId] = useState(() => resolvePlaySessionId(patient.rise_id, sessionParam, Date.now()))
 
   const [step, setStep] = useState<Step>("welcome")
   const [checks, setChecks] = useState<Record<string, boolean>>({})
   const [facing, setFacing] = useState<"environment" | "user">("environment")
-  const [demo, setDemo] = useState(false)
+  const [demo, setDemo] = useState(demoParam)
   const [countdown, setCountdown] = useState<number | null>(null)
   const [elapsed, setElapsed] = useState(0)
   const [repPulse, setRepPulse] = useState(0)
@@ -70,7 +87,7 @@ export function CheckIn({ patient, clinicName }: { patient: SeedPatient; clinicN
   const [result, setResult] = useState<SessionResult | null>(null)
 
   const voice = useVoice()
-  const { videoRef, canvasRef, setFrameHandler, setTierHandler, tier, status: poseStatus, error: poseError, visible, ready, startLive, startSeeded } = usePose()
+  const { videoRef, canvasRef, setFrameHandler, setTierHandler, tier, status: poseStatus, error: poseError, visible, ready, demoVideo, startLive, startSeeded } = usePose()
 
   // Test clock: ms of active testing since Go (stops while paused). Negative before Go.
   const clockAcc = useRef(0)
@@ -195,6 +212,14 @@ export function CheckIn({ patient, clinicName }: { patient: SeedPatient; clinicN
     else void startLive(facing)
   }
 
+  // ?demo=1 opens on the demo recording: start its replay when the setup step (and the camera frame) appears.
+  const demoStarted = useRef(false)
+  useEffect(() => {
+    if (step !== "setup" || !demo || demoStarted.current) return
+    demoStarted.current = true
+    startSeeded(patient, clock)
+  }, [step, demo, patient, clock, startSeeded])
+
   const allChecked = SETUP_CHECKS.every((c) => checks[c.id])
   const framed = demo || visible
   const canStart = allChecked && ready && framed
@@ -252,6 +277,7 @@ export function CheckIn({ patient, clinicName }: { patient: SeedPatient; clinicN
       return {
         sessionId,
         riseId: patient.rise_id,
+        protocol: "steadi_30s",
         rawStands: s.rawStands,
         armsUsed: s.armsUsed,
         armsFromRep: s.armsFromRep,
@@ -268,6 +294,7 @@ export function CheckIn({ patient, clinicName }: { patient: SeedPatient; clinicN
         patientNote,
         tier: tier ?? "seeded",
         demoData: demo || tier === "seeded",
+        scripted: demo ? ["new_incontinence", "gait", "tandem"] : [],
         startedAt: startedAt.current,
         finishedAt: Date.now(),
       }
@@ -296,7 +323,7 @@ export function CheckIn({ patient, clinicName }: { patient: SeedPatient; clinicN
     }
     const r = buildResult(symptoms)
     setResult(r)
-    sendResult(r)
+    void sendResult(r)
     status("scoring")
     const decision = triage(r, prev, patient.episode.post_op_day_today)
     if (decision.emergency) {
@@ -320,7 +347,7 @@ export function CheckIn({ patient, clinicName }: { patient: SeedPatient; clinicN
 
   const sendNote = (skip: boolean) => {
     voice.stop()
-    if (!skip && note.trim() && result) sendResult({ ...result, patientNote: note.trim() })
+    if (!skip && note.trim() && result) void sendResult({ ...result, patientNote: note.trim() })
     setNoteSent(skip || !note.trim() ? "skipped" : "sent")
   }
 
@@ -330,10 +357,10 @@ export function CheckIn({ patient, clinicName }: { patient: SeedPatient; clinicN
 
   if (step === "emergency") {
     return (
-      <main className="flex min-h-dvh flex-col justify-center gap-8 bg-red-700 px-5 py-10 text-white" role="alert">
+      <main className="flex min-h-dvh flex-col justify-center gap-8 bg-pt-danger-fill px-5 py-10 text-white" role="alert">
         <AlertTriangle aria-hidden className="size-16" />
         <p className="text-3xl font-semibold leading-snug">{lines.emergency.line}</p>
-        <Button asChild size="lg" className="h-16 bg-white text-2xl text-red-700 hover:bg-white/90">
+        <Button asChild size="lg" className="h-16 bg-white text-2xl text-pt-danger-fill hover:bg-white/90">
           <a href="tel:911">
             <Phone aria-hidden className="size-6" /> Call 911
           </a>
@@ -343,21 +370,26 @@ export function CheckIn({ patient, clinicName }: { patient: SeedPatient; clinicN
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-6 text-xl">
+    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 bg-pt-bg px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-6 text-xl text-pt-ink">
       <header className="flex items-center justify-between gap-2">
-        <span className="text-base font-medium text-muted-foreground">{clinicName}</span>
+        <span className="text-xl font-medium text-pt-muted">{clinicName}</span>
         <div className="flex gap-2">
-          {(demo || tier === "seeded") && <Badge variant="outline">Demo data</Badge>}
-          <Badge variant="secondary">Synthetic patient</Badge>
+          {(demo || tier === "seeded") && <Badge className="border border-pt-accent/50 bg-transparent text-base text-pt-ink">Demo data</Badge>}
+          <Badge className="border-0 bg-pt-surface-2 text-base text-pt-ink">Synthetic patient</Badge>
         </div>
       </header>
 
       {/* Camera / skeleton: mounted across setup and test so the stream survives step changes. */}
       <div className={cn("relative overflow-hidden rounded-xl bg-black", showCamera ? "block" : "hidden", step === "test" || step === "paused" ? "aspect-[3/4]" : "aspect-[4/3]")}>
-        <video ref={videoRef} playsInline muted className={cn("h-full w-full object-cover", demo && "hidden", facing === "user" && "-scale-x-100")} />
+        <video ref={videoRef} playsInline muted className={cn("h-full w-full", demo ? "object-contain" : "object-cover", demo && !demoVideo && "hidden", facing === "user" && !demo && "-scale-x-100")} />
+        {demo && demoVideo && (
+          <span className="absolute right-3 top-3 z-10 rounded-full bg-black/70 px-3 py-1 text-base font-medium text-white">AI-generated demo video</span>
+        )}
         <canvas ref={canvasRef} className={cn("pointer-events-none absolute inset-0 h-full w-full", facing === "user" && !demo && "-scale-x-100")} />
+        {/* Until the camera is on, show what each safety check looks like (follows the first unticked check). */}
+        {step === "setup" && !ready && !demo && <SetupGuide step={guideStepFor(checks)} />}
         {step === "setup" && ready && (
-          <div className={cn("absolute inset-x-3 bottom-3 flex items-center gap-2 rounded-lg px-3 py-2 text-lg font-medium", framed ? "bg-emerald-600 text-white" : "bg-amber-400 text-black")} aria-live="polite">
+          <div className={cn("absolute inset-x-3 bottom-3 flex items-center gap-2 rounded-lg px-3 py-2 text-xl font-medium", framed ? "bg-emerald-800 text-white" : "bg-amber-300 text-black")} aria-live="polite">
             {framed ? <Check aria-hidden className="size-5" /> : <AlertTriangle aria-hidden className="size-5" />}
             {framed ? "I can see all of you" : "Step back so I can see you head to feet"}
           </div>
@@ -376,13 +408,13 @@ export function CheckIn({ patient, clinicName }: { patient: SeedPatient; clinicN
       </div>
 
       {voice.caption && (step === "setup" || step === "instructions" || step === "test") && (
-        <p className="min-h-16 rounded-lg bg-muted px-4 py-3 text-xl leading-snug" aria-live="polite">{voice.caption}</p>
+        <p className="min-h-16 rounded-lg bg-pt-surface px-4 py-3 text-xl leading-snug" aria-live="polite">{voice.caption}</p>
       )}
 
       {step === "welcome" && (
         <section className="flex flex-1 flex-col justify-center gap-6">
           <h1 className="text-3xl font-semibold leading-tight">Hi {firstName}, your care team at {clinicName} asked for a 2-minute check-in.</h1>
-          <p className="text-muted-foreground">A voice will guide you through every step. You can stop at any time.</p>
+          <p className="text-pt-muted">A voice will guide you through every step. You can stop at any time.</p>
           <Button size="lg" className={btn} onClick={begin}>Start</Button>
         </section>
       )}
@@ -391,7 +423,7 @@ export function CheckIn({ patient, clinicName }: { patient: SeedPatient; clinicN
         <section className="flex flex-col gap-4">
           <h1 className="text-2xl font-semibold">Before we start</h1>
           {SETUP_CHECKS.map((c) => (
-            <div key={c.id} className="flex items-start gap-3 rounded-lg border p-4">
+            <div key={c.id} className="flex items-start gap-3 rounded-lg border border-pt-line bg-pt-surface p-4">
               <Checkbox id={c.id} className="mt-1 size-7" checked={!!checks[c.id]} onCheckedChange={(v) => {
                 setChecks((x) => ({ ...x, [c.id]: v === true }))
                 const next = SETUP_CHECKS[SETUP_CHECKS.findIndex((x) => x.id === c.id) + 1]
@@ -402,17 +434,17 @@ export function CheckIn({ patient, clinicName }: { patient: SeedPatient; clinicN
             </div>
           ))}
           {!ready && !demo && (
-            <Button size="lg" variant="secondary" className={btn} onClick={() => startCamera(facing)} disabled={!allChecked}>Turn on the camera</Button>
+            <Button size="lg" className={btn2} onClick={() => startCamera(facing)} disabled={!allChecked}>Turn on the camera</Button>
           )}
-          {poseStatus && <p aria-live="polite" className="text-muted-foreground">{poseStatus}</p>}
-          {poseError && !demo && <p role="alert" className="text-destructive">{poseError}</p>}
-          <div className="flex items-center justify-between gap-3 text-base">
-            <Button variant="ghost" size="lg" onClick={() => { const f = facing === "user" ? "environment" : "user"; setFacing(f); if (!demo) startCamera(f) }}>
+          {poseStatus && <p aria-live="polite" className="text-pt-muted">{poseStatus}</p>}
+          {poseError && !demo && <p role="alert" className="text-pt-danger">{poseError}</p>}
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xl">
+            <Button size="lg" className={cn(btn2, "w-auto border-0 bg-transparent")} onClick={() => { const f = facing === "user" ? "environment" : "user"; setFacing(f); if (!demo) startCamera(f) }}>
               Use {facing === "user" ? "back" : "front"} camera
             </Button>
             <div className="flex items-center gap-2">
               <Switch id="demo" checked={demo} onCheckedChange={toggleDemo} />
-              <Label htmlFor="demo" className="text-base">Use demo recording</Label>
+              <Label htmlFor="demo" className="text-xl">Use demo recording</Label>
             </div>
           </div>
           <Button size="lg" className={btn} disabled={!canStart} onClick={() => void startInstructions()}>
@@ -422,13 +454,13 @@ export function CheckIn({ patient, clinicName }: { patient: SeedPatient; clinicN
       )}
 
       {step === "instructions" && (
-        <Button size="lg" variant="secondary" className={btn} onClick={() => { voice.stop(); goCountdown() }} disabled={countdown !== null}>
+        <Button size="lg" className={btn2} onClick={() => { voice.stop(); goCountdown() }} disabled={countdown !== null}>
           I know what to do — start now
         </Button>
       )}
 
       {(step === "test" || step === "instructions") && (
-        <Button size="lg" variant="destructive" className="sticky bottom-4 h-16 w-full text-2xl" onClick={() => (step === "test" ? pauseTest("button") : setStep("setup"))}>
+        <Button size="lg" className={cn(ptStop, "sticky bottom-4 h-16 min-h-16 text-2xl")} onClick={() => (step === "test" ? pauseTest("button") : setStep("setup"))}>
           <Square aria-hidden className="size-6 fill-current" /> Stop
         </Button>
       )}
@@ -437,7 +469,7 @@ export function CheckIn({ patient, clinicName }: { patient: SeedPatient; clinicN
         <section className="flex flex-col gap-4">
           <h1 className="text-2xl font-semibold">{voice.text("paused")}</h1>
           <Button size="lg" className={btn} onClick={keepGoing}>Keep going</Button>
-          <Button size="lg" variant="secondary" className={btn} onClick={() => finishTest(true)}>Finish here</Button>
+          <Button size="lg" className={btn2} onClick={() => finishTest(true)}>Finish here</Button>
         </section>
       )}
 
@@ -458,14 +490,14 @@ export function CheckIn({ patient, clinicName }: { patient: SeedPatient; clinicN
             <p key={i} className={cn("leading-snug", i === 0 && "text-2xl font-semibold")}>{l}</p>
           ))}
           {noteSent === "open" ? (
-            <div className="flex flex-col gap-3 rounded-lg border p-4">
+            <div className="flex flex-col gap-3 rounded-lg border border-pt-line bg-pt-surface p-4">
               <Label htmlFor="note" className="text-xl font-normal leading-snug">{lines.note_prompt}</Label>
-              <Textarea id="note" rows={3} className="text-xl" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Type, or tap the microphone on your keyboard" />
+              <Textarea id="note" rows={3} className="border-pt-line bg-pt-bg text-xl text-pt-ink placeholder:text-pt-muted focus-visible:ring-pt-focus" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Type, or tap the microphone on your keyboard" />
               <Button size="lg" className={btn} onClick={() => sendNote(false)} disabled={!note.trim()}>Send to my nurse</Button>
-              <Button size="lg" variant="ghost" className={btn} onClick={() => sendNote(true)}>Skip</Button>
+              <Button size="lg" className={btn2} onClick={() => sendNote(true)}>Skip</Button>
             </div>
           ) : (
-            <p className="rounded-lg bg-muted px-4 py-3" aria-live="polite">
+            <p className="rounded-lg bg-pt-surface px-4 py-3" aria-live="polite">
               {noteSent === "sent" ? "Your note was sent to your nurse. " : ""}You can close this page now.
             </p>
           )}
@@ -490,22 +522,22 @@ type Q = (typeof QUESTIONS)[number]
 function Question({ q, index, pain, setPain, onAnswer }: { q: Q; index: number; pain: number; setPain: (n: number) => void; onAnswer: (v: boolean | number) => void }) {
   return (
     <section className="flex flex-col gap-5" aria-labelledby={`q-${q.id}`}>
-      <p className="text-base text-muted-foreground">Question {index + 1} of {QUESTIONS.length}</p>
+      <p className="text-xl text-pt-muted">Question {index + 1} of {QUESTIONS.length}</p>
       <h1 id={`q-${q.id}`} className="text-2xl font-semibold leading-snug">{q.text}</h1>
       {q.type === "slider" ? (
         <>
           <div className="flex items-center gap-4">
-            <span className="text-base">0</span>
+            <span className="text-xl">0</span>
             <Slider value={[pain]} min={0} max={10} step={1} onValueChange={(v) => setPain(v[0])} aria-labelledby={`q-${q.id}`} className="py-4" />
-            <span className="text-base">10</span>
+            <span className="text-xl">10</span>
           </div>
           <p className="text-center text-4xl font-semibold" aria-live="polite">{pain}</p>
           <Button size="lg" className={btn} onClick={() => onAnswer(pain)}>Next</Button>
         </>
       ) : (
         <div className="grid grid-cols-2 gap-3">
-          <Button size="lg" variant="secondary" className="h-20 text-2xl" onClick={() => onAnswer(true)}>Yes</Button>
-          <Button size="lg" variant="secondary" className="h-20 text-2xl" onClick={() => onAnswer(false)}>No</Button>
+          <Button size="lg" className={cn(btn2, "h-20 min-h-20 text-2xl")} onClick={() => onAnswer(true)}>Yes</Button>
+          <Button size="lg" className={cn(btn2, "h-20 min-h-20 text-2xl")} onClick={() => onAnswer(false)}>No</Button>
         </div>
       )}
     </section>

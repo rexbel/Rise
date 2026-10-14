@@ -1,24 +1,27 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useMemo, useState } from "react"
-import { Badge } from "@/components/ui/badge"
+import { useEffect, useId, useMemo, useState } from "react"
+import { Phone, TriangleAlert, Undo2 } from "lucide-react"
+import { Slider as SliderPrimitive } from "radix-ui"
 import { Button } from "@/components/ui/button"
-import { Slider } from "@/components/ui/slider"
 import { FrameGate } from "@/components/play/FrameGate"
 import { PlayerHome } from "@/components/play/PlayerHome"
 import { SessionReport } from "@/components/play/SessionReport"
 import { usePlay } from "@/components/play/PlayProvider"
-import { playBody, playDisplay } from "@/components/play/playTheme"
+import { playBody, playDisplay, ptCta, ptFocus, ptLink, ptSecondary } from "@/components/play/playTheme"
 import ui from "@/content/play-ui.json"
 import lines from "@/content/patient-lines.json"
 import { playerHome } from "@/lib/play/playerHome"
 import type { ExerciseId } from "@/lib/play/programs"
-import { isLiveShell, nextQuestionId } from "@/lib/play/phaseView"
+import { isLiveShell, nextQuestionId, QUESTION_ORDER } from "@/lib/play/phaseView"
+import { questionNumber } from "@/lib/play/playResult"
 import { questionKind, questionText } from "@/lib/play/questionCopy"
-import { speak } from "@/lib/play/speak"
+import { speak, speakLines } from "@/lib/play/speak"
 import type { QuestionId } from "@/lib/play/types"
 import type { SeedPatient } from "@/lib/types"
+import { weekHref } from "@/lib/play/crewView"
+import { cn } from "@/lib/utils"
 
 export function PhoneColumn({ patient }: { patient: SeedPatient }) {
   const { session, caption } = usePlay()
@@ -26,39 +29,39 @@ export function PhoneColumn({ patient }: { patient: SeedPatient }) {
 
   return (
     <div
-      className={`mx-auto flex h-full min-h-[640px] w-full flex-col text-zinc-50 ${playBody.className} ${
+      className={cn(
+        "mx-auto flex h-full min-h-[640px] w-full flex-col text-pt-ink",
+        playBody.className,
         onHome
           ? "max-w-6xl border-0 bg-transparent shadow-none"
-          : "max-w-xl border border-zinc-800 bg-zinc-950 shadow-sm sm:max-w-2xl sm:rounded-2xl"
-      }`}
+          : "max-w-xl border border-pt-line bg-pt-surface shadow-sm sm:max-w-2xl sm:rounded-2xl",
+      )}
     >
       <header
-        className={`flex items-center justify-between gap-2 ${
-          onHome ? "px-1 py-2 sm:px-0 sm:pb-4" : "border-b border-zinc-800 px-4 py-3 sm:px-6"
-        }`}
+        className={cn(
+          "flex items-center justify-between gap-2",
+          onHome ? "px-1 py-2 sm:px-0 sm:pb-4" : "border-b border-pt-line px-4 py-3 sm:px-6",
+        )}
       >
         <div>
-          <p className="text-xl font-semibold tracking-wide text-orange-400">{ui.brand}</p>
+          <p className="text-xl font-semibold tracking-wide text-pt-accent">{ui.brand}</p>
           {!onHome ? (
-            <p className={`${playDisplay.className} text-xl font-bold`}>
-              {patient.display_name.split(" ")[0]}
-            </p>
+            <p className={`${playDisplay.className} text-xl font-bold`}>{patient.display_name.split(" ")[0]}</p>
           ) : null}
         </div>
-        <div className="flex gap-1">
-          {session.demo && !onHome ? (
-            <Badge className="border-0 bg-orange-500/20 text-xl text-orange-300">{ui.frame.demo_badge}</Badge>
-          ) : null}
-        </div>
+        {session.demo && !onHome ? (
+          <span className="shrink-0 whitespace-nowrap rounded-full border border-pt-accent/50 px-3 py-0.5 text-xl text-pt-ink">{ui.frame.demo_badge}</span>
+        ) : null}
       </header>
-      <div className={`flex min-h-0 flex-1 flex-col ${onHome ? "px-1 pb-6 sm:px-0" : "p-4 sm:p-6"}`}>
+      <div className={cn("flex min-h-0 flex-1 flex-col", onHome ? "px-1 pb-6 sm:px-0" : "p-4 sm:p-6")}>
         <PhoneBody patient={patient} />
       </div>
       {caption ? (
         <p
-          className={`border-t border-zinc-800 px-4 py-3 text-xl leading-snug text-zinc-100 sm:px-6 ${
-            onHome ? "mt-2 rounded-2xl border border-zinc-800 bg-zinc-950/80" : ""
-          }`}
+          className={cn(
+            "border-t border-pt-line px-4 py-3 text-xl leading-snug text-pt-ink sm:px-6",
+            onHome && "mt-2 rounded-2xl border bg-pt-surface",
+          )}
           aria-live="polite"
         >
           {caption}
@@ -69,9 +72,9 @@ export function PhoneColumn({ patient }: { patient: SeedPatient }) {
 }
 
 function PhoneBody({ patient }: { patient: SeedPatient }) {
-  const { session, dispatch, begin, voiceStopOn, setVoiceStopOn } = usePlay()
+  const { session, dispatch, begin, voiceStopOn, setVoiceStopOn, sessionId, invited } = usePlay()
   const { phase } = session
-  const home = useMemo(() => playerHome(patient), [patient.rise_id])
+  const home = useMemo(() => playerHome(patient), [patient])
   const missionKey = home.missions.map((m) => m.id).join("|")
 
   useEffect(() => {
@@ -93,12 +96,10 @@ function PhoneBody({ patient }: { patient: SeedPatient }) {
           showDemoBadge
           actions={
             <>
-              {home.missions.length > 1 ? (
-                <p className="text-xl text-zinc-500">{ui.program.pick_hint}</p>
-              ) : null}
+              {home.missions.length > 1 ? <p className="text-xl text-pt-muted">{ui.program.pick_hint}</p> : null}
               <Button
                 type="button"
-                className={`${playDisplay.className} h-16 min-h-16 w-full bg-orange-500 text-xl font-bold text-white transition motion-safe:active:scale-[0.98] motion-reduce:transform-none hover:bg-orange-400 lg:max-w-md`}
+                className={cn(ptCta, playDisplay.className, "h-16 min-h-16 motion-safe:active:scale-[0.98] lg:max-w-md")}
                 onClick={begin}
               >
                 {ui.home.begin}
@@ -106,18 +107,15 @@ function PhoneBody({ patient }: { patient: SeedPatient }) {
               {!session.demo ? (
                 <Button
                   type="button"
-                  variant="outline"
-                  className="h-14 min-h-14 w-full border-zinc-700 bg-transparent text-xl text-zinc-100 lg:max-w-md"
+                  aria-pressed={voiceStopOn}
+                  className={cn(ptSecondary, "lg:max-w-md")}
                   onClick={() => setVoiceStopOn(!voiceStopOn)}
                 >
                   Voice Stop {voiceStopOn ? "on" : "off"}
                 </Button>
               ) : null}
-              <Link
-                href="/play"
-                className="py-1 text-xl text-zinc-400 underline-offset-2 hover:text-zinc-200 hover:underline lg:max-w-md"
-              >
-                {ui.home.back_board}
+              <Link href={weekHref(patient.rise_id, sessionId, invited)} className={cn(ptLink, "inline-flex min-h-14 items-center self-start")}>
+                {ui.home.back_week}
               </Link>
             </>
           }
@@ -128,54 +126,73 @@ function PhoneBody({ patient }: { patient: SeedPatient }) {
   if (phase === "ready") {
     return (
       <Screen title={ui.ready.title} body={ui.ready.body}>
-        <BigButton onClick={() => dispatch({ type: "READY_OK" })}>{ui.ready.continue}</BigButton>
-        <Button asChild variant="outline" className="h-14 min-h-14 w-full text-lg">
+        <Button type="button" className={ptCta} onClick={() => dispatch({ type: "READY_OK" })}>
+          {ui.ready.continue}
+        </Button>
+        <Button asChild className={ptSecondary}>
           <Link href="/play">{ui.ready.not_now}</Link>
         </Button>
       </Screen>
     )
   }
-  if (phase === "frame") {
-    return (
-      <FrameGate demo={session.demo} onOk={() => dispatch({ type: "FRAME_OK" })} />
-    )
-  }
+  if (phase === "frame") return <FrameGate demo={session.demo} onOk={() => dispatch({ type: "FRAME_OK" })} />
   if (phase === "countdown") return <Countdown />
   // Live / paused render full-screen via PlaySessionView (not the phone column).
   if (isLiveShell(phase) || phase === "paused") {
-    return <p className="text-lg text-zinc-400">Opening full-screen play…</p>
+    return <p className="text-xl text-pt-muted">Opening full-screen play…</p>
   }
   if (phase === "questions") return <Questions />
-  if (phase === "emergencyConfirm") {
-    return (
-      <Screen title={lines.emergency.mistap_confirm}>
-        <BigButton
-          onClick={() => {
-            speak(lines.emergency.line)
-            dispatch({ type: "CONFIRM_EMERGENCY" })
-          }}
-        >
-          {ui.emergency.yes_i_meant_that}
-        </BigButton>
-        <BigButton variant="outline" onClick={() => dispatch({ type: "EMERGENCY_MISTAP" })}>
-          {ui.emergency.mistap}
-        </BigButton>
-      </Screen>
-    )
-  }
-  if (phase === "emergency") {
-    return (
-      <Screen title={lines.emergency.line}>
-        <p className="text-xl">{lines.emergency.care_team_told}</p>
-        <p className="text-xl">{lines.emergency.follow_up}</p>
-        <Button asChild className="h-14 min-h-14 text-lg">
-          <a href="tel:911">{ui.emergency.call}</a>
-        </Button>
-      </Screen>
-    )
-  }
+  if (phase === "emergency") return <Emergency />
   if (phase === "close") return <SessionReport patient={patient} />
   return null
+}
+
+/**
+ * Red flag: shown the moment Yes is tapped, no confirm step first. "Your care team is being told" appears (and is
+ * spoken) only after the server acknowledged the result; the 911 instruction never waits on the network.
+ */
+function Emergency() {
+  const { dispatch, delivery } = usePlay()
+  const told = delivery === "ok"
+
+  useEffect(() => {
+    void speakLines([lines.emergency.line, lines.emergency.follow_up])
+  }, [])
+
+  useEffect(() => {
+    if (told) void speakLines([lines.emergency.care_team_told])
+  }, [told])
+
+  return (
+    <div className="flex flex-1 flex-col justify-center gap-5">
+      <section role="alert" className="flex flex-col gap-4 rounded-2xl bg-pt-danger-fill p-5 text-white sm:p-6">
+        <TriangleAlert className="size-12" aria-hidden />
+        <h2 className={`${playDisplay.className} text-3xl font-bold leading-snug`}>{lines.emergency.line}</h2>
+        {told ? <p className="text-xl leading-snug" role="status">{lines.emergency.care_team_told}</p> : null}
+        <p className="text-xl leading-snug">{lines.emergency.follow_up}</p>
+        <Button
+          asChild
+          className="h-16 min-h-16 w-full rounded-xl bg-white text-2xl font-bold text-pt-danger-fill outline-none hover:bg-white/90 focus-visible:ring-[3px] focus-visible:ring-pt-focus focus-visible:ring-offset-2 focus-visible:ring-offset-pt-danger-fill"
+        >
+          <a href="tel:911">
+            <Phone className="size-7" aria-hidden />
+            {ui.emergency.call}
+          </a>
+        </Button>
+      </section>
+      <Button
+        type="button"
+        className={cn(
+          ptFocus,
+          "h-14 min-h-14 self-center rounded-xl border border-pt-line bg-transparent px-5 text-xl font-semibold text-pt-muted hover:bg-pt-surface-2 hover:text-pt-ink",
+        )}
+        onClick={() => dispatch({ type: "EMERGENCY_MISTAP" })}
+      >
+        <Undo2 className="size-5" aria-hidden />
+        {ui.emergency.mistap_undo}
+      </Button>
+    </div>
+  )
 }
 
 function Countdown() {
@@ -199,8 +216,8 @@ function Countdown() {
   }, [dispatch])
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 bg-gradient-to-b from-orange-500/10 to-transparent">
-      <p className={`${playDisplay.className} text-7xl font-extrabold text-orange-400`} aria-live="assertive">
+    <div className="flex flex-1 flex-col items-center justify-center gap-3 bg-gradient-to-b from-pt-accent/10 to-transparent">
+      <p className={`${playDisplay.className} text-7xl font-extrabold text-pt-accent`} aria-live="assertive">
         {ui.countdown[i]}
       </p>
     </div>
@@ -212,25 +229,58 @@ function Questions() {
   const id = nextQuestionId(session.answers) ?? "calf"
   const text = questionText(id)
   const kind = questionKind(id)
+  const titleId = useId()
 
   useEffect(() => {
     speak(text)
   }, [text])
 
   return (
-    <Screen title={text}>
-      {kind === "slider" ? <PainControl id={id} /> : <YesNo id={id} />}
-    </Screen>
+    <section className="flex flex-1 flex-col justify-center gap-5" aria-labelledby={titleId}>
+      <p className="text-xl text-pt-muted">
+        {ui.questions.progress.replace("{n}", String(questionNumber(id))).replace("{total}", String(QUESTION_ORDER.length))}
+      </p>
+      <h2 id={titleId} className={`${playDisplay.className} text-3xl font-bold leading-snug text-pt-ink`}>
+        {text}
+      </h2>
+      {kind === "slider" ? <PainControl key={id} id={id} titleId={titleId} /> : <YesNo key={id} id={id} />}
+    </section>
   )
 }
 
-function PainControl({ id }: { id: QuestionId }) {
+function PainControl({ id, titleId }: { id: QuestionId; titleId: string }) {
   const { dispatch } = usePlay()
   const [value, setValue] = useState(0)
+  const valueText = ui.questions.pain_value.replace("{n}", String(value))
   return (
     <>
-      <Slider min={0} max={10} step={1} value={[value]} onValueChange={(v) => setValue(v[0] ?? 0)} />
-      <BigButton onClick={() => dispatch({ type: "ANSWER", id, value })}>{ui.questions.next}</BigButton>
+      <p className={`${playDisplay.className} text-center text-7xl font-extrabold text-pt-ink`} aria-hidden>
+        {value}
+      </p>
+      <SliderPrimitive.Root
+        min={0}
+        max={10}
+        step={1}
+        value={[value]}
+        onValueChange={(v) => setValue(v[0] ?? 0)}
+        className="relative flex h-14 w-full touch-none select-none items-center"
+      >
+        <SliderPrimitive.Track className="relative h-3 grow overflow-hidden rounded-full bg-pt-surface-2">
+          <SliderPrimitive.Range className="absolute h-full bg-pt-accent" />
+        </SliderPrimitive.Track>
+        <SliderPrimitive.Thumb
+          aria-labelledby={titleId}
+          aria-valuetext={valueText}
+          className={cn(ptFocus, "block size-12 rounded-full border-4 border-pt-accent bg-pt-ink shadow-md")}
+        />
+      </SliderPrimitive.Root>
+      <div className="flex justify-between gap-4 text-xl text-pt-muted" aria-hidden>
+        <span>0 {ui.questions.pain_low}</span>
+        <span className="text-right">10 {ui.questions.pain_high}</span>
+      </div>
+      <Button type="button" className={ptCta} onClick={() => dispatch({ type: "ANSWER", id, value })}>
+        {ui.questions.next}
+      </Button>
     </>
   )
 }
@@ -239,10 +289,12 @@ function YesNo({ id }: { id: QuestionId }) {
   const { dispatch } = usePlay()
   return (
     <div className="grid grid-cols-2 gap-3">
-      <BigButton onClick={() => dispatch({ type: "ANSWER", id, value: true })}>{ui.questions.yes}</BigButton>
-      <BigButton variant="outline" onClick={() => dispatch({ type: "ANSWER", id, value: false })}>
+      <Button type="button" className={cn(ptSecondary, "h-20 min-h-20 text-2xl")} onClick={() => dispatch({ type: "ANSWER", id, value: true })}>
+        {ui.questions.yes}
+      </Button>
+      <Button type="button" className={cn(ptSecondary, "h-20 min-h-20 text-2xl")} onClick={() => dispatch({ type: "ANSWER", id, value: false })}>
         {ui.questions.no}
-      </BigButton>
+      </Button>
     </div>
   )
 }
@@ -250,26 +302,9 @@ function YesNo({ id }: { id: QuestionId }) {
 function Screen({ title, body, children }: { title: string; body?: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-1 flex-col justify-center gap-4">
-      <h2 className={`${playDisplay.className} text-2xl font-bold leading-snug text-zinc-50`}>{title}</h2>
-      {body ? <p className="text-xl text-zinc-400">{body}</p> : null}
+      <h2 className={`${playDisplay.className} text-3xl font-bold leading-snug text-pt-ink`}>{title}</h2>
+      {body ? <p className="text-xl text-pt-muted">{body}</p> : null}
       {children}
     </div>
   )
 }
-
-function BigButton({
-  children,
-  onClick,
-  variant = "default",
-}: {
-  children: React.ReactNode
-  onClick?: () => void
-  variant?: "default" | "outline"
-}) {
-  return (
-    <Button type="button" variant={variant} className="h-14 min-h-14 w-full text-lg" onClick={onClick}>
-      {children}
-    </Button>
-  )
-}
-

@@ -1,18 +1,23 @@
 {
-  "$comment": "Locked RehabNinja chrome. No STEADI, stand counts, or clinical labels.",
+  "$comment": "Locked RehabNinja chrome. No STEADI, stand counts, ranks, places, or clinical labels. Other patients appear only in `crew`: first name and initial, days active, and fixed cheers. Patient lines follow the SAMHSA trauma-informed rules in content/patient-lines.json.",
   "brand": "Rise · RehabNinja",
   "lobby": {
     "play": "Play",
-    "choose_profile": "Your board",
+    "choose_profile": "Your week",
     "pitch_demo": "Try a demo",
+    "clinic": "Clinical launch & monitoring platform",
     "tagline": "Stand in front of your camera. Good moves slice fruit."
   },
-  "picker": {
-    "title": "Your board",
-    "body": "You’re on the knee track with your cohort. Only you can play — peers are here for the board.",
-    "cta": "Sign up or sign in",
-    "continue": "Continue as {name} →",
-    "roster": "Received hits"
+  "week": {
+    "title": "Your week",
+    "body": "Your own progress, plus the crew cheering you on.",
+    "since_surgery": "Day {n} since surgery",
+    "checkins_label": "Check-ins done",
+    "last_time_label": "How last time felt",
+    "next_label": "Next check-in",
+    "missions_label": "Today's missions",
+    "continue": "Continue",
+    "back_lobby": "Back to start"
   },
   "home": {
     "eyebrow": "Your home",
@@ -22,13 +27,9 @@
     "mission_badge_selected": "Selected",
     "hint": "Fruit on your joints = good form. Bombs when knees drift or hands push off.",
     "begin": "Begin",
-    "back_board": "Back to your board",
+    "back_week": "Back to your week",
     "demo_chip": "Demo data",
     "meta_checkins": "{n} check-ins",
-    "chips": {
-      "rank": "Board place",
-      "hits": "Board hits"
-    },
     "recovery": {
       "tka": "Knee recovery",
       "tha": "Hip recovery",
@@ -55,7 +56,7 @@
   },
   "ready": {
     "title": "Before you start",
-    "body": "Sturdy chair behind you? Feeling OK to start?",
+    "body": "Sturdy chair behind you? Someone nearby? Feeling OK to start?",
     "continue": "I am ready",
     "not_now": "Not now"
   },
@@ -63,9 +64,17 @@
     "title": "We need to see you",
     "body": "Stand so your hips, knees, and feet are in the outline.",
     "continue": "Continue",
-    "demo_badge": "Demo replay"
+    "demo_badge": "Demo replay",
+    "looking_good": "Looking good.",
+    "step_back": "Step back until hips and knees are in the outline.",
+    "fallback": "We could not use the camera, so a demo replay will play instead."
   },
-  "countdown": ["Three", "Two", "One", "Go"],
+  "countdown": [
+    "Three",
+    "Two",
+    "One",
+    "Go"
+  ],
   "live": {
     "prompt": "RehabNinja",
     "how": "Clean reps slice fruit. Bombs = knees in or hands pushing off.",
@@ -76,9 +85,12 @@
     },
     "tracking_soft": "We need a clearer view — step back a little.",
     "step_back": "Step back so we can see your knees — then keep playing.",
+    "step_back_ok": "Looking good. Continue when you're ready.",
+    "step_back_wait": "We need to see your hips and knees.",
     "stop": "Stop",
     "pause": "Pause",
     "demo_badge": "Demo replay",
+    "video_badge": "AI-generated demo video",
     "reps_label": "Reps",
     "hold_label": "Hold"
   },
@@ -97,22 +109,133 @@
   "questions": {
     "yes": "Yes",
     "no": "No",
-    "next": "Next"
+    "next": "Next",
+    "progress": "Question {n} of {total}",
+    "pain_low": "No pain",
+    "pain_high": "Worst pain",
+    "pain_value": "{n} out of 10"
   },
   "emergency": {
-    "yes_i_meant_that": "Yes, I meant that",
-    "mistap": "No, go back",
-    "call": "Call now"
+    "call": "Call now",
+    "mistap_undo": "I tapped this by mistake"
   },
   "close": {
     "title": "Your session",
     "workout_label": "Workout",
     "hits_label": "Hits",
     "timeline_label": "Hit timeline",
+    "tip_label": "One tip for next time",
+    "today_label": "How today went",
+    "nurse_label": "A note for your nurse",
+    "step": "Step {n} of {total}",
+    "next": "Next",
     "care_team": "Your care team can review this session on the clinic board.",
     "done": "Done",
     "back_to_questions": "Answer questions again",
-    "change_profile": "Back to your board"
+    "change_profile": "Back to your week"
+  },
+  "note": {
+    "send": "Send to my nurse",
+    "skip": "Skip",
+    "placeholder": "Type, or tap the microphone on your keyboard",
+    "sent": "Your note was sent to your nurse.",
+    "not_sent": "Your note did not go through yet. You can try sending it again.",
+    "skipped": "No note this time. That's okay."
+  },
+  "crew": {
+    "heading": "Your crew",
+    "intro": "People on the same recovery path, cheering each other on. Only your name, days active, and cheers are shared.",
+    "goal_label": "Crew goal this week",
+    "goal_progress": "{done} of {target} crew days active this week",
+    "goal_reached": "Your crew showed up together this week.",
+    "you": "You",
+    "active_days": "Active {n} days this week",
+    "active_day_one": "Active one day this week",
+    "active_none": "Getting started this week",
+    "today": "Today",
+    "cheers_count": "{n} cheers",
+    "cheers_count_one": "One cheer",
+    "cheer_button": "Cheer",
+    "cheer_button_label": "Send a cheer to {name}",
+    "cheer_pick": "Pick a cheer for {name}",
+    "cheer_cancel": "Not now",
+    "cheer_sending": "Sending your cheer",
+    "cheered": "Cheered today",
+    "cheer_sent": "Your cheer went to {name}.",
+    "cheer_limit": "That is lots of cheering for today. Try again tomorrow.",
+    "cheer_failed": "Your cheer did not go through yet. You can try again.",
+    "cheers": {
+      "nice_work": "Nice work!",
+      "keep_going": "Keep going!",
+      "proud_of_you": "Proud of you!"
+    },
+    "for_you_heading": "Cheers for you",
+    "for_you_line": "{name} sent: {cheer}",
+    "for_you_empty": "Cheers from your crew will show up here.",
+    "join_heading": "Want to join your crew?",
+    "join_body": "Your crew is on a recovery path like yours. They cheer each other on. It is your choice.",
+    "join_shared_label": "What your crew sees",
+    "join_shared": [
+      "Your name with one initial, like Sam T.",
+      "Days you were active this week",
+      "Cheers you send and get"
+    ],
+    "join_private_label": "What your crew never sees",
+    "join_private": [
+      "How you did in your exercises",
+      "Your answers to health questions",
+      "Messages with your care team"
+    ],
+    "join_button": "Join my crew",
+    "join_sending": "Joining your crew",
+    "join_note": "You can leave any time.",
+    "join_members_label": "Who is on this crew",
+    "join_done": "You joined your crew. Welcome.",
+    "join_changed": "This card changed a little. Please read it again before you join.",
+    "join_failed": "Joining did not go through yet. You can try again.",
+    "join_again": "Join your crew on this phone to send cheers.",
+    "photo_label": "Show my photo",
+    "photo_on": "On",
+    "photo_off": "Off",
+    "photo_hint_on": "Your crew sees your photo.",
+    "photo_hint_off": "Your crew sees your initials.",
+    "photo_saving": "Saving your choice",
+    "photo_saved_on": "Your photo is now shown to your crew.",
+    "photo_saved_off": "Your photo is now hidden. Your crew sees your initials.",
+    "photo_failed": "That change did not save yet. You can try again.",
+    "settings_heading": "Your crew choices",
+    "leave_button": "Leave my crew",
+    "leave_confirm": "Leave your crew? You can join again later.",
+    "leave_yes": "Leave",
+    "leave_no": "Stay",
+    "leave_sending": "Leaving your crew",
+    "leave_done": "You left your crew. You can join again any time.",
+    "leave_failed": "Leaving did not go through yet. You can try again.",
+    "paused_heading": "Crew on hold",
+    "paused_body": "Your crew is on hold while your care team checks in. Your crew does not see why.",
+    "empty": "Your crew is just getting started. Others will show up here soon.",
+    "loading": "Loading your crew",
+    "error": "Your crew could not load right now. You can still play.",
+    "retry": "Try again",
+    "time": {
+      "now": "Just now",
+      "minute": "A minute ago",
+      "minutes": "{n} minutes ago",
+      "hour": "An hour ago",
+      "hours": "{n} hours ago",
+      "yesterday": "Yesterday",
+      "days": "{n} days ago"
+    },
+    "chip_days": "Days active",
+    "chip_days_value": "{n} this week",
+    "chip_cheers": "Cheers",
+    "demo": "Demo data",
+    "someone": "Someone on your crew",
+    "elsewhere_heading": "You are on your crew",
+    "elsewhere_body": "This phone does not know you yet. Join again here to change settings or leave.",
+    "elsewhere_button": "Join again on this phone",
+    "join_need_invite": "Please open the check-in link your care team sent, then join from there.",
+    "join_hold_note": "If your care team checks in with you, your crew will not see you for a while."
   },
   "synthetic": "Synthetic data"
 }

@@ -1,6 +1,8 @@
 "use client"
 
 import { useEffect, useRef } from "react"
+import { DROP_EVERY_PX, pruneDrops, spawnDrop, stepDrops, type Drop } from "@/lib/play/lobbyDrops"
+import { SCENE_PALETTE, type LobbyScene } from "@/lib/play/lobbyScene"
 
 type Phase =
   | "waiting"
@@ -26,22 +28,31 @@ const HERO_H = 30
 
 const TREE_COLORS = ["#6D8821", "#8FAC34", "#98B333"]
 
+
 type LobbyStageProps = {
   /** Pixels reserved at top for title/CTAs — playfield sits below this band. */
   topReserve?: number
   /** Pixels reserved at bottom — playfield sits above this band. */
   bottomReserve?: number
+  /** Rehab gym by day, hospital rooftops at night (lib/play/lobbyScene). */
+  scene?: LobbyScene
 }
 
 /**
  * Ambient Stick Hero–style loop for the RehabNinja lobby.
- * Green hills from the original; orange accents for RehabNinja.
+ * Green hills from the original; the hero is a surgeon ninja (teal scrub cap with the orange tie, white coat,
+ * mask) who drops crutches, pills, and band-aids behind him as he walks.
  * Auto-plays; no input. Pointer-events stay on the CTAs above.
  */
 export function LobbyStage({
   topReserve = 0,
   bottomReserve = 0,
+  scene = "gym",
 }: LobbyStageProps) {
+  const sceneRef = useRef<LobbyScene>(scene)
+  useEffect(() => {
+    sceneRef.current = scene
+  }, [scene])
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const topReserveRef = useRef(topReserve)
   const bottomReserveRef = useRef(bottomReserve)
@@ -94,6 +105,9 @@ export function LobbyStage({
     let platforms: Platform[] = []
     let sticks: Stick[] = []
     let trees: Tree[] = []
+    let drops: Drop[] = []
+    let dropCount = 0
+    let nextDropAt = 0
     let stretchTarget = 0
     const FLASH_LABELS = ["PERFECT", "COMBO ×2", "NICE", "STREAK"]
 
@@ -105,11 +119,10 @@ export function LobbyStage({
     window.addEventListener("resize", resize)
 
     const last = <T,>(arr: T[]) => arr[arr.length - 1]!
-    const sinus = (deg: number) => Math.sin((deg / 180) * Math.PI)
 
     function generatePlatform() {
-      const prev = last(platforms)
-      const furthest = prev.x + prev.w
+      const prev = platforms[platforms.length - 1]
+      const furthest = prev ? prev.x + prev.w : sceneOffset + 50
       // Tight gaps so the ninja keeps hopping across several blocks
       const gap = 36 + Math.floor(Math.random() * 55)
       const w = 36 + Math.floor(Math.random() * 40)
@@ -142,12 +155,14 @@ export function LobbyStage({
       trees = []
       for (let i = 0; i < 14; i++) generateTree()
       heroX = platforms[0]!.x + platforms[0]!.w - HERO_FROM_EDGE
+      drops = []
+      nextDropAt = heroX + DROP_EVERY_PX
       planStretch()
     }
 
     /** Next platform to the right of the current stick anchor. */
     function nextPlatformAfterStick(): Platform | undefined {
-      const stickX = last(sticks).x
+      const stickX = sticks[sticks.length - 1]?.x ?? sceneOffset
       return platforms.find((p) => p.x >= stickX - 0.5)
     }
 
@@ -224,9 +239,62 @@ export function LobbyStage({
       ctx.fill()
     }
 
+    function drawDrop(d: Drop) {
+      ctx.save()
+      // Resting supplies sit on the surface: lift each by half its height so it rests on top.
+      const lift = d.kind === "crutch" ? 2.2 : 3
+      ctx.translate(d.x, VIEW - PLATFORM_H + d.y - lift)
+      ctx.rotate(d.rot)
+      if (d.kind === "bandaid") {
+        ctx.fillStyle = "#F2C9A0"
+        drawRoundedRect(-8, -3, 16, 6, 3)
+        ctx.fillStyle = "#E7B184"
+        ctx.fillRect(-2.5, -3, 5, 6)
+        ctx.fillStyle = "#B9875A"
+        ctx.beginPath()
+        ctx.arc(-1.2, -1, 0.5, 0, Math.PI * 2)
+        ctx.arc(1.2, 1, 0.5, 0, Math.PI * 2)
+        ctx.fill()
+      } else if (d.kind === "pill") {
+        ctx.fillStyle = "#ffffff"
+        drawRoundedRect(-6, -2.5, 12, 5, 2.5)
+        ctx.fillStyle = "#f97316"
+        ctx.beginPath()
+        ctx.moveTo(0, -2.5)
+        ctx.lineTo(3.5, -2.5)
+        ctx.arc(3.5, 0, 2.5, -Math.PI / 2, Math.PI / 2)
+        ctx.lineTo(0, 2.5)
+        ctx.closePath()
+        ctx.fill()
+        ctx.strokeStyle = "#9CA3AF"
+        ctx.lineWidth = 0.5
+        ctx.stroke()
+      } else {
+        // Crutch, drawn vertical (it rests on its side)
+        ctx.strokeStyle = "#7A7F87"
+        ctx.lineWidth = 1.4
+        ctx.beginPath()
+        ctx.moveTo(-1.7, -12)
+        ctx.lineTo(-1.7, 10)
+        ctx.moveTo(1.7, -12)
+        ctx.lineTo(1.7, 10)
+        ctx.stroke()
+        ctx.fillStyle = "#4B5563"
+        drawRoundedRect(-4.5, -13.5, 9, 2.6, 1.3)
+        drawRoundedRect(-3, -1.5, 6, 2, 1)
+        ctx.fillStyle = "#111"
+        drawRoundedRect(-2.2, 9.5, 4.4, 2.2, 1)
+      }
+      ctx.restore()
+    }
+
+    function drawDrops() {
+      drops.forEach(drawDrop)
+    }
+
     function drawHero() {
       ctx.save()
-      // Stick Hero black body; orange band = RehabNinja
+      // Surgeon ninja: Stick Hero body, white coat, teal scrub cap with the orange RehabNinja tie, blue mask
       ctx.fillStyle = "black"
       ctx.translate(
         heroX - HERO_W / 2,
@@ -240,28 +308,62 @@ export function LobbyStage({
       ctx.beginPath()
       ctx.arc(-leg, 11.5, 3, 0, Math.PI * 2)
       ctx.fill()
+      // White coat over the lower body, with lapels and a red-cross pocket
+      const half = HERO_W / 2
+      ctx.fillStyle = "#ffffff"
       ctx.beginPath()
-      ctx.fillStyle = "white"
-      ctx.arc(5, -7, 3, 0, Math.PI * 2)
+      ctx.moveTo(-half, -3)
+      ctx.lineTo(half, -3)
+      ctx.lineTo(half, 6)
+      ctx.arcTo(half, 11, half - 5, 11, 5)
+      ctx.lineTo(-half + 5, 11)
+      ctx.arcTo(-half, 11, -half, 6, 5)
+      ctx.closePath()
+      ctx.fill()
+      ctx.strokeStyle = "#C9CDD3"
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(-2.5, -3)
+      ctx.lineTo(0, 2)
+      ctx.lineTo(2.5, -3)
+      ctx.stroke()
+      ctx.fillStyle = "#E24B4A"
+      drawRoundedRect(2.2, 4, 4.4, 4.4, 1)
+      ctx.strokeStyle = "#ffffff"
+      ctx.lineWidth = 0.9
+      ctx.beginPath()
+      ctx.moveTo(4.4, 4.9)
+      ctx.lineTo(4.4, 7.5)
+      ctx.moveTo(3.1, 6.2)
+      ctx.lineTo(5.7, 6.2)
+      ctx.stroke()
+      // Teal scrub cap with the orange tie trailing behind
+      ctx.fillStyle = "#1D9E75"
+      ctx.beginPath()
+      ctx.moveTo(-half - 1, -8.5)
+      ctx.quadraticCurveTo(-half - 1, -19.5, 0, -19.5)
+      ctx.quadraticCurveTo(half + 1, -19.5, half + 1, -8.5)
+      ctx.closePath()
       ctx.fill()
       ctx.fillStyle = "#f97316"
-      ctx.fillRect(-HERO_W / 2 - 1, -12, HERO_W + 2, 4.5)
       ctx.beginPath()
-      ctx.moveTo(-9, -14.5)
-      ctx.lineTo(-17, -18.5)
-      ctx.lineTo(-14, -8.5)
+      ctx.moveTo(-half, -11)
+      ctx.lineTo(-16, -14)
+      ctx.lineTo(-14.5, -7.5)
       ctx.fill()
+      // Eye and surgical mask
       ctx.beginPath()
-      ctx.moveTo(-10, -10.5)
-      ctx.lineTo(-15, -3.5)
-      ctx.lineTo(-5, -7)
+      ctx.fillStyle = "white"
+      ctx.arc(4.5, -6.3, 2.3, 0, Math.PI * 2)
       ctx.fill()
+      ctx.fillStyle = "#85B7EB"
+      drawRoundedRect(-0.8, -4.4, half + 0.8, 4.2, 1.8)
       ctx.restore()
     }
 
     function drawPlatforms() {
       platforms.forEach(({ x, w }) => {
-        ctx.fillStyle = "black"
+        ctx.fillStyle = SCENE_PALETTE[sceneRef.current].platform
         ctx.fillRect(
           x,
           VIEW - PLATFORM_H,
@@ -295,61 +397,148 @@ export function LobbyStage({
       })
     }
 
-    function getHillY(windowX: number, baseHeight: number, amplitude: number, stretch: number) {
-      const sineBaseY = window.innerHeight - baseHeight
-      return (
-        sinus((sceneOffset * BG_PARALLAX + windowX) * stretch) * amplitude +
-        sineBaseY
-      )
+
+
+
+    /** Parallax x for a background anchor (the old tree positions, reused for props and buildings). */
+    const propX = (x: number) => -sceneOffset * BG_PARALLAX + x
+    /** Stable 0..1 value per anchor so each prop keeps its look as it scrolls. */
+    const pick = (x: number) => {
+      const v = Math.sin(x * 12.9898) * 43758.5453
+      return v - Math.floor(v)
     }
 
-    function drawHill(
-      baseHeight: number,
-      amplitude: number,
-      stretch: number,
-      color: string,
-    ) {
-      const w = window.innerWidth
-      const h = window.innerHeight
-      ctx.beginPath()
-      ctx.moveTo(0, h)
-      ctx.lineTo(0, getHillY(0, baseHeight, amplitude, stretch))
-      for (let i = 0; i < w; i++) {
-        ctx.lineTo(i, getHillY(i, baseHeight, amplitude, stretch))
+    /** Day: bright PT clinic with windows, stall bars, parallel bars, exercise balls, and step blocks. */
+    function drawGym(w: number, h: number) {
+      const floorY = h - 100
+      ctx.fillStyle = "#F3EEE6"
+      ctx.fillRect(0, 0, w, h)
+      // Windows on a slower parallax band, in the free space between the lobby buttons and the floor
+      const winTop = Math.max(topReserveRef.current + 16, floorY - 230)
+      const winH = Math.min(120, floorY - 90 - winTop)
+      if (winH >= 50) {
+        const winW = 120
+        const winOffset = (sceneOffset * BG_PARALLAX * 0.5) % (winW + 60)
+        for (let x = -winOffset; x < w + winW; x += winW + 60) {
+          ctx.fillStyle = "#CFE6F2"
+          ctx.fillRect(x, winTop, winW, winH)
+          ctx.fillStyle = "#F3EEE6"
+          ctx.fillRect(x + winW / 2 - 2, winTop, 4, winH)
+          ctx.fillRect(x, winTop + winH / 2 - 2, winW, 4)
+        }
       }
-      ctx.lineTo(w, h)
-      ctx.fillStyle = color
-      ctx.fill()
+      ctx.fillStyle = "#D9C7A8"
+      ctx.fillRect(0, floorY, w, h - floorY)
+      ctx.fillStyle = "#CDB894"
+      ctx.fillRect(0, floorY, w, 3)
+      trees.forEach((t) => {
+        const x = propX(t.x)
+        if (x < -80 || x > w + 80) return
+        const kind = Math.floor(pick(t.x) * 4)
+        if (kind === 0) {
+          // Stall bars on the wall
+          ctx.strokeStyle = "#C69A6B"
+          ctx.lineWidth = 3
+          ctx.beginPath()
+          ctx.moveTo(x - 14, floorY)
+          ctx.lineTo(x - 14, floorY - 70)
+          ctx.moveTo(x + 14, floorY)
+          ctx.lineTo(x + 14, floorY - 70)
+          for (let y = floorY - 8; y > floorY - 70; y -= 10) {
+            ctx.moveTo(x - 14, y)
+            ctx.lineTo(x + 14, y)
+          }
+          ctx.stroke()
+        } else if (kind === 1) {
+          // Parallel bars
+          ctx.strokeStyle = "#7A7F87"
+          ctx.lineWidth = 3
+          ctx.beginPath()
+          ctx.moveTo(x - 30, floorY - 28)
+          ctx.lineTo(x + 30, floorY - 28)
+          ctx.moveTo(x - 30, floorY - 22)
+          ctx.lineTo(x + 30, floorY - 22)
+          ctx.moveTo(x - 26, floorY - 28)
+          ctx.lineTo(x - 26, floorY)
+          ctx.moveTo(x + 26, floorY - 28)
+          ctx.lineTo(x + 26, floorY)
+          ctx.stroke()
+        } else if (kind === 2) {
+          // Exercise ball
+          ctx.fillStyle = "#5DCAA5"
+          ctx.beginPath()
+          ctx.arc(x, floorY - 14, 14, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.strokeStyle = "#9FE1CB"
+          ctx.lineWidth = 1.5
+          ctx.beginPath()
+          ctx.arc(x, floorY - 8, 12, Math.PI * 1.15, Math.PI * 1.85)
+          ctx.stroke()
+        } else {
+          // Step block
+          ctx.fillStyle = "#f97316"
+          drawRoundedRect(x - 14, floorY - 10, 28, 10, 2)
+        }
+      })
     }
 
-    function drawTree(x: number, color: string) {
-      ctx.save()
-      const hill1Base = 100
-      const hill1Amp = 10
-      ctx.translate(
-        (-sceneOffset * BG_PARALLAX + x) * 1,
-        window.innerHeight - hill1Base + sinus(x) * hill1Amp,
-      )
-      ctx.fillStyle = "#7D833C"
-      ctx.fillRect(-1, -5, 2, 5)
+    /** Night: dusk sky, moon, twinkling stars, and a skyline with lit windows and the odd red-cross hospital. */
+    function drawRooftops(w: number, h: number) {
+      ctx.fillStyle = "#2B3554"
+      ctx.fillRect(0, 0, w, h)
+      // City haze sits low, behind the skyline, so the sky above the buttons stays one calm color
+      ctx.fillStyle = "#34416A"
+      ctx.fillRect(0, h - 260, w, 260)
+      ctx.fillStyle = "#F6E7B8"
       ctx.beginPath()
-      ctx.moveTo(-5, -5)
-      ctx.lineTo(0, -30)
-      ctx.lineTo(5, -5)
-      ctx.fillStyle = color
+      ctx.arc(w * 0.82, h * 0.1, 16, 0, Math.PI * 2)
       ctx.fill()
-      ctx.restore()
+      const t = pausedRef.current ? 0 : performance.now() / 900
+      for (let i = 0; i < 40; i++) {
+        const sx = pick(i + 0.5) * w
+        const sy = pick(i + 7.25) * h * 0.45
+        ctx.globalAlpha = 0.45 + 0.4 * Math.sin(t + i)
+        ctx.fillRect(sx, sy, 1.6, 1.6)
+      }
+      ctx.globalAlpha = 1
+      const groundY = h - 100
+      trees.forEach((tr) => {
+        const x = propX(tr.x)
+        if (x < -90 || x > w + 90) return
+        const r = pick(tr.x)
+        const bw = 34 + Math.floor(r * 34)
+        const bh = 90 + Math.floor(pick(tr.x + 3) * 150)
+        const hospital = r > 0.86
+        ctx.fillStyle = hospital ? "#E9EDF5" : "#1F2742"
+        ctx.fillRect(x - bw / 2, groundY - bh, bw, bh + 100)
+        if (hospital) {
+          ctx.fillStyle = "#E24B4A"
+          drawRoundedRect(x - 8, groundY - bh + 8, 16, 16, 2)
+          ctx.fillStyle = "#ffffff"
+          ctx.fillRect(x - 1.8, groundY - bh + 11, 3.6, 10)
+          ctx.fillRect(x - 5, groundY - bh + 14.2, 10, 3.6)
+        }
+        // Windows: a stable lit pattern per building
+        for (let wy = groundY - bh + (hospital ? 32 : 10); wy < groundY - 8; wy += 12) {
+          for (let wx = x - bw / 2 + 6; wx < x + bw / 2 - 8; wx += 10) {
+            const lit = pick(wx * 0.37 + wy) > 0.55
+            ctx.fillStyle = lit ? "#F6D27A" : hospital ? "#C9CDD3" : "#2E3858"
+            ctx.fillRect(wx, wy, 5, 6)
+          }
+        }
+      })
     }
 
     function drawHud() {
-      ctx.fillStyle = "#111"
+      const palette = SCENE_PALETTE[sceneRef.current]
+      ctx.fillStyle = palette.hud
       ctx.font = "900 36px ui-sans-serif, system-ui, sans-serif"
       ctx.textAlign = "right"
       ctx.fillText(String(score), window.innerWidth - 28, 48)
 
       if (performance.now() < flashUntil) {
         ctx.textAlign = "center"
-        ctx.fillStyle = "#ea580c"
+        ctx.fillStyle = palette.flash
         ctx.font = "800 26px ui-sans-serif, system-ui, sans-serif"
         ctx.globalAlpha = Math.min(1, (flashUntil - performance.now()) / 350)
         ctx.fillText(
@@ -366,22 +555,15 @@ export function LobbyStage({
       const h = window.innerHeight
       ctx.clearRect(0, 0, w, h)
 
-      // Stick Hero sky
-      const sky = ctx.createLinearGradient(0, 0, 0, h)
-      sky.addColorStop(0, "#BBD691")
-      sky.addColorStop(1, "#FEF1E1")
-      ctx.fillStyle = sky
-      ctx.fillRect(0, 0, w, h)
-
-      drawHill(100, 10, 1, "#95C629")
-      drawHill(70, 20, 0.5, "#659F1C")
-      trees.forEach((t) => drawTree(t.x, t.color))
+      if (sceneRef.current === "rooftops") drawRooftops(w, h)
+      else drawGym(w, h)
 
       ctx.save()
       ctx.translate((w - VIEW) / 2 - sceneOffset, sceneTop(h))
       drawPlatforms()
-      drawHero()
       drawSticks()
+      drawDrops()
+      drawHero()
       ctx.restore()
 
       drawHud()
@@ -400,7 +582,9 @@ export function LobbyStage({
         raf = requestAnimationFrame(animate)
         return
       }
-      const dt = ts - lastTs
+      // Clamp the step: after a backgrounded tab or a hot reload one giant frame would scroll the camera past
+      // every platform, the prune below would empty the world, and the loop would crash.
+      const dt = Math.min(50, ts - lastTs)
 
       switch (phase) {
         case "waiting": {
@@ -436,6 +620,10 @@ export function LobbyStage({
         }
         case "walking": {
           heroX += dt / 1.85
+          if (heroX >= nextDropAt) {
+            drops = spawnDrop(drops, heroX - HERO_W - 2, -HERO_H + 6, dropCount++)
+            nextDropAt = heroX + DROP_EVERY_PX
+          }
           const [landed] = stickHits()
           if (landed) {
             const maxX = landed.x + landed.w - HERO_FROM_EDGE
@@ -468,6 +656,7 @@ export function LobbyStage({
               (p) => p.x + p.w > sceneOffset - 80,
             )
             sticks = sticks.filter((s) => s.x > sceneOffset - 120)
+            drops = pruneDrops(drops, sceneOffset - 60)
             while (platforms.length < 10) generatePlatform()
             trees = trees.filter((t) => t.x > sceneOffset * BG_PARALLAX - 40)
             while (trees.length < 14) generateTree()
@@ -496,6 +685,7 @@ export function LobbyStage({
         }
       }
 
+      drops = stepDrops(drops, dt)
       draw()
       lastTs = ts
       raf = requestAnimationFrame(animate)

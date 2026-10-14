@@ -1,20 +1,57 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useRef, useState } from "react"
+import { Lock } from "lucide-react"
+import { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { Button } from "@/components/ui/button"
 import { LobbyStage } from "@/components/play/LobbyStage"
-import { playBody, playDisplay } from "@/components/play/playTheme"
+import { playBody, playDisplay, ptCta } from "@/components/play/playTheme"
+import { cn } from "@/lib/utils"
 import ui from "@/content/play-ui.json"
+import { sceneFor, type LobbyScene } from "@/lib/play/lobbyScene"
 
+/** Re-check once a minute so a lobby left open switches at dusk and dawn. */
+function subscribeMinute(onChange: () => void) {
+  const id = window.setInterval(onChange, 60_000)
+  return () => window.clearInterval(id)
+}
+
+/** ?scene=gym|rooftops overrides the clock (handy for a daytime pitch of the night scene). */
+function currentScene(): LobbyScene {
+  const forced = new URLSearchParams(window.location.search).get("scene")
+  return forced === "gym" || forced === "rooftops" ? forced : sceneFor(new Date())
+}
+
+/** Chrome colors per scene: dark text on the bright gym, light text on the night sky. */
+const CHROME: Record<LobbyScene, { main: string; ink: string; demo: string; clinic: string; ring: string }> = {
+  gym: {
+    main: "bg-[#F3EEE6] text-[var(--rn-ink)]",
+    ink: "text-[var(--rn-ink)]",
+    // The mark's green band and blue mask, darkened so white text passes AA (6.2:1 and 6.5:1).
+    demo: "bg-[#0F6E56] text-white hover:bg-[#0B5A46] focus-visible:ring-[var(--rn-ink)] focus-visible:ring-offset-[#F3EEE6]",
+    clinic: "border-[#185FA5]/50 bg-white/60 text-[#185FA5] hover:bg-white focus-visible:ring-[var(--rn-ink)] focus-visible:ring-offset-[#F3EEE6]",
+    ring: "focus-visible:ring-[var(--rn-ink)] focus-visible:ring-offset-[#F3EEE6]",
+  },
+  rooftops: {
+    main: "bg-[#2B3554] text-white",
+    ink: "text-white",
+    demo: "border-2 border-[#1F2742] bg-white text-[#1F2742] hover:bg-white/90 focus-visible:ring-white focus-visible:ring-offset-[#2B3554]",
+    clinic: "border-white/40 bg-[#1F2742]/60 text-white/90 hover:bg-[#1F2742] focus-visible:ring-white focus-visible:ring-offset-[#2B3554]",
+    ring: "focus-visible:ring-white focus-visible:ring-offset-[#2B3554]",
+  },
+}
+
+/** Medic ninja mark: black hood, green band with a white cross, blue mask, white coat collar. Same art as app/icon.svg. */
 function NinjaMark({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 40 40" fill="none" aria-hidden>
-      <circle cx="20" cy="20" r="20" fill="#0a0a0c" />
-      <rect x="8" y="14" width="24" height="5" rx="1" fill="#f97316" />
-      <path d="M8 14 L3 10 L6 18 Z" fill="#f97316" />
-      <path d="M8 16 L4 22 L10 18 Z" fill="#f97316" />
-      <circle cx="26" cy="22" r="2.5" fill="white" />
+      <circle cx="20" cy="20" r="19.5" fill="#ffffff" stroke="#111111" />
+      <path d="M3 26 Q3 4 20 4 Q37 4 37 26 Z" fill="#111111" />
+      <rect x="3" y="11" width="34" height="5" fill="#1D9E75" />
+      <path d="M18 13.5 H22 M20 11.6 V15.4" stroke="#ffffff" strokeWidth="1.4" />
+      <circle cx="26" cy="20" r="2.6" fill="#ffffff" />
+      <path d="M9 23 H33 Q32 30 20 30 Q10 30 9 23 Z" fill="#85B7EB" />
+      <path d="M12 32 L20 38 L28 32" stroke="#D3D1C7" strokeWidth="1.2" />
     </svg>
   )
 }
@@ -23,6 +60,9 @@ function NinjaMark({ className }: { className?: string }) {
 export function GameLobby() {
   const chromeRef = useRef<HTMLDivElement>(null)
   const [topReserve, setTopReserve] = useState(280)
+  // Server and first paint use the gym; the client switches to the right scene right after hydration.
+  const scene = useSyncExternalStore(subscribeMinute, currentScene, () => "gym" as LobbyScene)
+  const c = CHROME[scene]
 
   useEffect(() => {
     const el = chromeRef.current
@@ -36,9 +76,10 @@ export function GameLobby() {
 
   return (
     <main
-      className={`relative min-h-full flex-1 overflow-hidden bg-[#FEF1E1] text-zinc-900 ${playBody.className}`}
+      className={`relative min-h-full flex-1 overflow-hidden ${c.main} ${playBody.className}`}
+      data-scene={scene}
     >
-      <LobbyStage topReserve={topReserve} bottomReserve={0} />
+      <LobbyStage topReserve={topReserve} bottomReserve={0} scene={scene} />
 
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center px-5 pt-8 sm:pt-10">
         <div
@@ -48,11 +89,11 @@ export function GameLobby() {
           <div className="flex flex-col items-center gap-3">
             <NinjaMark className="size-14 drop-shadow-sm sm:size-16" />
             <h1
-              className={`${playDisplay.className} text-4xl font-extrabold tracking-tight text-zinc-900 sm:text-5xl`}
+              className={`${playDisplay.className} text-4xl font-extrabold tracking-tight ${c.ink} sm:text-5xl`}
             >
               RehabNinja
             </h1>
-            <p className="max-w-xs text-base font-semibold leading-snug text-zinc-700 sm:text-lg">
+            <p className={`max-w-xs text-xl font-semibold leading-snug ${c.ink}`}>
               {ui.lobby.tagline}
             </p>
           </div>
@@ -61,25 +102,30 @@ export function GameLobby() {
             <Button
               asChild
               size="lg"
-              className={`${playDisplay.className} h-14 min-h-14 w-full bg-orange-500 text-lg font-bold text-white shadow-md hover:bg-orange-400`}
+              className={cn(ptCta, playDisplay.className, "shadow-md", c.ring)}
             >
               <Link href="/play">{ui.lobby.play}</Link>
             </Button>
             <Button
               asChild
               size="lg"
-              variant="outline"
-              className={`${playBody.className} h-12 min-h-12 w-full border-zinc-800/35 bg-white/90 text-base font-semibold text-zinc-900 hover:bg-white`}
+              className={cn(ptCta, c.demo)}
             >
               <Link href="/play/rise-01?demo=1">{ui.lobby.pitch_demo}</Link>
             </Button>
           </div>
 
-          <nav className="pt-1 text-xs text-zinc-500">
-            <Link href="/clinic" className="underline-offset-2 hover:text-zinc-800 hover:underline">
-              Clinic
-            </Link>
-          </nav>
+          {/* Staff entry: deliberately quieter than the patient actions above. */}
+          <Link
+            href="/clinic"
+            className={cn(
+              "inline-flex min-h-11 items-center gap-2 self-center whitespace-nowrap rounded-lg border px-3 py-2 text-sm font-semibold tracking-wide outline-none focus-visible:ring-[3px] focus-visible:ring-offset-2",
+              c.clinic,
+            )}
+          >
+            <Lock className="size-3.5 shrink-0" aria-hidden />
+            {ui.lobby.clinic}
+          </Link>
         </div>
       </div>
     </main>
