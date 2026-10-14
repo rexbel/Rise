@@ -191,6 +191,12 @@ export function auditActionLabel(a: AuditEntry): string {
       return "Patient answers changed"
     case "reset":
       return "Reset"
+    case "followup_opened":
+      return "Follow-up opened"
+    case "followup_attempt":
+      return "Follow-up attempt: not reached"
+    case "followup_closed":
+      return "Follow-up closed"
   }
 }
 

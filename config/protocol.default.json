@@ -83,6 +83,17 @@
     ],
     "max_cheers_per_sender_per_day": 20
   },
+  "followup": {
+    "$comment": "Rise defaults, not clinical standards. A decided card with one of these final recommendations opens a follow-up task on the console's Today list; a person records how it ended. Due is 'today' for every open task; urgency orders the list.",
+    "opens_on": ["escalate_urgent", "human_confirm", "nurse_callback"],
+    "outcomes": [
+      { "code": "reached_plan_continues", "label": "Reached: plan continues", "closes": true },
+      { "code": "reached_visit_booked", "label": "Reached: visit booked", "closes": true },
+      { "code": "reached_urgent_care", "label": "Reached: sent for urgent care", "closes": true, "pauses_schedule": true },
+      { "code": "not_reached", "label": "Not reached: try again", "closes": false },
+      { "code": "other", "label": "Other", "closes": true, "requires_free_text": true }
+    ]
+  },
   "downgrade_reasons": [
     { "code": "spoke_with_patient", "label": "Spoke with the patient; lower priority is appropriate" },
     { "code": "known_finding", "label": "Finding already known and managed by the care team" },
