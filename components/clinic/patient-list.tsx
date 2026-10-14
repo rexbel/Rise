@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useMemo, useState } from "react"
-import { Send } from "lucide-react"
+import { CalendarClock, PauseCircle, Send, TriangleAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { SessionSnapshot } from "@/lib/types"
@@ -14,9 +14,10 @@ import {
   statusText,
   type PatientSummary,
 } from "./format"
+import { nextCheckInView, seedNextCheckIn } from "./followup"
 import { SendCheckInDialog } from "./send-dialog"
 import { Eyebrow, RecommendationText, STATUS_ICON, StatusText, focusRing } from "./status"
-import { useClinic } from "./store"
+import { useClinic, useNow } from "./store"
 
 /** C1: the seven seed patients, their recovery day, and what their latest session is doing. */
 export function PatientList() {
@@ -41,6 +42,7 @@ export function PatientList() {
             <Th className="text-right">Post-op day</Th>
             <Th>Episode</Th>
             <Th>Last check-in</Th>
+            <Th>Next check-in</Th>
             <Th>Session</Th>
             <Th>
               <span className="sr-only">Actions</span>
@@ -68,6 +70,9 @@ export function PatientList() {
               </td>
               <td className="py-3 pr-3">
                 <LastCheckIn p={p} session={latest.get(p.riseId)} />
+              </td>
+              <td className="py-3 pr-3">
+                <NextCheckInCell p={p} session={latest.get(p.riseId)} />
               </td>
               <td className="py-3 pr-3">
                 <SessionCell session={latest.get(p.riseId)} loaded={loaded} />
@@ -101,6 +106,10 @@ export function PatientList() {
               <dd>
                 <LastCheckIn p={p} session={latest.get(p.riseId)} />
               </dd>
+              <dt className="text-cl-muted">Next</dt>
+              <dd>
+                <NextCheckInCell p={p} session={latest.get(p.riseId)} />
+              </dd>
               <dt className="text-cl-muted">Session</dt>
               <dd>
                 <SessionCell session={latest.get(p.riseId)} loaded={loaded} />
@@ -110,6 +119,11 @@ export function PatientList() {
           </li>
         ))}
       </ul>
+
+      <p className="mt-3 text-sm text-cl-muted">
+        Next check-in follows the Rise default schedule (or the clinician-set cadence), not a clinical standard. A decided
+        card or a recorded follow-up updates it.
+      </p>
 
       <SendCheckInDialog patient={target} onClose={() => setTarget(null)} />
     </section>
@@ -126,7 +140,7 @@ function Th({ children, className }: { children: React.ReactNode; className?: st
 
 function Episode({ p }: { p: PatientSummary }) {
   return (
-    <span>
+    <span className="whitespace-nowrap">
       Day <span className="font-semibold tabular-nums">{p.episodeDay}</span> of {p.episodeLength}
       {p.episodeType === "reactivated" && <span className="block text-cl-muted">Reactivated</span>}
     </span>
@@ -144,6 +158,33 @@ function LastCheckIn({ p, session }: { p: PatientSummary; session: SessionSnapsh
   return (
     <span>
       {p.lastCheckIn.label} <span className="block text-cl-muted">POD {p.lastCheckIn.postOpDay}</span>
+    </span>
+  )
+}
+
+/** The latest session's next check-in, else the seed's scheduled one. Icon + words; never color alone. */
+function NextCheckInCell({ p, session }: { p: PatientSummary; session: SessionSnapshot | undefined }) {
+  const now = useNow(60_000)
+  const nc = session?.nextCheckIn ?? seedNextCheckIn(p.cadence)
+  const v = nextCheckInView(nc, now)
+  // Seed rows carry no due date, so "Scheduled" marks them as the plan rather than a session result.
+  const detail = v.on ?? (nc.source === "seed" ? "Scheduled" : null)
+  if (v.paused) {
+    return (
+      <span title={nc.reason}>
+        <StatusText icon={PauseCircle} tone="confirm">
+          Paused
+        </StatusText>
+        <span className="block text-cl-muted">until a clinician clears them</span>
+      </span>
+    )
+  }
+  return (
+    <span title={`${nc.reason} · ${nc.phase}`}>
+      <StatusText icon={v.overdue ? TriangleAlert : CalendarClock} tone={v.overdue ? "confirm" : "neutral"}>
+        {v.when}
+      </StatusText>
+      {detail && <span className="block whitespace-nowrap text-cl-muted">{detail}</span>}
     </span>
   )
 }
@@ -174,9 +215,11 @@ function SendButton({ p, onClick, className }: { p: PatientSummary; onClick: () 
       onClick={onClick}
       className={cn("h-11 border-cl-ink/30 bg-cl-surface px-3 text-base text-cl-ink hover:bg-cl-paper", focusRing, className)}
       aria-label={`Send check-in to ${p.name}`}
+      title={`Send check-in to ${p.name}`}
     >
       <Send aria-hidden />
-      Send check-in
+      {/* Icon-only on tablet widths so the table fits; the aria-label and title keep the name. */}
+      <span className="md:max-lg:sr-only">Send check-in</span>
     </Button>
   )
 }

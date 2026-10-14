@@ -25,6 +25,8 @@ export type PatientSummary = {
   episodeDay: number
   episodeLength: number
   lastCheckIn: { label: string; postOpDay: number }
+  /** The seed's scheduled next check-in (seed/patients.json cadence), used until a session sets one. */
+  cadence: { inDays: number; phase: string; reason: string }
 }
 
 export type Tone = "escalate" | "confirm" | "callback" | "ok" | "neutral"
