@@ -3,13 +3,14 @@
 /**
  * Patient phone (plan §5): P1 welcome -> P2 safety + setup -> instructions + countdown -> P3 chair stand
  * <-> P3a paused -> P4 four questions -> P5 closing (or the emergency screen alone on a red flag).
+ * Setup and closing go one screen at a time: one picture, one question, one big button.
  * Never shows a score, a stand count, a norm, or "below average". Every instruction is spoken and captioned.
  */
 import { useCallback, useEffect, useRef, useState } from "react"
-import { AlertTriangle, Check, Phone, Square } from "lucide-react"
+import Link from "next/link"
+import { AlertTriangle, ArrowLeft, Check, Loader2, Phone, Square, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
@@ -20,7 +21,7 @@ import { closingLines } from "@/lib/feedback"
 import { StandCounter, type CounterSummary } from "@/lib/pose/counter"
 import { triage } from "@/lib/rules"
 import { resolvePlaySessionId } from "@/lib/play/playResult"
-import { guideStepFor, SetupGuide } from "./setup-guide"
+import { SetupGuide } from "./setup-guide"
 import { sendEvent, sendResult } from "@/lib/session-client"
 import { steadiScore } from "@/lib/steadi"
 import type { CheckIn as PriorCheckIn, Recommendation, SeedPatient, SessionResult, SessionStatus, Symptoms, Trend } from "@/lib/types"
@@ -35,10 +36,15 @@ const DURATION_MS = protocol.test.duration_s * 1000
 const RESUME_WINDOW_MS = protocol.thresholds.stop_resume_window_s * 1000
 const QUESTIONS = protocol.symptom_questions
 const SETUP_CHECKS = [
-  { id: "chair", voice: "setup_chair" },
-  { id: "helper", voice: "setup_helper" },
-  { id: "phone", voice: "setup_phone" },
+  { id: "chair", voice: "setup_chair", confirm: "My chair is ready" },
+  { id: "helper", voice: "setup_helper", confirm: "Someone is nearby" },
+  { id: "phone", voice: "setup_phone", confirm: "My phone is in place" },
 ] as const
+/** Setup screens: the three safety checks, then "can I see all of you?". */
+const SETUP_STEPS = SETUP_CHECKS.length + 1
+const CLOSE_STEPS = 3
+type CloseKind = "today" | "next" | "note"
+const CLOSE_TITLE: Record<CloseKind, string> = { today: "How today went", next: "What happens next", note: "A note for your nurse" }
 
 /** Easier / same / harder than last time, from the patient's own history (plan §5). */
 function trendVsPrevious(s: CounterSummary, prev: PriorCheckIn | undefined, finishedEarly: boolean): Trend | "first" | "finished_early" {
@@ -73,6 +79,8 @@ export function CheckIn({
 
   const [step, setStep] = useState<Step>("welcome")
   const [checks, setChecks] = useState<Record<string, boolean>>({})
+  /** 0..2 = a safety check, 3 = framing. */
+  const [setupIdx, setSetupIdx] = useState(0)
   const [facing, setFacing] = useState<"environment" | "user">("environment")
   const [demo, setDemo] = useState(demoParam)
   const [countdown, setCountdown] = useState<number | null>(null)
@@ -82,6 +90,16 @@ export function CheckIn({
   const [pain, setPain] = useState(0)
   const [answers, setAnswers] = useState<Partial<Symptoms>>({})
   const [closing, setClosing] = useState<string[]>([])
+  /** Voice ids for closing[0] (trend) and closing[1] (next step). */
+  const [closingIds, setClosingIds] = useState<[string, string]>(["", ""])
+  /** Index into closeOrder. */
+  const [closeIdx, setCloseIdx] = useState(0)
+  /** When the care team will reach out, that comes first so it is seen and heard without a tap. */
+  const [closeOrder, setCloseOrder] = useState<CloseKind[]>(["today", "next", "note"])
+  const [noteError, setNoteError] = useState(false)
+  // Each step change moves focus to the new heading, so screen readers and keyboards follow the page.
+  const setupHeading = useRef<HTMLHeadingElement>(null)
+  const closeHeading = useRef<HTMLHeadingElement>(null)
   const [note, setNote] = useState("")
   const [noteSent, setNoteSent] = useState<"open" | "sent" | "skipped">("open")
   const [result, setResult] = useState<SessionResult | null>(null)
@@ -197,6 +215,7 @@ export function CheckIn({
   // ---- step actions
   const begin = () => {
     setStep("setup")
+    setSetupIdx(0)
     status("setting_up")
     void voice.say("setup_chair")
   }
@@ -220,6 +239,62 @@ export function CheckIn({
     startSeeded(patient, clock)
   }, [step, demo, patient, clock, startSeeded])
 
+  /** "Yes" on the current safety check: tick it, read the next one, or turn the camera on after the last. */
+  const confirmCheck = () => {
+    const c = SETUP_CHECKS[setupIdx]
+    if (!c) return
+    setChecks((x) => ({ ...x, [c.id]: true }))
+    const nextIdx = setupIdx + 1
+    setSetupIdx(nextIdx)
+    const next = SETUP_CHECKS[nextIdx]
+    if (next) void voice.say(next.voice)
+    else {
+      voice.stop()
+      voice.setCaption("")
+      if (!ready && !demo) startCamera(facing)
+    }
+  }
+
+  const backSetup = () => {
+    const i = Math.max(0, setupIdx - 1)
+    setSetupIdx(i)
+    void voice.say(SETUP_CHECKS[i].voice)
+  }
+
+  useEffect(() => {
+    if (step === "setup" && setupIdx > 0) setupHeading.current?.focus()
+  }, [step, setupIdx])
+  useEffect(() => {
+    if (step === "closing") closeHeading.current?.focus()
+  }, [step, closeIdx])
+
+  /** Demo only: a presenter goes straight to the framing screen. */
+  const skipSetup = () => {
+    voice.stop()
+    voice.setCaption("")
+    setChecks(Object.fromEntries(SETUP_CHECKS.map((c) => [c.id, true])))
+    setSetupIdx(SETUP_CHECKS.length)
+  }
+
+  // The patient is a few steps from the phone on the framing screen, so the framing result is spoken too.
+  const framingSaid = useRef<boolean | null>(null)
+  const onFramingScreen = step === "setup" && setupIdx === SETUP_CHECKS.length && ready
+  const framedNow = demo || visible
+  const say = voice.say
+  useEffect(() => {
+    if (!onFramingScreen) {
+      framingSaid.current = null
+      return
+    }
+    if (framingSaid.current === framedNow) return
+    // Speak a change only once it has held for a second, so a flickering detection doesn't chatter.
+    const id = setTimeout(() => {
+      framingSaid.current = framedNow
+      void say(framedNow ? "framing_ok" : "framing_back")
+    }, 1000)
+    return () => clearTimeout(id)
+  }, [onFramingScreen, framedNow, say])
+
   const allChecked = SETUP_CHECKS.every((c) => checks[c.id])
   const framed = demo || visible
   const canStart = allChecked && ready && framed
@@ -237,17 +312,28 @@ export function CheckIn({
   }
 
 
+  const countdownTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+  /** Stop pressed (or the page left) during 3-2-1: the test must not start. */
+  const cancelCountdown = useCallback(() => {
+    if (countdownTimer.current) clearInterval(countdownTimer.current)
+    countdownTimer.current = null
+    countdownStarted.current = false
+    setCountdown(null)
+  }, [])
+  useEffect(() => cancelCountdown, [cancelCountdown])
+
   const goCountdown = () => {
     if (countdownStarted.current) return
     countdownStarted.current = true
     void voice.say("countdown")
     let n = 3
     setCountdown(n)
-    const id = setInterval(() => {
+    const id = (countdownTimer.current = setInterval(() => {
       n--
       if (n > 0) setCountdown(n)
       else {
         clearInterval(id)
+        countdownTimer.current = null
         setCountdown(null)
         // Go: calibrate on the seated frames, start the 30 s clock at 0.
         setClock(0, true)
@@ -256,7 +342,7 @@ export function CheckIn({
         status("testing")
         setStep("test")
       }
-    }, 1000)
+    }, 1000))
   }
   const keepGoing = () => {
     resumed.current = true
@@ -334,26 +420,65 @@ export function CheckIn({
     const trend = trendVsPrevious(summary.current!, prev, finishedEarly.current)
     const rec: Recommendation | "finished_early" = finishedEarly.current ? "finished_early" : decision.recommendation
     const out = closingLines({ trend, recommendation: rec, redFlag: false, clinicName })
-    setClosing(out)
-    setStep("closing")
     const nextId = rec === "human_confirm" || rec === "finished_early" ? "next_finished_early" : `next_${rec}`
-    void (async () => {
-      await voice.say(`trend_${trend}`, out[0])
-      await voice.say(nextId, out[1])
-      await voice.say("closure", out[2])
-      await voice.say("note_prompt", lines.note_prompt)
-    })()
+    const order: CloseKind[] = rec === "continue_plan" ? ["today", "next", "note"] : ["next", "today", "note"]
+    setClosing(out)
+    setClosingIds([`trend_${trend}`, nextId])
+    setCloseOrder(order)
+    setCloseIdx(0)
+    setStep("closing")
+    sayClose(order[0], out, [`trend_${trend}`, nextId])
   }
 
-  const sendNote = (skip: boolean) => {
+  /** Each closing screen reads its own line when it opens. */
+  const sayClose = (kind: CloseKind, out = closing, ids = closingIds) => {
+    if (kind === "today") void voice.say(ids[0], out[0])
+    else if (kind === "next") void voice.say(ids[1], out[1])
+    else if (noteSent === "open") void voice.say("note_prompt", lines.note_prompt)
+    else void voice.say("closure", out[2])
+  }
+
+  const goClose = (i: number) => {
+    const j = Math.max(0, Math.min(CLOSE_STEPS - 1, i))
+    setCloseIdx(j)
+    sayClose(closeOrder[j])
+  }
+
+  const [noteSending, setNoteSending] = useState(false)
+  const [noteFailed, setNoteFailed] = useState(false)
+  const sendNote = async (skip: boolean) => {
+    if (!skip && !note.trim()) {
+      setNoteError(true)
+      return
+    }
     voice.stop()
-    if (!skip && note.trim() && result) void sendResult({ ...result, patientNote: note.trim() })
-    setNoteSent(skip || !note.trim() ? "skipped" : "sent")
+    if (!skip && result) {
+      // Only say "sent" once the server has it: a note can carry something the nurse must see.
+      setNoteSending(true)
+      const ok = await sendResult({ ...result, patientNote: note.trim() })
+      setNoteSending(false)
+      if (!ok) {
+        setNoteFailed(true)
+        return
+      }
+    }
+    setNoteFailed(false)
+    setNoteSent(skip ? "skipped" : "sent")
+    void voice.say("closure", closing[2])
+  }
+
+  /** Leave the demo from any screen: stop speaking and the countdown, then go back to the start screen. */
+  const exitDemo = () => {
+    voice.stop()
+    cancelCountdown()
   }
 
   // ---- render
   const progress = Math.min(1, Math.max(0, elapsed / DURATION_MS))
   const showCamera = step === "setup" || step === "instructions" || step === "test" || step === "paused"
+  /** Safety-check screens show a picture in a landscape frame; framing and the test use a portrait frame. */
+  const picture = step === "setup" && setupIdx < SETUP_CHECKS.length
+  const isDemo = demo || tier === "seeded"
 
   if (step === "emergency") {
     return (
@@ -371,29 +496,49 @@ export function CheckIn({
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-5 bg-pt-bg px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-6 text-xl text-pt-ink">
-      <header className="flex items-center justify-between gap-2">
-        <span className="text-xl font-medium text-pt-muted">{clinicName}</span>
-        <div className="flex gap-2">
-          {(demo || tier === "seeded") && <Badge className="border border-pt-accent/50 bg-transparent text-base text-pt-ink">Demo data</Badge>}
-          <Badge className="border-0 bg-pt-surface-2 text-base text-pt-ink">Synthetic patient</Badge>
+      <header className="flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xl font-medium text-pt-muted">{clinicName}</span>
+          {demo ? (
+            <Link
+              href="/"
+              onClick={exitDemo}
+              className="inline-flex min-h-14 shrink-0 items-center gap-2 rounded-full border border-pt-line px-4 text-xl font-medium text-pt-ink outline-none hover:bg-pt-surface-2 focus-visible:ring-[3px] focus-visible:ring-pt-focus"
+            >
+              <X aria-hidden className="size-5" /> Exit demo
+            </Link>
+          ) : (
+            !isDemo && <Badge className="border-0 bg-pt-surface-2 text-base text-pt-ink">Synthetic patient</Badge>
+          )}
         </div>
+        {/* "Demo data" whenever the replay is in use, including a camera fallback; Exit demo only in demo mode. */}
+        {isDemo && (
+          <div className="flex gap-2">
+            <Badge className="border border-pt-accent/50 bg-transparent text-base text-pt-ink">Demo data</Badge>
+            <Badge className="border-0 bg-pt-surface-2 text-base text-pt-ink">Synthetic patient</Badge>
+          </div>
+        )}
       </header>
 
       {/* Camera / skeleton: mounted across setup and test so the stream survives step changes. */}
-      <div className={cn("relative overflow-hidden rounded-xl bg-black", showCamera ? "block" : "hidden", step === "test" || step === "paused" ? "aspect-[3/4]" : "aspect-[4/3]")}>
+      <div
+        className={cn(
+          "relative mx-auto w-full overflow-hidden rounded-xl bg-black",
+          showCamera ? "block" : "hidden",
+          // Portrait frame, height-capped so the main button stays in view (shorter on the framing screen, which has more below it).
+          picture ? "aspect-[4/3]" : step === "setup" ? "aspect-[3/4] max-w-[calc(40dvh*0.75)]" : "aspect-[3/4] max-w-[calc(56dvh*0.75)]",
+        )}
+      >
         <video ref={videoRef} playsInline muted className={cn("h-full w-full", demo ? "object-contain" : "object-cover", demo && !demoVideo && "hidden", facing === "user" && !demo && "-scale-x-100")} />
-        {demo && demoVideo && (
-          <span className="absolute right-3 top-3 z-10 rounded-full bg-black/70 px-3 py-1 text-base font-medium text-white">AI-generated demo video</span>
+        {demo && demoVideo && !picture && (
+          // Bottom centre, clear of her face and the timer ring.
+          <span className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/70 px-3 py-1 text-base font-medium text-white">
+            AI-generated demo video
+          </span>
         )}
         <canvas ref={canvasRef} className={cn("pointer-events-none absolute inset-0 h-full w-full", facing === "user" && !demo && "-scale-x-100")} />
-        {/* Until the camera is on, show what each safety check looks like (follows the first unticked check). */}
-        {step === "setup" && !ready && !demo && <SetupGuide step={guideStepFor(checks)} />}
-        {step === "setup" && ready && (
-          <div className={cn("absolute inset-x-3 bottom-3 flex items-center gap-2 rounded-lg px-3 py-2 text-xl font-medium", framed ? "bg-emerald-800 text-white" : "bg-amber-300 text-black")} aria-live="polite">
-            {framed ? <Check aria-hidden className="size-5" /> : <AlertTriangle aria-hidden className="size-5" />}
-            {framed ? "I can see all of you" : "Step back so I can see you head to feet"}
-          </div>
-        )}
+        {/* Each safety-check screen shows what that check looks like. */}
+        {picture && <SetupGuide step={SETUP_CHECKS[setupIdx].id} />}
         {(step === "test" || step === "paused") && (
           <>
             <TimeRing progress={progress} />
@@ -407,7 +552,8 @@ export function CheckIn({
         )}
       </div>
 
-      {voice.caption && (step === "setup" || step === "instructions" || step === "test") && (
+      {/* Setup and closing screens print their spoken line as the heading, so the caption box is for the test only. */}
+      {voice.caption && (step === "instructions" || step === "test" || (step === "questions" && voice.caption !== QUESTIONS[qi].text)) && (
         <p className="min-h-16 rounded-lg bg-pt-surface px-4 py-3 text-xl leading-snug" aria-live="polite">{voice.caption}</p>
       )}
 
@@ -419,37 +565,70 @@ export function CheckIn({
         </section>
       )}
 
-      {step === "setup" && (
-        <section className="flex flex-col gap-4">
-          <h1 className="text-2xl font-semibold">Before we start</h1>
-          {SETUP_CHECKS.map((c) => (
-            <div key={c.id} className="flex items-start gap-3 rounded-lg border border-pt-line bg-pt-surface p-4">
-              <Checkbox id={c.id} className="mt-1 size-7" checked={!!checks[c.id]} onCheckedChange={(v) => {
-                setChecks((x) => ({ ...x, [c.id]: v === true }))
-                const next = SETUP_CHECKS[SETUP_CHECKS.findIndex((x) => x.id === c.id) + 1]
-                if (v === true && next && !checks[next.id]) void voice.say(next.voice)
-                if (v === true && !next && !ready && !demo) startCamera(facing)
-              }} />
-              <Label htmlFor={c.id} className="text-xl font-normal leading-snug">{voice.text(c.voice)}</Label>
-            </div>
-          ))}
-          {!ready && !demo && (
-            <Button size="lg" className={btn2} onClick={() => startCamera(facing)} disabled={!allChecked}>Turn on the camera</Button>
-          )}
-          {poseStatus && <p aria-live="polite" className="text-pt-muted">{poseStatus}</p>}
-          {poseError && !demo && <p role="alert" className="text-pt-danger">{poseError}</p>}
-          <div className="flex flex-wrap items-center justify-between gap-3 text-xl">
-            <Button size="lg" className={cn(btn2, "w-auto border-0 bg-transparent")} onClick={() => { const f = facing === "user" ? "environment" : "user"; setFacing(f); if (!demo) startCamera(f) }}>
-              Use {facing === "user" ? "back" : "front"} camera
-            </Button>
-            <div className="flex items-center gap-2">
-              <Switch id="demo" checked={demo} onCheckedChange={toggleDemo} />
-              <Label htmlFor="demo" className="text-xl">Use demo recording</Label>
-            </div>
+      {step === "setup" && picture && (
+        <section className="flex flex-1 flex-col gap-4" aria-labelledby="setup-q">
+          <StepCount n={setupIdx + 1} total={SETUP_STEPS} />
+          <h1 id="setup-q" ref={setupHeading} tabIndex={-1} className="text-2xl font-semibold leading-snug outline-none" aria-live="polite">
+            {voice.text(SETUP_CHECKS[setupIdx].voice)}
+          </h1>
+          <Button size="lg" className={btn} onClick={confirmCheck}>
+            <Check aria-hidden className="size-6" /> {SETUP_CHECKS[setupIdx].confirm}
+          </Button>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {setupIdx > 0 ? (
+              <Button size="lg" className={cn(btn2, "w-auto border-0 bg-transparent")} onClick={backSetup}>
+                <ArrowLeft aria-hidden className="size-5" /> Back
+              </Button>
+            ) : <span />}
+            {demo && (
+              <Button size="lg" className={cn(btn2, "w-auto border-0 bg-transparent text-pt-muted")} onClick={skipSetup}>
+                Skip setup (demo)
+              </Button>
+            )}
           </div>
-          <Button size="lg" className={btn} disabled={!canStart} onClick={() => void startInstructions()}>
+        </section>
+      )}
+
+      {step === "setup" && !picture && (
+        <section className="flex flex-col gap-4" aria-labelledby="frame-q">
+          <StepCount n={SETUP_STEPS} total={SETUP_STEPS} />
+          <h1 id="frame-q" ref={setupHeading} tabIndex={-1} className="text-2xl font-semibold leading-snug outline-none">Can I see all of you, from head to feet?</h1>
+          {/* Framing status, under the picture so it never covers the body. Icon and words, not color alone. */}
+          {!(poseError && !demo && !ready) && (
+            <p className="flex items-center gap-2 text-xl font-medium" aria-live="polite">
+              {!ready ? (
+                <><Loader2 aria-hidden className="size-6 animate-spin text-pt-muted motion-reduce:animate-none" /> {poseStatus || "Turning on the camera…"}</>
+              ) : framed ? (
+                <><Check aria-hidden className="size-6 text-emerald-400" /> {voice.text("framing_ok")}</>
+              ) : (
+                <><AlertTriangle aria-hidden className="size-6 text-amber-300" /> {voice.text("framing_back")}</>
+              )}
+            </p>
+          )}
+          {poseError && !demo && (
+            <div className="flex flex-col gap-3">
+              <p role="alert" className="text-pt-danger">{poseError}</p>
+              <Button size="lg" className={btn2} onClick={() => startCamera(facing)}>Try the camera again</Button>
+            </div>
+          )}
+          {/* Pinned like Stop, so it stays in view on short phones. */}
+          <Button size="lg" className={cn(btn, "sticky bottom-4 z-10")} disabled={!canStart} onClick={() => void startInstructions()}>
             I&apos;m ready
           </Button>
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xl">
+            <Button size="lg" className={cn(btn2, "w-auto border-0 bg-transparent")} onClick={backSetup}>
+              <ArrowLeft aria-hidden className="size-5" /> Back
+            </Button>
+            {!demo && (
+              <Button size="lg" className={cn(btn2, "w-auto border-0 bg-transparent")} onClick={() => { const f = facing === "user" ? "environment" : "user"; setFacing(f); startCamera(f) }}>
+                Use {facing === "user" ? "back" : "front"} camera
+              </Button>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <Switch id="demo" checked={demo} onCheckedChange={toggleDemo} />
+            <Label htmlFor="demo" className="text-xl">Use demo recording</Label>
+          </div>
         </section>
       )}
 
@@ -460,7 +639,12 @@ export function CheckIn({
       )}
 
       {(step === "test" || step === "instructions") && (
-        <Button size="lg" className={cn(ptStop, "sticky bottom-4 h-16 min-h-16 text-2xl")} onClick={() => (step === "test" ? pauseTest("button") : setStep("setup"))}>
+        <Button size="lg" className={cn(ptStop, "sticky bottom-4 h-16 min-h-16 text-2xl")} onClick={() => {
+          if (step === "test") return pauseTest("button")
+          voice.stop()
+          cancelCountdown()
+          setStep("setup")
+        }}>
           <Square aria-hidden className="size-6 fill-current" /> Stop
         </Button>
       )}
@@ -485,25 +669,84 @@ export function CheckIn({
       )}
 
       {step === "closing" && (
-        <section className="flex flex-col gap-5">
-          {closing.map((l, i) => (
-            <p key={i} className={cn("leading-snug", i === 0 && "text-2xl font-semibold")}>{l}</p>
-          ))}
-          {noteSent === "open" ? (
-            <div className="flex flex-col gap-3 rounded-lg border border-pt-line bg-pt-surface p-4">
-              <Label htmlFor="note" className="text-xl font-normal leading-snug">{lines.note_prompt}</Label>
-              <Textarea id="note" rows={3} className="border-pt-line bg-pt-bg text-xl text-pt-ink placeholder:text-pt-muted focus-visible:ring-pt-focus" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Type, or tap the microphone on your keyboard" />
-              <Button size="lg" className={btn} onClick={() => sendNote(false)} disabled={!note.trim()}>Send to my nurse</Button>
-              <Button size="lg" className={btn2} onClick={() => sendNote(true)}>Skip</Button>
+        <section className="flex flex-1 flex-col gap-5" aria-labelledby="close-h">
+          <div>
+            <StepCount n={closeIdx + 1} total={CLOSE_STEPS} />
+            <h1 id="close-h" ref={closeHeading} tabIndex={-1} className="mt-1 text-3xl font-bold text-pt-accent outline-none">
+              {CLOSE_TITLE[closeOrder[closeIdx]]}
+            </h1>
+          </div>
+
+          {closeOrder[closeIdx] === "today" && <p className="text-2xl font-semibold leading-snug" aria-live="polite">{closing[0]}</p>}
+
+          {closeOrder[closeIdx] === "next" && (
+            <div className="flex items-start gap-4 rounded-xl border border-pt-line bg-pt-surface p-5" aria-live="polite">
+              <Phone aria-hidden className="mt-1 size-7 shrink-0 text-pt-accent" />
+              <p className="text-2xl font-semibold leading-snug">{closing[1]}</p>
             </div>
-          ) : (
-            <p className="rounded-lg bg-pt-surface px-4 py-3" aria-live="polite">
-              {noteSent === "sent" ? "Your note was sent to your nurse. " : ""}You can close this page now.
-            </p>
           )}
+
+          {closeOrder[closeIdx] === "note" &&
+            (noteSent === "open" ? (
+              <div className="flex flex-col gap-3">
+                <Label htmlFor="note" className="text-xl font-normal leading-snug">{lines.note_prompt}</Label>
+                <Textarea
+                  id="note"
+                  rows={4}
+                  className="border-pt-line bg-pt-surface text-xl text-pt-ink placeholder:text-pt-muted focus-visible:ring-pt-focus"
+                  value={note}
+                  onChange={(e) => { setNote(e.target.value); setNoteError(false) }}
+                  placeholder="Type, or tap the microphone on your keyboard"
+                  aria-invalid={noteError}
+                  aria-describedby={noteError ? "note-error" : undefined}
+                />
+                {noteError && <p id="note-error" role="alert" className="text-pt-danger">Type a note first, or choose Skip.</p>}
+                {noteFailed && (
+                  <p role="alert" className="flex items-start gap-2 text-pt-danger">
+                    <AlertTriangle aria-hidden className="mt-1 size-5 shrink-0" /> Your note didn&apos;t send. Check your connection and try again.
+                  </p>
+                )}
+                <Button size="lg" className={btn} disabled={noteSending} onClick={() => void sendNote(false)}>
+                  {noteSending ? "Sending…" : noteFailed ? "Try sending again" : "Send to my nurse"}
+                </Button>
+                <Button size="lg" className={btn2} disabled={noteSending} onClick={() => void sendNote(true)}>Skip</Button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4" aria-live="polite">
+                {noteSent === "sent" && (
+                  <p className="flex items-center gap-2 rounded-lg bg-pt-surface px-4 py-3"><Check aria-hidden className="size-6 text-emerald-400" /> Your note was sent to your nurse.</p>
+                )}
+                <p className="text-2xl font-semibold leading-snug">{closing[2]}</p>
+              </div>
+            ))}
+
+          <div className="mt-auto flex flex-col gap-3">
+            {closeIdx < CLOSE_STEPS - 1 && (
+              <Button size="lg" className={btn} onClick={() => goClose(closeIdx + 1)}>Next</Button>
+            )}
+            {closeIdx > 0 && (
+              <Button size="lg" className={cn(btn2, "w-auto self-start border-0 bg-transparent")} onClick={() => goClose(closeIdx - 1)}>
+                <ArrowLeft aria-hidden className="size-5" /> Back
+              </Button>
+            )}
+          </div>
         </section>
       )}
     </main>
+  )
+}
+
+/** "Step n of total" in words, with dots for a glance; the words carry the meaning. */
+function StepCount({ n, total }: { n: number; total: number }) {
+  return (
+    <div className="flex items-center gap-3">
+      <p className="text-xl text-pt-muted">Step {n} of {total}</p>
+      <div className="flex gap-1.5" aria-hidden>
+        {Array.from({ length: total }, (_, i) => (
+          <span key={i} className={cn("size-2.5 rounded-full", i < n ? "bg-pt-accent" : "bg-pt-line")} />
+        ))}
+      </div>
+    </div>
   )
 }
 

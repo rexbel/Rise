@@ -12,7 +12,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -24,5 +24,14 @@ jobs:
         run: npm run check
       - name: Lint
         run: npm run lint
+      # next/font/google downloads every font file at build time, and fonts.gstatic.com sometimes fails one
+      # from GitHub runners ("Can't resolve '@vercel/turbopack-next/internal/font/google/font'"). Retry before
+      # calling it a real failure; a code error fails all three attempts the same way.
       - name: Production build
-        run: npm run build
+        run: |
+          for attempt in 1 2 3; do
+            npm run build && exit 0
+            echo "::warning::Build attempt $attempt failed; retrying in 20 s (Google Fonts download)"
+            sleep 20
+          done
+          exit 1
