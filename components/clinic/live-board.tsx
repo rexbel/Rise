@@ -19,7 +19,8 @@ import {
   SURFACE_LABEL,
   TIER_LABEL,
 } from "./format"
-import { DemoBadge, NeedsReview, RecommendationText, RedFlag, STATUS_ICON, StatusText, TONE_RULE, focusRing } from "./status"
+import { checkInKind, COULD_NOT_COMPLETE_LABEL } from "./session-facts"
+import { DemoBadge, NeedsReview, RealBadge, RecommendationText, RedFlag, STATUS_ICON, StatusText, TONE_RULE, focusRing } from "./status"
 import { useClinic, useNow } from "./store"
 
 /** C2: one tile per session, live from the SSE stream. */
@@ -129,6 +130,9 @@ function Tile({ s }: { s: SessionSnapshot }) {
           {statusText(s)}
         </StatusText>
         {s.status === "testing" && s.armsUsed && <span className="text-base text-cl-muted">· arms used</span>}
+        {s.status === "could_not_complete" && s.couldNotComplete && (
+          <span className="text-base text-cl-muted">· {COULD_NOT_COMPLETE_LABEL[s.couldNotComplete.reason]}, no test done</span>
+        )}
       </div>
 
       {card && final && (
@@ -165,7 +169,7 @@ function Tile({ s }: { s: SessionSnapshot }) {
       <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-sm text-cl-muted">
         {s.tier && <span>{TIER_LABEL[s.tier]}</span>}
         <span>Updated {formatAgo(s.updatedAt, now)}</span>
-        {s.demoData && <DemoBadge />}
+        {s.demoData ? <DemoBadge /> : checkInKind(s) === "real" && <RealBadge />}
       </div>
     </Link>
   )

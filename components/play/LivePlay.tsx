@@ -2,14 +2,19 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { Pause as PauseIcon, Square, Zap } from "lucide-react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { CameraTrouble, type CameraTroubleState } from "@/components/play/CameraTrouble"
+import { failureReason, isRealPlay, reportCouldNotComplete } from "@/components/play/couldNotComplete"
 import { HitTimeline } from "@/components/play/HitTimeline"
 import { PixiLiveField } from "@/components/play/PixiLiveField"
 import { FrameSilhouette } from "@/components/play/FrameSilhouette"
 import { usePlay } from "@/components/play/PlayProvider"
-import { playBody, playDisplay, ptCta, ptSecondary, ptStop } from "@/components/play/playTheme"
+import { playBody, playDisplay, ptCta, ptLink, ptSecondary, ptStop } from "@/components/play/playTheme"
 import { PoseTier } from "@/lib/types"
+import lines from "@/content/patient-lines.json"
 import ui from "@/content/play-ui.json"
+import { weekHref } from "@/lib/play/crewView"
 import { rulePack } from "@/lib/play/exerciseRules"
 import { createFindingTracker, type LiveVisual } from "@/lib/play/findings"
 import { createHitMissTracker, type HitMissEvent } from "@/lib/play/hitMiss"
@@ -62,7 +67,7 @@ function syncLoopVideo(v: HTMLVideoElement | null, tMs: number) {
   if (v.paused) void v.play().catch(() => {})
 }
 
-/** ?replay=1 forces demo replay even when a camera is available (recording a demo on a laptop). */
+/** ?replay=1 forces demo replay even when a camera is available (recording a demo on a laptop). Ignored on a real invite. */
 function replayForced(): boolean {
   return new URLSearchParams(window.location.search).get("replay") === "1"
 }
@@ -82,7 +87,18 @@ export function LivePlay() {
     resolveCosmosLook,
     recordRep,
     setSetSource,
+    invited,
+    demo,
+    sessionId,
+    inviteToken,
   } = usePlay()
+  /** A console invite for the patient's own camera: the replay never stands in for them. */
+  const real = isRealPlay(invited, demo)
+  /** Real invite: the camera or tracker failed at set start (help, then "Tell my care team"). null otherwise. */
+  const [trouble, setTrouble] = useState<CameraTroubleState | null>(null)
+  /** Bumped by Try again on the help screen. */
+  const [attempt, setAttempt] = useState(0)
+  const troubleReason = useRef<"camera" | "tracker">("camera")
   const pack = rulePack(session.exerciseId)
   const ex = exerciseById(session.exerciseId)
   const [keypoints, setKeypoints] = useState<Keypoints17 | null>(null)
@@ -121,6 +137,7 @@ export function LivePlay() {
       setVideoReplay(false)
       setCamHint(null)
       setShowCoach(true)
+      setTrouble(null)
     }
   }
 
@@ -212,6 +229,15 @@ export function LivePlay() {
     secondLookRef.current = triggerSecondLook
   }, [triggerSecondLook])
 
+  /** Real invite: note why the camera failed (before stopping it), then show help instead of a replay. */
+  const showTrouble = useCallback(() => {
+    troubleReason.current = failureReason(camVideoRef.current?.srcObject)
+    camApi.current.stop()
+    setUsingDemo(false)
+    setTrouble("help")
+    speak(lines.could_not_complete.spoken)
+  }, [camVideoRef])
+
   // Tell the relay which pose source feeds this set (seeded replay -> Demo data on the card).
   useEffect(() => {
     if (!inSet) return
@@ -238,12 +264,18 @@ export function LivePlay() {
       clientLog("info", "live set starting camera", { riseId: session.riseId, exerciseId: session.exerciseId })
       // If the framing step already failed, don't load the camera and body tracker a second time: on phones the
       // repeat load (plus the game's WebGL) can run the tab out of memory. Go straight to the replay.
-      const result = replayForced() || session.cameraFailed ? "forced" : await camApi.current.start("user")
+      // A real invite never replays: ?replay=1 and an earlier framing failure don't apply.
+      const result = !real && (replayForced() || session.cameraFailed) ? "forced" : await camApi.current.start("user")
       if (cancelled) return
       if (result === "live") {
         setUsingDemo(false)
         setCamHint(null)
         clientLog("info", "live camera path active")
+        return
+      }
+      if (real) {
+        clientLog("warn", "camera failed on a real invite: help, no replay", { result, err: camApi.current.error })
+        showTrouble()
         return
       }
       // cancelled (Strict Mode) or error → synthetic so live is never blank
@@ -287,6 +319,38 @@ export function LivePlay() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inSet, session.riseId, session.exerciseId, dispatch, resetHits])
+
+  // Try again on the help screen: restart the camera only (the set itself has not started counting).
+  useEffect(() => {
+    if (attempt === 0 || !real) return
+    let cancelled = false
+    void (async () => {
+      const result = await camApi.current.start("user")
+      if (cancelled) return
+      if (result === "live") setCamHint(null)
+      else showTrouble()
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [attempt, real, showTrouble])
+
+  const retryCamera = () => {
+    setTrouble(null)
+    setAttempt((n) => n + 1)
+  }
+
+  const tellCareTeam = async () => {
+    if (trouble === "sending") return
+    setTrouble("sending")
+    const ok = await reportCouldNotComplete(sessionId, troubleReason.current)
+    if (!ok) {
+      setTrouble("failed")
+      return
+    }
+    setTrouble("done")
+    speak(lines.could_not_complete.done)
+  }
 
   useEffect(() => {
     const bus = busRef.current
@@ -441,6 +505,25 @@ export function LivePlay() {
           </div>
         ) : null}
       </div>
+
+      {/* Real invite, camera failed: help in place of the stage (nothing is running, so no Stop or Pause). */}
+      {trouble ? (
+        <div className="absolute inset-0 z-30 overflow-y-auto bg-pt-bg">
+          <div className="mx-auto flex min-h-full w-full max-w-md flex-col px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1.5rem,env(safe-area-inset-top))]">
+            <CameraTrouble
+              state={trouble}
+              onRetry={retryCamera}
+              onTell={() => void tellCareTeam()}
+              headingClassName={playDisplay.className}
+              doneExtra={
+                <Link href={weekHref(inviteToken)} className={`${ptLink} inline-flex min-h-14 items-center self-start`}>
+                  {ui.home.back_week}
+                </Link>
+              }
+            />
+          </div>
+        </div>
+      ) : null}
 
       <HitTimeline hitLog={hitLog} size="sm" className="shrink-0 bg-pt-bg px-3 pt-2" />
 

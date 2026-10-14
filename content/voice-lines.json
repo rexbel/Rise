@@ -208,6 +208,14 @@
     {
       "id": "count_20",
       "text": "Twenty."
+    },
+    {
+      "id": "camera_trouble",
+      "text": "We couldn't start your camera. That's okay. You can try again, or tell your care team you couldn't do it today."
+    },
+    {
+      "id": "could_not_complete_done",
+      "text": "Your care team will see that the check-in didn't work today. There's nothing else you need to do right now."
     }
   ]
 }

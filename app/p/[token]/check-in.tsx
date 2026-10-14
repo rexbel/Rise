@@ -27,10 +27,12 @@ import { steadiScore } from "@/lib/steadi"
 import type { CheckIn as PriorCheckIn, PatientInvite, Recommendation, SeedPatient, SessionResult, SessionStatus, Symptoms, Trend } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { ptCta, ptSecondary, ptStop } from "@/components/play/ptClasses"
+import { CameraTrouble, type CameraTroubleState } from "@/components/play/CameraTrouble"
+import { failureReason, isRealInvite, reportCouldNotComplete } from "@/components/play/couldNotComplete"
 import { usePose } from "./use-pose"
 import { useVoice } from "./use-voice"
 
-type Step = "welcome" | "setup" | "instructions" | "test" | "paused" | "questions" | "closing" | "emergency"
+type Step = "welcome" | "setup" | "instructions" | "test" | "paused" | "questions" | "closing" | "emergency" | "could_not_complete"
 
 const DURATION_MS = protocol.test.duration_s * 1000
 const RESUME_WINDOW_MS = protocol.thresholds.stop_resume_window_s * 1000
@@ -85,6 +87,10 @@ export function CheckIn({
   const [setupIdx, setSetupIdx] = useState(0)
   const [facing, setFacing] = useState<"environment" | "user">("environment")
   const [demo, setDemo] = useState(invite ? invite.demo : demoParam)
+  /** A console invite for the patient's own camera: never the demo replay, never a skipped setup. */
+  const real = isRealInvite(invite)
+  /** Real invite only: telling the care team the camera didn't work ("help" until they choose). */
+  const [tellState, setTellState] = useState<CameraTroubleState>("help")
   const [countdown, setCountdown] = useState<number | null>(null)
   const [elapsed, setElapsed] = useState(0)
   const [repPulse, setRepPulse] = useState(0)
@@ -107,7 +113,7 @@ export function CheckIn({
   const [result, setResult] = useState<SessionResult | null>(null)
 
   const voice = useVoice()
-  const { videoRef, canvasRef, setFrameHandler, setTierHandler, tier, status: poseStatus, error: poseError, visible, ready, demoVideo, startLive, startSeeded } = usePose()
+  const { videoRef, canvasRef, setFrameHandler, setTierHandler, tier, status: poseStatus, error: poseError, visible, ready, demoVideo, startLive, startSeeded, stop: stopPose } = usePose()
 
   // Test clock: ms of active testing since Go (stops while paused). Negative before Go.
   const clockAcc = useRef(0)
@@ -228,6 +234,7 @@ export function CheckIn({
   }
 
   const toggleDemo = (on: boolean) => {
+    if (real) return
     setDemo(on)
     if (on) startSeeded(patient, clock)
     else void startLive(facing)
@@ -236,16 +243,17 @@ export function CheckIn({
   // ?demo=1 opens on the demo recording: start its replay when the setup step (and the camera frame) appears.
   const demoStarted = useRef(false)
   useEffect(() => {
-    if (step !== "setup" || !demo || demoStarted.current) return
+    if (step !== "setup" || !demo || real || demoStarted.current) return
     demoStarted.current = true
     startSeeded(patient, clock)
-  }, [step, demo, patient, clock, startSeeded])
+  }, [step, demo, real, patient, clock, startSeeded])
 
   /** "Yes" on the current safety check: tick it, read the next one, or turn the camera on after the last. */
   const confirmCheck = () => {
     const c = SETUP_CHECKS[setupIdx]
     if (!c) return
     setChecks((x) => ({ ...x, [c.id]: true }))
+    sendEvent({ type: "setup_confirmed", sessionId, check: c.id, at: Date.now() })
     const nextIdx = setupIdx + 1
     setSetupIdx(nextIdx)
     const next = SETUP_CHECKS[nextIdx]
@@ -272,6 +280,8 @@ export function CheckIn({
 
   /** Demo only: a presenter goes straight to the framing screen. */
   const skipSetup = () => {
+    if (real) return
+    sendEvent({ type: "setup_skipped", sessionId, at: Date.now() })
     voice.stop()
     voice.setCaption("")
     setChecks(Object.fromEntries(SETUP_CHECKS.map((c) => [c.id, true])))
@@ -296,6 +306,44 @@ export function CheckIn({
     }, 1000)
     return () => clearTimeout(id)
   }, [onFramingScreen, framedNow, say])
+
+  // Real invite: the camera or body tracker didn't start, so help replaces the framing screen (no replay).
+  const cameraTrouble = real && step === "setup" && setupIdx === SETUP_CHECKS.length && !!poseError && !ready
+  const troubleSaid = useRef(false)
+  useEffect(() => {
+    if (!cameraTrouble) {
+      troubleSaid.current = false
+      return
+    }
+    if (troubleSaid.current) return
+    troubleSaid.current = true
+    void say("camera_trouble", lines.could_not_complete.spoken)
+  }, [cameraTrouble, say])
+
+  const retryCamera = (f: "environment" | "user" = facing) => {
+    voice.stop()
+    voice.setCaption("")
+    setTellState("help")
+    setFacing(f)
+    startCamera(f)
+  }
+
+  /** "Tell my care team I couldn't do it today": wait for the server, then a calm closing. Never a replay. */
+  const tellCareTeam = async () => {
+    if (tellState === "sending") return
+    const reason = failureReason(videoRef.current?.srcObject)
+    voice.stop()
+    setTellState("sending")
+    const ok = await reportCouldNotComplete(sessionId, reason)
+    if (!ok) {
+      setTellState("failed")
+      return
+    }
+    stopPose()
+    setTellState("done")
+    setStep("could_not_complete")
+    void voice.say("could_not_complete_done", lines.could_not_complete.done)
+  }
 
   const allChecked = SETUP_CHECKS.every((c) => checks[c.id])
   const framed = demo || visible
@@ -477,7 +525,7 @@ export function CheckIn({
 
   // ---- render
   const progress = Math.min(1, Math.max(0, elapsed / DURATION_MS))
-  const showCamera = step === "setup" || step === "instructions" || step === "test" || step === "paused"
+  const showCamera = (step === "setup" && !cameraTrouble) || step === "instructions" || step === "test" || step === "paused"
   /** Safety-check screens show a picture in a landscape frame; framing and the test use a portrait frame. */
   const picture = step === "setup" && setupIdx < SETUP_CHECKS.length
   const isDemo = demo || tier === "seeded"
@@ -582,7 +630,7 @@ export function CheckIn({
                 <ArrowLeft aria-hidden className="size-5" /> Back
               </Button>
             ) : <span />}
-            {demo && (
+            {demo && !real && (
               <Button size="lg" className={cn(btn2, "w-auto border-0 bg-transparent text-pt-muted")} onClick={skipSetup}>
                 Skip setup (demo)
               </Button>
@@ -591,7 +639,22 @@ export function CheckIn({
         </section>
       )}
 
-      {step === "setup" && !picture && (
+      {cameraTrouble && (
+        <CameraTrouble
+          as="h1"
+          state={tellState}
+          onRetry={() => retryCamera()}
+          onTell={() => void tellCareTeam()}
+          switchCamera={{
+            label: facing === "user" ? lines.could_not_complete.use_back : lines.could_not_complete.use_front,
+            onClick: () => retryCamera(facing === "user" ? "environment" : "user"),
+          }}
+        />
+      )}
+
+      {step === "could_not_complete" && <CameraTrouble as="h1" state="done" onRetry={() => {}} onTell={() => {}} />}
+
+      {step === "setup" && !picture && !cameraTrouble && (
         <section className="flex flex-col gap-4" aria-labelledby="frame-q">
           <StepCount n={SETUP_STEPS} total={SETUP_STEPS} />
           <h1 id="frame-q" ref={setupHeading} tabIndex={-1} className="text-2xl font-semibold leading-snug outline-none">Can I see all of you, from head to feet?</h1>
@@ -627,10 +690,12 @@ export function CheckIn({
               </Button>
             )}
           </div>
-          <div className="flex items-center gap-3">
-            <Switch id="demo" checked={demo} onCheckedChange={toggleDemo} />
-            <Label htmlFor="demo" className="text-xl">Use demo recording</Label>
-          </div>
+          {!real && (
+            <div className="flex items-center gap-3">
+              <Switch id="demo" checked={demo} onCheckedChange={toggleDemo} />
+              <Label htmlFor="demo" className="text-xl">Use demo recording</Label>
+            </div>
+          )}
         </section>
       )}
 

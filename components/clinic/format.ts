@@ -145,7 +145,8 @@ export function downgradeOptions(from: Recommendation): Recommendation[] {
 export function sessionTone(s: Pick<SessionSnapshot, "card" | "audit" | "status">): Tone {
   const rec = finalRecommendation(s)
   if (rec) return RECOMMENDATION_TONE[rec]
-  if (s.status === "needs_confirmation" || s.status === "paused") return "confirm"
+  // Couldn't complete: a real patient tried and the camera failed, so a person should look.
+  if (s.status === "needs_confirmation" || s.status === "paused" || s.status === "could_not_complete") return "confirm"
   return "neutral"
 }
 
