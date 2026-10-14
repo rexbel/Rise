@@ -47,7 +47,7 @@ export function reducePlaySession(state: PlaySession, action: PlayAction): PlayS
     case "READY_OK":
       return state.phase === "ready" ? { ...state, phase: "frame" } : state
     case "FRAME_OK":
-      return state.phase === "frame" ? { ...state, phase: "countdown" } : state
+      return state.phase === "frame" ? { ...state, phase: "countdown", cameraFailed: !!action.cameraFailed } : state
     case "FRAME_LOST":
       return state
     case "COUNTDOWN_DONE":

@@ -135,7 +135,7 @@ function PhoneBody({ patient }: { patient: SeedPatient }) {
       </Screen>
     )
   }
-  if (phase === "frame") return <FrameGate demo={session.demo} onOk={() => dispatch({ type: "FRAME_OK" })} />
+  if (phase === "frame") return <FrameGate demo={session.demo} onOk={(cameraFailed) => dispatch({ type: "FRAME_OK", cameraFailed })} />
   if (phase === "countdown") return <Countdown />
   // Live / paused render full-screen via PlaySessionView (not the phone column).
   if (isLiveShell(phase) || phase === "paused") {

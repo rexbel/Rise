@@ -236,7 +236,9 @@ export function LivePlay() {
 
     void (async () => {
       clientLog("info", "live set starting camera", { riseId: session.riseId, exerciseId: session.exerciseId })
-      const result = replayForced() ? "forced" : await camApi.current.start("user")
+      // If the framing step already failed, don't load the camera and body tracker a second time: on phones the
+      // repeat load (plus the game's WebGL) can run the tab out of memory. Go straight to the replay.
+      const result = replayForced() || session.cameraFailed ? "forced" : await camApi.current.start("user")
       if (cancelled) return
       if (result === "live") {
         setUsingDemo(false)
