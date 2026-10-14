@@ -43,6 +43,49 @@ function draw(canvas: HTMLCanvasElement | null, kp: Keypoints17 | null, opaque: 
 
 export type FrameHandler = (kp: Keypoints17 | null) => void
 
+/** AI-generated demo footage (scripts/gen-demo-video.ts). Absent until generated: demo mode then stays keypoints-only. */
+export const DEMO_VIDEO_SRC = "/demo/sit-to-stand.mp4"
+
+/** Load the demo video into the camera <video>, held on its first (seated) frame. Resolves false when it isn't there. */
+async function loadDemoVideo(v: HTMLVideoElement | null): Promise<boolean> {
+  if (!v) return false
+  try {
+    const head = await fetch(DEMO_VIDEO_SRC, { method: "HEAD", signal: AbortSignal.timeout(4000) })
+    if (!head.ok) return false
+  } catch {
+    return false
+  }
+  ;(v.srcObject as MediaStream | null)?.getTracks().forEach((t) => t.stop())
+  v.srcObject = null
+  v.muted = true
+  v.playsInline = true
+  v.loop = false
+  v.src = DEMO_VIDEO_SRC
+  v.currentTime = 0
+  v.pause()
+  return true
+}
+
+/**
+ * Keep the demo video on the seeded clock (ms from Go): held on the first frame before Go, then playing in step.
+ * Drift over a quarter second is corrected by seeking, so the footage and the counted stands stay together.
+ */
+function syncDemoVideo(v: HTMLVideoElement | null, tMs: number) {
+  if (!v || !v.src || v.srcObject) return
+  const target = Math.max(0, tMs) / 1000
+  if (tMs <= 0) {
+    if (!v.paused) v.pause()
+    if (v.currentTime !== 0) v.currentTime = 0
+    return
+  }
+  if (Number.isFinite(v.duration) && target >= v.duration) {
+    if (!v.paused) v.pause()
+    return
+  }
+  if (Math.abs(v.currentTime - target) > 0.25) v.currentTime = target
+  if (v.paused) void v.play().catch(() => {})
+}
+
 /**
  * Camera + pose tier + frame loop for the patient phone. Live: camera -> selected tier -> onFrame, with the
  * mid-test swap to preloaded MediaPipe. Seeded: replays the patient's frames against `seededClock()` (ms from Go).
@@ -62,6 +105,8 @@ export function usePose() {
   const [visible, setVisible] = useState(false)
   const [fps, setFps] = useState(0)
   const [ready, setReady] = useState(false)
+  /** True when demo mode is showing the AI-generated demo video (public/demo/sit-to-stand.mp4) in the camera frame. */
+  const [demoVideo, setDemoVideo] = useState(false)
   const tierChange = useRef<(tier: PoseTier, fps: number) => void>(() => {})
 
   const stopAll = useCallback(() => {
@@ -92,6 +137,7 @@ export function usePose() {
           else hi = m - 1
         }
         kp = frames[lo]?.kp ?? null
+        syncDemoVideo(videoRef.current, t)
         draw(canvasRef.current, kp, true)
       } else if (est.current && videoRef.current) {
         kp = await est.current.primary.estimate(videoRef.current)
@@ -122,6 +168,11 @@ export function usePose() {
       setReady(false)
       stopAll()
       seeded.current = null
+      setDemoVideo(false)
+      if (videoRef.current) {
+        videoRef.current.removeAttribute("src")
+        videoRef.current.loop = false
+      }
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 640 }, height: { ideal: 480 } }, audio: false })
         const v = videoRef.current!
@@ -169,6 +220,10 @@ export function usePose() {
       void loadFixture(patient.rise_id).then((fx) => {
         if (fx && my === startGen.current && seeded.current) seeded.current = { frames: seededFrames(patient, fx), clock }
       })
+      // Show the demo video in the camera frame when it exists; its keypoints are the fixture above.
+      void loadDemoVideo(videoRef.current).then((ok) => {
+        if (my === startGen.current) setDemoVideo(ok)
+      })
     },
     [loop, stopAll],
   )
@@ -176,5 +231,5 @@ export function usePose() {
   const setFrameHandler = useCallback((fn: FrameHandler) => void (onFrame.current = fn), [])
   const setTierHandler = useCallback((fn: (tier: PoseTier, fps: number) => void) => void (tierChange.current = fn), [])
 
-  return { videoRef, canvasRef, setFrameHandler, setTierHandler, tier, status, error, visible, fps, ready, startLive, startSeeded, stop: stopAll }
+  return { videoRef, canvasRef, setFrameHandler, setTierHandler, tier, status, error, visible, fps, ready, demoVideo, startLive, startSeeded, stop: stopAll }
 }
