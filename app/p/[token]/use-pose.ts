@@ -137,8 +137,10 @@ export function usePose() {
           else hi = m - 1
         }
         kp = frames[lo]?.kp ?? null
-        syncDemoVideo(videoRef.current, t)
-        draw(canvasRef.current, kp, true)
+        const v = videoRef.current
+        syncDemoVideo(v, t)
+        // The demo video is the picture; its keypoints still drive the count, but no skeleton is drawn over her.
+        draw(canvasRef.current, v?.src && !v.srcObject ? null : kp, !(v?.src && !v.srcObject))
       } else if (est.current && videoRef.current) {
         kp = await est.current.primary.estimate(videoRef.current)
         const now = performance.now()
@@ -211,17 +213,20 @@ export function usePose() {
       const my = ++startGen.current
       stopAll()
       seeded.current = { frames: seededFrames(patient), clock }
+      setDemoVideo(false)
+      videoRef.current?.removeAttribute("src")
       setTier("seeded")
       setError(null)
       setStatus("")
       setReady(true)
       loop()
-      // Swap in the recorded fixture when this patient has one (it loads well before Go).
-      void loadFixture(patient.rise_id).then((fx) => {
-        if (fx && my === startGen.current && seeded.current) seeded.current = { frames: seededFrames(patient, fx), clock }
-      })
-      // Show the demo video in the camera frame when it exists; its keypoints are the fixture above.
-      void loadDemoVideo(videoRef.current).then((ok) => {
+      // Swap in the recorded fixture when this patient has one (it loads well before Go). The demo video shows in
+      // the camera frame only when that fixture was recorded from it, so the picture and the count always agree.
+      void loadFixture(patient.rise_id).then(async (fx) => {
+        if (!fx || my !== startGen.current || !seeded.current) return
+        seeded.current = { frames: seededFrames(patient, fx), clock }
+        if (fx.source !== `video:${DEMO_VIDEO_SRC.split("/").pop()}`) return
+        const ok = await loadDemoVideo(videoRef.current)
         if (my === startGen.current) setDemoVideo(ok)
       })
     },

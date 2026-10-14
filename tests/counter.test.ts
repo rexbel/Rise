@@ -90,6 +90,45 @@ describe("stand counter", () => {
     expect(summary.reps.every((r) => r.armsUsed)).toBe(true)
     expect(events.filter((e) => e.type === "arm_use")).toHaveLength(6)
   })
+
+  // Filmed from the front: crossed hands rest by the opposite shoulders, ~0.6 torso lengths from the shoulder midpoint.
+  // The seated lead-in sets the arm line, so a crossed-arms rise is clean and a push-off still counts.
+  const frontOn = (reach: (s: number, rep: number) => number) => {
+    const c = new StandCounter()
+    const at = (s: number, rep: number) => {
+      const kp = poseAt(s).map((k) => [...k]) as ReturnType<typeof poseAt>
+      const sh = [(kp[5][0] + kp[6][0]) / 2, (kp[5][1] + kp[6][1]) / 2]
+      const torso = Math.hypot(sh[0] - (kp[11][0] + kp[12][0]) / 2, sh[1] - (kp[11][1] + kp[12][1]) / 2)
+      const r = reach(s, rep) * torso
+      kp[9] = [sh[0] - r, sh[1], 0.95]
+      kp[10] = [sh[0] + r * 0.9, sh[1], 0.95]
+      return kp
+    }
+    for (let t = 0; t < 1000; t += 66) c.push({ t, kp: at(0, 1) })
+    c.start(1000)
+    let t = 1000
+    for (let rep = 1; rep <= 3; rep++) {
+      for (let i = 0; i <= 40; i++, t += 66) c.push({ t, kp: at(Math.sin((i / 40) * Math.PI), rep) })
+    }
+    return c.finish(30_000)
+  }
+
+  it("front-on, arms crossed: a forward lean of the crossed arms is not arm use", () => {
+    const s = frontOn((s) => 0.6 + 0.3 * s)
+    expect(s.rawStands).toBe(3)
+    expect(s.armsUsed).toBe(false)
+  })
+
+  it("front-on: pushing off the thighs from rep 2 is still arm use", () => {
+    const s = frontOn((s, rep) => (rep >= 2 && s > 0.05 && s < 0.95 ? 1.5 : 0.6))
+    expect(s.rawStands).toBe(3)
+    expect(s.armsFromRep).toBe(2)
+  })
+
+  it("hands already on the thighs at Go: the capped arm line still catches the push-off", () => {
+    const s = frontOn((s) => (s > 0.05 && s < 0.95 ? 1.3 : 1.0))
+    expect(s.armsFromRep).toBe(1)
+  })
 })
 
 

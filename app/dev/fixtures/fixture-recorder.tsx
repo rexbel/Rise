@@ -41,6 +41,21 @@ export function FixtureRecorder() {
   const [fixture, setFixture] = useState<Fixture | null>(null)
   const [check, setCheck] = useState<CounterSummary | null>(null)
 
+  // ?clip=/demo/sit-to-stand.mp4 loads a served clip (e.g. the AI demo video) without the file picker.
+  useEffect(() => {
+    const clip = new URLSearchParams(window.location.search).get("clip")
+    if (!clip?.startsWith("/")) return
+    const v = videoRef.current!
+    const onLoaded = () => {
+      setFileName(clip.split("/").pop() ?? clip)
+      setState("Clip loaded. Scrub to where Go should be (about 1 s before the first stand), then press Record.")
+    }
+    v.addEventListener("loadedmetadata", onLoaded, { once: true })
+    v.src = clip
+    v.muted = true
+    return () => v.removeEventListener("loadedmetadata", onLoaded)
+  }, [])
+
   useEffect(() => () => {
     run.current++
     est.current?.dispose()
@@ -77,7 +92,7 @@ export function FixtureRecorder() {
     v.src = URL.createObjectURL(f)
     v.muted = true
     setFileName(f.name)
-    setState("Clip loaded. Scrub to about 1 s before the first stand starts, then press Record.")
+    setState("Clip loaded. Scrub to where Go should be (about 1 s before the first stand), then press Record.")
   }
 
   const record = async () => {
@@ -94,19 +109,34 @@ export function FixtureRecorder() {
         setState(`Starting in ${n}… (stay seated)`)
         await new Promise((r) => setTimeout(r, 1000))
       }
-    } else {
-      await v.play()
     }
     setState("Recording… seated lead-in, then 30 s")
+    const kp3 = (kp: Keypoints17) => kp.map((p) => p.map((x) => Math.round(x * 1000) / 1000)) as Keypoints17
+    // A clip is timed by its own clock, so Go is the scrub point and the frames stay in step with the video when it is
+    // replayed in demo mode. The seated lead-in comes from the paused frame at Go (the counter calibrates on it).
+    const go = v.currentTime
+    if (source === "file") {
+      v.pause()
+      for (let t = -LEAD_IN_MS; t < 0 && run.current === my; t += 40) {
+        const kp = await e.estimate(v)
+        if (kp) frames.push({ t_ms: t, keypoints: kp3(kp) })
+      }
+      await v.play()
+    }
     const t0 = performance.now() + LEAD_IN_MS
     while (run.current === my) {
       const now = performance.now()
-      const t = Math.round(now - t0)
+      const t = source === "file" ? Math.round((v.currentTime - go) * 1000) : Math.round(now - t0)
       if (t > TEST_MS) break
       const kp = await e.estimate(v)
-      if (kp) frames.push({ t_ms: t, keypoints: kp.map((p) => p.map((x) => Math.round(x * 1000) / 1000)) as Keypoints17 })
+      if (kp && (source === "camera" || t > (frames.at(-1)?.t_ms ?? -Infinity))) frames.push({ t_ms: t, keypoints: kp3(kp) })
       if (source === "file" && v.ended) break
-      await new Promise((r) => requestAnimationFrame(r))
+      // A clip only has new pixels once per video frame; sampling faster just repeats them.
+      await new Promise((r) => {
+        if (source !== "file") return requestAnimationFrame(r)
+        v.requestVideoFrameCallback(() => r(null))
+        setTimeout(r, 250) // the clip may end before another frame arrives
+      })
     }
     if (source === "file") v.pause()
     if (run.current !== my) return

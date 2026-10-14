@@ -5,7 +5,9 @@
  *
  *   npx tsx scripts/gen-demo-video.ts still            dry run: show the request and credit cost
  *   npx tsx scripts/gen-demo-video.ts still --run      generate 4 still options (4 x 5 credits)
+ *   npx tsx scripts/gen-demo-video.ts edit --image <png> [--preset chair|zoom] [--count n] [--run]   (n x 2 credits)
  *   npx tsx scripts/gen-demo-video.ts segment 1 --image .demo-work/still-123.png [--run]   (50 credits)
+ *   npx tsx scripts/gen-demo-video.ts clip a|b --image .demo-work/still-123.png [--run]      (veo3.1_fast 8 s, 80 credits)
  *   npx tsx scripts/gen-demo-video.ts lastframe .demo-work/seg1-....mp4                    (ffmpeg, free)
  *   npx tsx scripts/gen-demo-video.ts stitch seg1.mp4 seg2.mp4 seg3.mp4                    (ffmpeg, free)
  *   npx tsx scripts/gen-demo-video.ts ledger                                               (credits spent)
@@ -25,7 +27,8 @@ const WORK = path.join(process.cwd(), ".demo-work")
 const LEDGER = path.join(WORK, "ledger.json")
 const OUT = path.join(process.cwd(), "public", "demo", "sit-to-stand.mp4")
 const BUDGET_CAP = 700
-const COST = { still: 5, segmentPerSecond: 5 } // gen4_image 720p; gen4_turbo per second (pricing guide)
+const COST = { still: 5, edit: 2, segmentPerSecond: 5, clipPerSecond: 10 } // gen4_image 720p; gen4_turbo and veo3.1_fast (no audio) per second
+const CLIP_SECONDS = 8
 const SEGMENT_SECONDS = 10
 const RATIO_IMAGE = "720:1280"
 const RATIO_VIDEO = "720:1280"
@@ -33,11 +36,36 @@ const RATIO_VIDEO = "720:1280"
 const CAMERA = "Static camera resting on the floor; the whole body stays in frame from head to feet. No camera movement, no cuts, no zoom."
 
 const STILL_PROMPT =
-  "Photorealistic vertical photo taken by a phone propped on the floor about 2.5 meters away, slightly low angle, " +
-  "showing the full body from head to feet of a 70-year-old person in plain comfortable clothes (gray sweatpants, " +
-  "navy long-sleeve top, white sneakers) sitting upright in the middle of a sturdy wooden chair without armrests, " +
-  "pushed back against a plain light wall. Arms crossed at the wrists over the chest, hands on opposite shoulders, " +
-  "feet flat on the floor. Bright even daylight in a tidy living room, uncluttered, no other people, no text."
+  "Photorealistic vertical photo. A plain gray metal folding chair with no arms, open at both sides, stands pushed " +
+  "back against a plain light wall. On it sits a 70-year-old woman with short white hair and glasses, navy " +
+  "long-sleeve top, gray sweatpants and white sneakers, sitting upright in the middle of the seat, arms crossed at " +
+  "the wrists over the chest with hands on opposite shoulders, knees bent at a right angle, feet flat on the floor. " +
+  "Her elbows and both sides of the seat are clearly visible with empty space beside the chair. Wide shot taken by a " +
+  "phone propped on the floor about 4 meters away: she and the chair fill only the lower half of the frame, with a " +
+  "large area of empty wall above her head (room for her to stand up fully and stay in frame), feet well above the " +
+  "bottom edge. Bright even daylight, light wood floor, uncluttered, no other chairs, no other people, no text."
+
+/**
+ * Keep the person, pose, room and camera; replace only the chair (the CDC test needs a chair without armrests).
+ * "No armrests" alone was ignored twice (models default to armchairs for a seated older adult); a folding chair has
+ * no arms by nature, so the model's own bias works for us.
+ */
+const EDIT_PROMPT =
+  "Photorealistic. Recreate @scene exactly: the same person, face, hair, glasses, clothes, sitting pose with arms " +
+  "crossed over the chest, feet flat on the floor, the same room, wall, floor, lighting and low camera angle, full body " +
+  "from head to feet. Replace only the chair with a plain gray metal folding chair (a simple armless folding chair " +
+  "with a flat seat and backrest), pushed back against the wall. The person's elbows and the sides of the seat are " +
+  "clearly visible with empty space beside them. No other changes, no text."
+
+/** Pull the camera back on an approved still so a full stand stays in frame. Same scene, more wall above the head. */
+const ZOOM_PROMPT =
+  "Photorealistic. The exact same scene as @scene: the same woman, face, glasses, clothes, the same armless gray metal " +
+  "folding chair, the same pose with arms crossed and feet flat, the same wall, floor and daylight, the same front-on " +
+  "camera height. Pull the camera back so the whole scene is smaller: she and the chair occupy only the lower half " +
+  "of the frame, with a tall area of plain empty wall above her head and visible floor below her feet. No other " +
+  "changes, no text."
+
+const EDIT_PRESETS = { chair: EDIT_PROMPT, zoom: ZOOM_PROMPT } as const
 
 const SEGMENTS: Record<1 | 2 | 3, string> = {
   1:
@@ -53,6 +81,28 @@ const SEGMENTS: Record<1 | 2 | 3, string> = {
     "upright and crosses the arms over the chest with hands on opposite shoulders, and stays still. " +
     CAMERA,
 }
+
+/**
+ * One stand and sit per clip, on veo3.1_fast with the same still as first and last frame, so she must end seated
+ * exactly where she began and clips join without a jump. gen4_turbo (first frame only) let her uncross her arms,
+ * bend over and walk out of frame. A = arms crossed (the CDC test); B = pushes off her thighs (the "used arms" case).
+ */
+const CLIPS: Record<"a" | "b", string> = {
+  a:
+    "The seated older woman keeps her arms crossed over her chest the whole time. She leans forward slightly and " +
+    "slowly rises straight up to a full upright stand, pauses standing tall for a moment, then slowly lowers herself " +
+    "back down to sit in the middle of the same chair, arms still crossed. She stays facing the camera in the same " +
+    "spot. Careful, realistic pace for a 70-year-old. " + CAMERA,
+  b:
+    "The seated older woman uncrosses her arms, places both hands on her thighs and pushes off them to slowly rise to " +
+    "a full upright stand, pauses standing tall, then slowly sits back down in the middle of the same chair and " +
+    "crosses her arms over her chest again. She stays facing the camera in the same spot. Careful, realistic pace " +
+    "for a 70-year-old. " + CAMERA,
+}
+
+const CLIP_NEGATIVE =
+  "walking away, leaving the frame, turning around, bending down, touching shoes, camera movement, zoom, cut, " +
+  "head cropped, extra people, text, captions"
 
 type Ledger = { spent: number; entries: { at: string; kind: string; credits: number; taskId?: string; file?: string }[] }
 
@@ -148,6 +198,33 @@ async function still(run: boolean, count: number) {
   }
 }
 
+/** Edit a still with gen4_image_turbo (reference image), 3 variations. */
+async function edit(run: boolean, image: string, count = 3, preset: keyof typeof EDIT_PRESETS = "chair") {
+  const prompt = EDIT_PRESETS[preset]
+  if (!existsSync(image)) throw new Error(`no such image: ${image}`)
+  const cost = COST.edit * count
+  const spent = guard(cost)
+  console.log(`edit: gen4_image_turbo ${RATIO_IMAGE} x ${count} from ${image} = ${cost} credits (spent so far ${spent}/${BUDGET_CAP})`)
+  console.log(`prompt (${preset}): ${prompt}`)
+  if (!run) return console.log("dry run: add --run to generate")
+  const base = path.basename(image, path.extname(image))
+  for (let i = 0; i < count; i++) {
+    const seed = Math.floor(Math.random() * 4_000_000_000)
+    const task = await api("POST", "/v1/text_to_image", {
+      model: "gen4_image_turbo",
+      promptText: prompt,
+      ratio: RATIO_IMAGE,
+      seed,
+      referenceImages: [{ uri: dataUri(image), tag: "scene" }],
+    })
+    const id = String(task.id)
+    record("edit", COST.edit, id)
+    const [url] = await waitFor(id)
+    const file = await download(url, path.join(WORK, `${base}-${preset}-${seed}.png`))
+    console.log(`saved ${path.relative(process.cwd(), file)}`)
+  }
+}
+
 async function segment(run: boolean, n: 1 | 2 | 3, image: string) {
   if (!SEGMENTS[n]) throw new Error("segment must be 1, 2, or 3")
   if (!existsSync(image)) throw new Error(`no such image: ${image}`)
@@ -167,6 +244,35 @@ async function segment(run: boolean, n: 1 | 2 | 3, image: string) {
   record(`segment-${n}`, cost, id)
   const [url] = await waitFor(id)
   const file = await download(url, path.join(WORK, `seg${n}-${Date.now()}.mp4`))
+  console.log(`saved ${path.relative(process.cwd(), file)}`)
+}
+
+async function clip(run: boolean, which: "a" | "b", image: string) {
+  if (!CLIPS[which]) throw new Error("clip must be a or b")
+  if (!existsSync(image)) throw new Error(`no such image: ${image}`)
+  const cost = COST.clipPerSecond * CLIP_SECONDS
+  const spent = guard(cost)
+  console.log(`clip ${which}: veo3.1_fast ${RATIO_VIDEO} ${CLIP_SECONDS}s, first+last frame ${image}, no audio = ${cost} credits (spent so far ${spent}/${BUDGET_CAP})`)
+  console.log(`prompt: ${CLIPS[which]}`)
+  console.log(`negative: ${CLIP_NEGATIVE}`)
+  if (!run) return console.log("dry run: add --run to generate")
+  const uri = dataUri(image)
+  const task = await api("POST", "/v1/image_to_video", {
+    model: "veo3.1_fast",
+    promptImage: [
+      { uri, position: "first" },
+      { uri, position: "last" },
+    ],
+    promptText: CLIPS[which],
+    negativePrompt: CLIP_NEGATIVE,
+    ratio: RATIO_VIDEO,
+    duration: CLIP_SECONDS,
+    audio: false,
+  })
+  const id = String(task.id)
+  record(`clip-${which}`, cost, id)
+  const [url] = await waitFor(id)
+  const file = await download(url, path.join(WORK, `clip-${which}-${Date.now()}.mp4`))
   console.log(`saved ${path.relative(process.cwd(), file)}`)
 }
 
@@ -195,15 +301,29 @@ async function main() {
   const [cmd, ...rest] = process.argv.slice(2)
   const run = rest.includes("--run")
   const args = rest.filter((a) => a !== "--run")
-  if (cmd === "still") return still(run, 4)
+  if (cmd === "still") {
+    const c = args.indexOf("--count")
+    return still(run, c >= 0 ? Math.max(1, Math.min(4, Number(args[c + 1]) || 4)) : 4)
+  }
+  if (cmd === "edit") {
+    const imgIdx = args.indexOf("--image")
+    const c = args.indexOf("--count")
+    const pr = args.indexOf("--preset")
+    const preset = pr >= 0 && args[pr + 1] === "zoom" ? "zoom" : "chair"
+    return edit(run, imgIdx >= 0 ? args[imgIdx + 1] : "", c >= 0 ? Math.max(1, Math.min(3, Number(args[c + 1]) || 3)) : 3, preset)
+  }
   if (cmd === "segment") {
     const imgIdx = args.indexOf("--image")
     return segment(run, Number(args[0]) as 1 | 2 | 3, imgIdx >= 0 ? args[imgIdx + 1] : "")
   }
+  if (cmd === "clip") {
+    const imgIdx = args.indexOf("--image")
+    return clip(run, args[0] as "a" | "b", imgIdx >= 0 ? args[imgIdx + 1] : "")
+  }
   if (cmd === "lastframe") return lastframe(args[0])
   if (cmd === "stitch") return stitch(args)
   if (cmd === "ledger") return console.log(JSON.stringify(ledger(), null, 2))
-  console.log("usage: still | segment <1|2|3> --image <file> | lastframe <mp4> | stitch <mp4...> | ledger   (add --run to spend)")
+  console.log("usage: still | edit --image <file> | segment <1|2|3> --image <file> | clip a|b --image <file> | lastframe <mp4> | stitch <mp4...> | ledger   (add --run to spend)")
 }
 
 main().catch((e) => {

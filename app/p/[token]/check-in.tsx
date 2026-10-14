@@ -212,6 +212,14 @@ export function CheckIn({
     else void startLive(facing)
   }
 
+  // ?demo=1 opens on the demo recording: start its replay when the setup step (and the camera frame) appears.
+  const demoStarted = useRef(false)
+  useEffect(() => {
+    if (step !== "setup" || !demo || demoStarted.current) return
+    demoStarted.current = true
+    startSeeded(patient, clock)
+  }, [step, demo, patient, clock, startSeeded])
+
   const allChecked = SETUP_CHECKS.every((c) => checks[c.id])
   const framed = demo || visible
   const canStart = allChecked && ready && framed
@@ -373,7 +381,7 @@ export function CheckIn({
 
       {/* Camera / skeleton: mounted across setup and test so the stream survives step changes. */}
       <div className={cn("relative overflow-hidden rounded-xl bg-black", showCamera ? "block" : "hidden", step === "test" || step === "paused" ? "aspect-[3/4]" : "aspect-[4/3]")}>
-        <video ref={videoRef} playsInline muted className={cn("h-full w-full object-cover", demo && !demoVideo && "hidden", facing === "user" && !demo && "-scale-x-100")} />
+        <video ref={videoRef} playsInline muted className={cn("h-full w-full", demo ? "object-contain" : "object-cover", demo && !demoVideo && "hidden", facing === "user" && !demo && "-scale-x-100")} />
         {demo && demoVideo && (
           <span className="absolute right-3 top-3 z-10 rounded-full bg-black/70 px-3 py-1 text-base font-medium text-white">AI-generated demo video</span>
         )}
