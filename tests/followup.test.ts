@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it } from "vitest"
 import { exportCrew, importCrew, joinCrew } from "../lib/crew"
 import { CREW_CONSENT_VERSION } from "../lib/types"
 import { patients, scriptedResult } from "../lib/seed"
+import { standingNextCheckIn } from "../lib/schedule"
 import {
   applyResult,
+  listSessions,
   approve,
   exportSessions,
   getSession,
@@ -32,46 +34,63 @@ function decided(p: typeof ellen, how: "approve" | { to: "nurse_callback" | "con
 beforeEach(() => resetSessions())
 
 describe("follow-up after a decision", () => {
-  it("an approved escalation opens a follow-up and schedules a recheck the next day", () => {
+  it("an approved escalation opens a follow-up and holds the next check-in until the call is recorded", () => {
     const { sessionId, card } = decided(ellen)
     expect(card.recommendation).toBe("escalate_urgent")
     const s = getSession(sessionId)!
-    expect(s.followUp).toMatchObject({ status: "open", recommendation: "escalate_urgent", route: "surgeon_on_call", attempts: 0 })
-    expect(s.nextCheckIn).toMatchObject({ inDays: 1, paused: false, source: "session" })
-    expect(s.nextCheckIn!.dueOn).toBe(new Date(2026, 9, 15).getTime())
+    expect(s.followUp).toMatchObject({ status: "open", recommendation: "escalate_urgent", route: "surgeon_on_call", attempts: 0, awaitingClearance: false })
+    // No date for the patient before anyone has called them.
+    expect(s.nextCheckIn).toMatchObject({ inDays: null, dueOn: null, paused: true, reason: "Waiting for the follow-up call" })
+    expect(patientNextCheckIn("rise-01")).toMatchObject({ paused: true })
     expect(s.audit.map((a) => a.action)).toEqual(["invited", "approved", "followup_opened"])
   })
 
-  it("not reached keeps it open and counts the attempt; a closing outcome ends it and sets the next check-in", () => {
+  it("not reached keeps it open and counts the attempt; reached closes it and only then sets a date", () => {
     const { sessionId } = decided(ellen)
     recordFollowUp(sessionId, { outcome: "not_reached", user: "Nurse A" }, T0 + 2000)
     expect(getSession(sessionId)!.followUp).toMatchObject({ status: "open", attempts: 1, lastAttemptAt: T0 + 2000 })
+    expect(getSession(sessionId)!.nextCheckIn?.paused).toBe(true)
 
     const s = recordFollowUp(sessionId, { outcome: "reached_visit_booked", note: "Seen tomorrow 9am", user: "Nurse B" }, T0 + DAY)
     expect(s.followUp).toMatchObject({ status: "done", outcome: "reached_visit_booked", note: "Seen tomorrow 9am", closedBy: "Nurse B", attempts: 1 })
     expect(s.nextCheckIn).toMatchObject({ inDays: 1, dueOn: new Date(2026, 9, 16).getTime(), paused: false })
+    // Never claims a clearance that wasn't recorded.
+    expect(s.nextCheckIn?.reason).toBe("Recheck after the follow-up: Reached: visit booked")
     expect(s.audit.at(-1)).toMatchObject({ action: "followup_closed", reasonCode: "reached_visit_booked", user: "Nurse B" })
   })
 
-  it("sent for urgent care pauses the schedule until a clinician clears the patient", () => {
+  it("sent for urgent care stays on Today, paused, until a clinician clears the patient", () => {
     const { sessionId } = decided(ellen)
-    const s = recordFollowUp(sessionId, { outcome: "reached_urgent_care", user: "Nurse A" }, T0 + 2000)
-    expect(s.nextCheckIn).toMatchObject({ inDays: null, dueOn: null, paused: true })
-    expect(patientNextCheckIn("rise-01")).toMatchObject({ paused: true, source: "session" })
+    let s = recordFollowUp(sessionId, { outcome: "reached_urgent_care", user: "Nurse A" }, T0 + 2000)
+    expect(s.followUp).toMatchObject({ status: "open", awaitingClearance: true })
+    expect(s.nextCheckIn).toMatchObject({ paused: true, reason: "Paused until a clinician clears the patient" })
+    expect(() => recordFollowUp(sessionId, { outcome: "reached_plan_continues", user: "N" })).toThrow(/clinician to clear/)
+
+    s = recordFollowUp(sessionId, { outcome: "clinician_cleared", user: "Dr C" }, T0 + 2 * DAY)
+    expect(s.followUp).toMatchObject({ status: "done", outcome: "clinician_cleared", awaitingClearance: false })
+    expect(s.nextCheckIn).toMatchObject({ inDays: 1, paused: false, reason: "Recheck the day after the clinician clears the patient" })
   })
 
-  it("rejects unknown outcomes, a missing note on Other, and a second close", () => {
+  it("clearance is only offered once a patient is waiting for it; unknown outcomes and a bare Other are rejected", () => {
     const { sessionId } = decided(ellen)
+    expect(() => recordFollowUp(sessionId, { outcome: "clinician_cleared", user: "N" })).toThrow(/only after/)
     expect(() => recordFollowUp(sessionId, { outcome: "nope", user: "N" })).toThrow(SessionError)
     expect(() => recordFollowUp(sessionId, { outcome: "other", user: "N" })).toThrow(/needs a note/)
     recordFollowUp(sessionId, { outcome: "reached_plan_continues", user: "N" })
     expect(() => recordFollowUp(sessionId, { outcome: "reached_plan_continues", user: "N" })).toThrow(/no open follow-up/)
   })
 
-  it("a downgrade to nurse callback opens a callback follow-up; continue the plan opens none but still schedules", () => {
+  it("a card reopened by new patient input must be decided again before the follow-up is recorded", () => {
+    const { sessionId } = decided(ellen)
+    applyResult(sessionId, scriptedResult(ellen, { sessionId, symptoms: { ...ellen.scripted_today.symptoms, pain_0_10: 9 } }), T0 + 5000)
+    expect(getSession(sessionId)!.card?.approval).toBe("pending")
+    expect(() => recordFollowUp(sessionId, { outcome: "reached_plan_continues", user: "N" })).toThrow(/decide it first/)
+  })
+
+  it("a downgrade to nurse callback opens a callback follow-up; continue the plan opens none and schedules", () => {
     const callback = decided(ellen, { to: "nurse_callback" })
     expect(getSession(callback.sessionId)!.followUp).toMatchObject({ status: "open", recommendation: "nurse_callback" })
-    expect(getSession(callback.sessionId)!.nextCheckIn?.inDays).toBe(2)
+    expect(getSession(callback.sessionId)!.nextCheckIn?.paused).toBe(true)
 
     const plan = decided(gary)
     expect(getSession(plan.sessionId)!.followUp).toBeUndefined()
@@ -81,6 +100,21 @@ describe("follow-up after a decision", () => {
   it("the patient's next check-in falls back to the seed before any decision", () => {
     expect(patientNextCheckIn("rise-04")).toMatchObject({ inDays: gary.cadence.next_checkin_in_days, source: "seed", paused: false })
     expect(patientNextCheckIn("nobody")).toBeNull()
+  })
+
+  it("a pause stands over a newer invite or a later routine decision, until it is cleared", () => {
+    const { sessionId } = decided(ellen)
+    recordFollowUp(sessionId, { outcome: "reached_urgent_care", user: "Nurse A" }, T0 + 2000)
+    invite("rise-01", "play", "Nurse A", T0 + 3000)
+    expect(patientNextCheckIn("rise-01")).toMatchObject({ paused: true })
+    // The console patient list uses the same rule.
+    expect(standingNextCheckIn(listSessions(), "rise-01")).toEqual(patientNextCheckIn("rise-01"))
+  })
+
+  it("open follow-ups are kept when the store is full", () => {
+    const { sessionId } = decided(ellen)
+    for (let i = 0; i < 105; i++) invite("rise-04", "play", "N", T0 + 10_000 + i)
+    expect(getSession(sessionId)?.followUp?.status).toBe("open")
   })
 })
 

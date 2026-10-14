@@ -9,28 +9,29 @@ The classic check-in's second safety step asks the patient to make sure someone 
 ## Proposed flow
 
 1. On the "Make sure someone is nearby" screen, add a second, quieter button under "Someone is nearby": **"I'm on my own right now"**.
-2. That leads to one calm screen. It doesn't start the test and doesn't count as a missed check-in.
-3. The phone sends an event to the console (`setup_alone`, audited). The session shows "Patient was alone; test not started" on the live board, so the coordinator can decide whether to call.
+2. That leads to one calm screen. It doesn't start the test. Whether it counts as a missed check-in is pending question 2.
+3. The phone sends an event to the console (`setup_alone`, audited). Proposed: it opens a low-urgency task on the console's Today list ("Patient was alone; test not started"), so a named person owns it, rather than appearing only on the live board where nobody may be watching.
 4. The patient can come back later from the same link.
 
 ## Wording for review
 
-Each line follows the SAMHSA trauma-informed principles the app already uses: safety, choice, no blame, plain words. All lines are spoken by the coach and captioned.
+Each line aims to follow SAMHSA's trauma-informed principles (safety, choice, no blame, plain words), the same basis as the patient lines in `content/patient-lines.json`. All lines are spoken by the coach and captioned.
 
 | Where | Proposed text | Notes for the reviewer |
 | --- | --- | --- |
 | Button | I'm on my own right now | Neutral; doesn't imply they did something wrong. |
 | Screen heading | Thanks for telling us. | Acknowledges, no judgement. |
 | Body | This exercise is safest with someone nearby. Please try again when someone can be with you. | States the reason once. Doesn't mention falls, to avoid alarm. Confirm this is the right safety message. |
-| Care-team line | We've let your care team know you were on your own today. | Only if the console event is built. Sets the expectation that someone may call. Confirm the team wants this promise made. |
-| Button | Okay | Closes the screen. No "Do it anyway" option. Confirm that's the right call. |
+| Care-team line | We've let your care team know you were on your own today. | Only if the console event is built. Implies follow-up the team may not do. A no-promise alternative: "Your care team can see that you were on your own today." |
+| Button | Okay | Closes the screen. The draft offers no "Do it anyway" option; that stays open for question 1. |
 
 ## Questions for the clinician
 
 1. Should a patient who is alone ever be allowed to do the chair stand (for example days 15 to 30, or a stable patient)? The draft says no.
 2. Should "alone" count toward the "two missed check-ins create a coordinator task" rule (plan §6a)? The draft says it counts as a contact, not a miss.
 3. Is "We've let your care team know" acceptable if nobody is guaranteed to call?
-4. Should RehabNinja's combined safety card ("Sturdy chair behind you? Someone nearby? Feeling OK to start?") get the same option?
+4. What happens after repeated "alone" answers, for a patient who lives alone every day? For example, does the care team call to arrange a helper or a supervised time?
+5. Should RehabNinja's combined safety card ("Sturdy chair behind you? Someone nearby? Feeling OK to start?") get the same option?
 
 ## When approved
 

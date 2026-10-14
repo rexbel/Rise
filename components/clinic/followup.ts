@@ -12,7 +12,10 @@ export type FollowUpOutcome = {
   label: string
   closes: boolean
   requiresFreeText: boolean
-  pausesSchedule: boolean
+  /** Keeps the task open with check-ins paused until a clinician clears the patient. */
+  awaitsClearance: boolean
+  /** Offered only while the task is awaiting clearance (clinician cleared). */
+  onlyWhenAwaitingClearance: boolean
 }
 
 /** protocol.followup.outcomes, normalized (optional flags default to false). */
@@ -21,8 +24,19 @@ export const FOLLOWUP_OUTCOMES: FollowUpOutcome[] = protocol.followup.outcomes.m
   label: o.label,
   closes: o.closes,
   requiresFreeText: "requires_free_text" in o && o.requires_free_text === true,
-  pausesSchedule: "pauses_schedule" in o && o.pauses_schedule === true,
+  awaitsClearance: "awaits_clearance" in o && o.awaits_clearance === true,
+  onlyWhenAwaitingClearance: "only_when_awaiting_clearance" in o && o.only_when_awaiting_clearance === true,
 }))
+
+/**
+ * The outcomes a person can record now (mirrors the server's checks in lib/sessions.ts recordFollowUp). Awaiting
+ * clearance: only "Clinician cleared" and Other. Otherwise everything except "Clinician cleared".
+ */
+export function outcomeChoices(f: { awaitingClearance: boolean }): FollowUpOutcome[] {
+  return FOLLOWUP_OUTCOMES.filter((o) =>
+    f.awaitingClearance ? o.onlyWhenAwaitingClearance || o.code === "other" : !o.onlyWhenAwaitingClearance,
+  )
+}
 
 export function outcomeByCode(code: string | null | undefined): FollowUpOutcome | undefined {
   return code ? FOLLOWUP_OUTCOMES.find((o) => o.code === code) : undefined

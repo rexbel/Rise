@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils"
 import { clinicFontClass } from "./fonts"
 import {
   attemptsLabel,
-  FOLLOWUP_OUTCOMES,
+  outcomeChoices,
   followUpErrors,
   nextCheckInView,
   outcomeByCode,
@@ -42,6 +42,7 @@ import {
   downgradeOptions,
   finalRecommendation,
   formatTime,
+  formatWhen,
   RECOMMENDATION_LABEL,
   RECOMMENDATION_TONE,
   ROUTE_LABEL,
@@ -743,6 +744,7 @@ function FollowUpForm({ s, f }: { s: SessionSnapshot; f: FollowUp }) {
   const [saved, setSaved] = useState<string | null>(null)
   const id = useId()
   const def = outcomeByCode(outcome)
+  const choices = outcomeChoices(f)
   const errors: FollowUpErrors = tried ? followUpErrors(outcome, note) : {}
   const route = f.route ? (ROUTE_LABEL[f.route as Route] ?? f.route.replace(/_/g, " ")) : null
 
@@ -752,7 +754,7 @@ function FollowUpForm({ s, f }: { s: SessionSnapshot; f: FollowUp }) {
     setTried(true)
     const problems = followUpErrors(outcome, note)
     if (problems.outcome || problems.note) {
-      document.getElementById(problems.outcome ? `${id}-outcome-${FOLLOWUP_OUTCOMES[0].code}` : `${id}-note`)?.focus()
+      document.getElementById(problems.outcome ? `${id}-outcome-${choices[0].code}` : `${id}-note`)?.focus()
       return
     }
     setBusy(true)
@@ -761,9 +763,10 @@ function FollowUpForm({ s, f }: { s: SessionSnapshot; f: FollowUp }) {
     if (r.ok) {
       const label = outcomeLabel(outcome)
       if (r.data.followUp?.status === "open") {
-        // Not reached: stays on Today. Clear the form for the next try.
+        // Not reached, or waiting for clearance: stays on Today. Clear the form for the next step.
         const tries = attemptsLabel(r.data.followUp.attempts)
-        setSaved(`Recorded “${label}”.${tries ? ` ${tries}.` : ""} It stays on Today.`)
+        const waiting = r.data.followUp.awaitingClearance ? " Check-ins stay paused until a clinician clears the patient." : ""
+        setSaved(`Recorded “${label}”.${tries ? ` ${tries}.` : ""} It stays on Today.${waiting}`)
         setOutcome("")
         setNote("")
         setTried(false)
@@ -781,8 +784,16 @@ function FollowUpForm({ s, f }: { s: SessionSnapshot; f: FollowUp }) {
           <StatusText icon={Hourglass} tone={RECOMMENDATION_TONE[f.recommendation]}>
             Open on Today
           </StatusText>
-          <span className="text-cl-muted">since {formatTime(f.openedAt)}</span>
+          <span className="text-cl-muted">since {formatWhen(f.openedAt)}</span>
         </p>
+        {f.awaitingClearance && (
+          <p className="text-base">
+            <StatusText icon={PauseCircle} tone="confirm">
+              Waiting for a clinician to clear the patient
+            </StatusText>{" "}
+            <span className="text-cl-muted">Check-ins are paused until then.</span>
+          </p>
+        )}
         <p className="text-base text-cl-muted">
           For {RECOMMENDATION_LABEL[f.recommendation]}
           {route ? ` → ${route}` : ""}. Recording as {DEMO_USER}.
@@ -805,7 +816,7 @@ function FollowUpForm({ s, f }: { s: SessionSnapshot; f: FollowUp }) {
           aria-describedby={errors.outcome ? `${id}-outcome-error` : undefined}
           className="gap-1.5"
         >
-          {FOLLOWUP_OUTCOMES.map((o) => (
+          {choices.map((o) => (
             <Label
               key={o.code}
               htmlFor={`${id}-outcome-${o.code}`}
@@ -821,8 +832,11 @@ function FollowUpForm({ s, f }: { s: SessionSnapshot; f: FollowUp }) {
               />
               <span className="min-w-0 flex-1">
                 {o.label}
-                {!o.closes && <span className="block text-sm text-cl-muted">Counts an attempt; stays on Today</span>}
-                {o.pausesSchedule && <span className="block text-sm text-cl-muted">Pauses check-ins until a clinician clears them</span>}
+                {o.code === "not_reached" && <span className="block text-sm text-cl-muted">Counts an attempt; stays on Today</span>}
+                {o.awaitsClearance && !f.awaitingClearance && (
+                  <span className="block text-sm text-cl-muted">Pauses check-ins; stays on Today until a clinician clears the patient</span>
+                )}
+                {o.onlyWhenAwaitingClearance && <span className="block text-sm text-cl-muted">Closes the follow-up and sets the next check-in</span>}
               </span>
             </Label>
           ))}
@@ -932,7 +946,10 @@ function NextCheckInLine({ nc, withHeading }: { nc: NextCheckIn; withHeading: bo
         {nc.reason} · {nc.phase}
       </p>
       <p className="text-sm text-cl-muted">
-        {nc.source === "seed" ? "From the scripted schedule. " : ""}Rise default schedule, not a clinical standard.
+        {nc.source === "seed" ? "From the scripted schedule. " : ""}
+        {nc.reason === "Clinician-set cadence" || nc.phase.startsWith("Clinician cadence")
+          ? "Clinician-set cadence."
+          : "Rise default schedule, not a clinical standard."}
       </p>
     </div>
   )

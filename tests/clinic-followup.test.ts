@@ -34,6 +34,7 @@ function session(id: string, followUp?: Partial<FollowUp> & { recommendation: Re
           route: null,
           openedAt: 0,
           attempts: 0,
+          awaitingClearance: false,
           lastAttemptAt: null,
           outcome: null,
           note: null,
@@ -78,7 +79,7 @@ describe("outcomes and the form", () => {
     expect(FOLLOWUP_OUTCOMES.map((o) => o.code)).toEqual(protocol.followup.outcomes.map((o) => o.code))
     expect(outcomeLabel("not_reached")).toBe("Not reached: try again")
     expect(FOLLOWUP_OUTCOMES.find((o) => o.code === "other")?.requiresFreeText).toBe(true)
-    expect(FOLLOWUP_OUTCOMES.find((o) => o.code === "reached_urgent_care")?.pausesSchedule).toBe(true)
+    expect(FOLLOWUP_OUTCOMES.find((o) => o.code === "reached_urgent_care")?.awaitsClearance).toBe(true)
     expect(outcomeLabel("made_up_code")).toBe("made up code")
   })
 

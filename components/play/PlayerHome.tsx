@@ -41,7 +41,8 @@ export function PlayerHome({
   const { state: crew } = useCrewBoard(patient.rise_id)
   // Chips only while the patient is on the crew: never when paused or not joined.
   const chips = crewChips(homeChipsRow(crew.status === "ready" ? crew.board : undefined))
-  const nextLabel = useNextCheckInLabel(patient.rise_id) ?? home.nextSessionLabel
+  // Never the scripted seed date: until the care team's schedule loads, a placeholder; if it can't load, the neutral line.
+  const nextLabel = useNextCheckInLabel(patient.rise_id) ?? "…"
 
   return (
     <div className="rn-home-enter grid gap-6 motion-reduce:animate-none lg:grid-cols-12 lg:gap-8">
@@ -136,8 +137,8 @@ export function PlayerHome({
 }
 
 /**
- * The care team's next check-in for this patient, in words. null while loading or on any failure, so the caller keeps
- * the seed value: no spinner, no layout jump, and no error shown to the patient.
+ * The care team's next check-in for this patient, in words. null while loading. On any failure, the neutral "your care
+ * team will let you know" line rather than a date nobody set (and no error shown to the patient).
  */
 function useNextCheckInLabel(riseId: string): string | null {
   const [label, setLabel] = useState<string | null>(null)
@@ -145,8 +146,8 @@ function useNextCheckInLabel(riseId: string): string | null {
     const ctrl = new AbortController()
     fetchNextCheckIn(riseId, { signal: ctrl.signal })
       .then((nc) => setLabel(patientNextCheckInLabel(nc, Date.now())))
-      .catch(() => {
-        // The seed value stays; the patient never sees a load error here.
+      .catch((e: unknown) => {
+        if (!ctrl.signal.aborted || (e instanceof Error && e.name === "TimeoutError")) setLabel(NEXT_PAUSED_LABEL)
       })
     return () => ctrl.abort()
   }, [riseId])

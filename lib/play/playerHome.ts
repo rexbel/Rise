@@ -74,7 +74,7 @@ type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 export async function fetchNextCheckIn(
   riseId: string,
   opts: { signal?: AbortSignal; fetchImpl?: FetchLike; timeoutMs?: number } = {},
-): Promise<NextCheckIn> {
+): Promise<Pick<NextCheckIn, "inDays" | "dueOn" | "paused">> {
   const doFetch = opts.fetchImpl ?? ((input, init) => fetch(input, init))
   const timeout = AbortSignal.timeout(opts.timeoutMs ?? 5000)
   const res = await doFetch(`/api/patients/${encodeURIComponent(riseId)}/next-checkin`, {

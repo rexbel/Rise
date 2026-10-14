@@ -177,7 +177,7 @@ export const SessionResult = z.object({
   /** Patient chose "Keep going" after a pause (logged on the card, not a stop). */
   resumedAfterPause: z.boolean(),
   tandemHoldS: z.number().min(0).optional(),
-  gaitObservations: z.array(z.string()).default([]),
+  gaitObservations: z.array(z.string().max(200)).max(20).default([]),
   symptoms: Symptoms,
   patientNote: z.string().max(2000).optional(),
   tier: PoseTier,
@@ -403,6 +403,7 @@ export const AuditEntry = z.object({
     "followup_opened",
     "followup_attempt",
     "followup_closed",
+    "followup_cancelled",
   ]),
   from: Recommendation.optional(),
   to: Recommendation.optional(),
@@ -440,6 +441,8 @@ export const FollowUp = z.object({
   openedAt: At,
   /** "Not reached" attempts so far. */
   attempts: z.number().int().min(0),
+  /** Sent for urgent care (or Other): still open on Today, check-ins paused, until a clinician clears the patient. */
+  awaitingClearance: z.boolean(),
   lastAttemptAt: At.nullable(),
   outcome: z.string().nullable(),
   note: z.string().nullable(),
@@ -481,8 +484,14 @@ export const SessionSnapshot = z.object({
 })
 export type SessionSnapshot = z.infer<typeof SessionSnapshot>
 
-/** GET /api/patients/[riseId]/next-checkin: the latest session's schedule, else the seed's. */
-export const PatientNextCheckIn = z.object({ riseId: z.string(), nextCheckIn: NextCheckIn })
+/**
+ * GET /api/patients/[riseId]/next-checkin: what the patient's home may show. Day only: no reason, phase, or source,
+ * which would reveal escalations or decline on an unauthenticated route.
+ */
+export const PatientNextCheckIn = z.object({
+  riseId: z.string(),
+  nextCheckIn: NextCheckIn.pick({ inDays: true, dueOn: true, paused: true }),
+})
 export type PatientNextCheckIn = z.infer<typeof PatientNextCheckIn>
 
 /**

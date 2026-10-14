@@ -5,7 +5,8 @@ import { useMemo, useState } from "react"
 import { CalendarClock, PauseCircle, Send, TriangleAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import type { SessionSnapshot } from "@/lib/types"
+import { standingNextCheckIn } from "@/lib/schedule"
+import type { NextCheckIn, SessionSnapshot } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import {
   finalRecommendation,
@@ -23,7 +24,8 @@ import { useClinic, useNow } from "./store"
 export function PatientList() {
   const { patients, sessions, loaded } = useClinic()
   const [target, setTarget] = useState<PatientSummary | null>(null)
-  const latest = useMemo(() => latestByPatient([...sessions.values()]), [sessions])
+  const all = useMemo(() => [...sessions.values()], [sessions])
+  const latest = useMemo(() => latestByPatient(all), [all])
 
   return (
     <section aria-labelledby="patients-heading" className="min-w-0">
@@ -72,7 +74,7 @@ export function PatientList() {
                 <LastCheckIn p={p} session={latest.get(p.riseId)} />
               </td>
               <td className="py-3 pr-3">
-                <NextCheckInCell p={p} session={latest.get(p.riseId)} />
+                <NextCheckInCell p={p} standing={standingNextCheckIn(all, p.riseId)} />
               </td>
               <td className="py-3 pr-3">
                 <SessionCell session={latest.get(p.riseId)} loaded={loaded} />
@@ -108,7 +110,7 @@ export function PatientList() {
               </dd>
               <dt className="text-cl-muted">Next</dt>
               <dd>
-                <NextCheckInCell p={p} session={latest.get(p.riseId)} />
+                <NextCheckInCell p={p} standing={standingNextCheckIn(all, p.riseId)} />
               </dd>
               <dt className="text-cl-muted">Session</dt>
               <dd>
@@ -162,10 +164,10 @@ function LastCheckIn({ p, session }: { p: PatientSummary; session: SessionSnapsh
   )
 }
 
-/** The latest session's next check-in, else the seed's scheduled one. Icon + words; never color alone. */
-function NextCheckInCell({ p, session }: { p: PatientSummary; session: SessionSnapshot | undefined }) {
+/** The standing next check-in (lib/schedule.ts, the same rule as the patient's home), else the seed's. Icon + words. */
+function NextCheckInCell({ p, standing }: { p: PatientSummary; standing: NextCheckIn | null }) {
   const now = useNow(60_000)
-  const nc = session?.nextCheckIn ?? seedNextCheckIn(p.cadence)
+  const nc = standing ?? seedNextCheckIn(p.cadence)
   const v = nextCheckInView(nc, now)
   // Seed rows carry no due date, so "Scheduled" marks them as the plan rather than a session result.
   const detail = v.on ?? (nc.source === "seed" ? "Scheduled" : null)

@@ -84,14 +84,15 @@
     "max_cheers_per_sender_per_day": 20
   },
   "followup": {
-    "$comment": "Rise defaults, not clinical standards. A decided card with one of these final recommendations opens a follow-up task on the console's Today list; a person records how it ended. Due is 'today' for every open task; urgency orders the list.",
+    "$comment": "Rise defaults, not clinical standards. A decided card with one of these final recommendations opens a follow-up task on the console's Today list, and the patient's next check-in waits until a person records how it ended. awaits_clearance keeps the task open on Today, with check-ins paused, until 'clinician_cleared' is recorded. Due is 'today' for every open task; urgency orders the list. Due-by times and a not-reached hand-off threshold are left for the clinic to set.",
     "opens_on": ["escalate_urgent", "human_confirm", "nurse_callback"],
     "outcomes": [
       { "code": "reached_plan_continues", "label": "Reached: plan continues", "closes": true },
       { "code": "reached_visit_booked", "label": "Reached: visit booked", "closes": true },
-      { "code": "reached_urgent_care", "label": "Reached: sent for urgent care", "closes": true, "pauses_schedule": true },
+      { "code": "reached_urgent_care", "label": "Reached: sent for urgent care", "closes": false, "awaits_clearance": true },
       { "code": "not_reached", "label": "Not reached: try again", "closes": false },
-      { "code": "other", "label": "Other", "closes": true, "requires_free_text": true }
+      { "code": "other", "label": "Other: pause check-ins", "closes": false, "awaits_clearance": true, "requires_free_text": true },
+      { "code": "clinician_cleared", "label": "Clinician cleared: resume check-ins", "closes": true, "only_when_awaiting_clearance": true }
     ]
   },
   "downgrade_reasons": [

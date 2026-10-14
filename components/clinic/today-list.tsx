@@ -2,12 +2,12 @@
 
 import Link from "next/link"
 import { useMemo } from "react"
-import { ChevronRight, CircleCheck, PhoneMissed } from "lucide-react"
+import { ChevronRight, CircleCheck, PauseCircle, PhoneMissed, RotateCcw } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { Route } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { attemptsLabel, todayWorklist } from "./followup"
-import { formatTime, RECOMMENDATION_LABEL, RECOMMENDATION_TONE, ROUTE_LABEL } from "./format"
+import { formatWhen, RECOMMENDATION_LABEL, RECOMMENDATION_TONE, ROUTE_LABEL } from "./format"
 import { DemoBadge, RecommendationText, StatusText, TONE_RULE, focusRing } from "./status"
 import { useClinic } from "./store"
 
@@ -56,11 +56,13 @@ export function TodayList() {
             const name = patient(s.riseId)?.name ?? s.riseId
             const route = f.route ? (ROUTE_LABEL[f.route as Route] ?? f.route.replace(/_/g, " ")) : null
             const tries = attemptsLabel(f.attempts)
+            // New patient input sent the card back to pending: the follow-up form waits until it is decided again.
+            const reopened = s.card?.approval === "pending"
             return (
               <li key={s.sessionId} className="min-w-0">
                 <Link
                   href={`/clinic/s/${s.sessionId}`}
-                  aria-label={`${name}: ${RECOMMENDATION_LABEL[f.recommendation]}${route ? ` to ${route}` : ""}. Opened ${formatTime(f.openedAt)}.${tries ? ` ${tries}.` : ""} Open triage card.`}
+                  aria-label={`${name}: ${RECOMMENDATION_LABEL[f.recommendation]}${route ? ` to ${route}` : ""}. Opened ${formatWhen(f.openedAt)}.${tries ? ` ${tries}.` : ""}${f.awaitingClearance ? " Waiting for clinician clearance." : ""}${reopened ? " Card reopened: decide it first." : ""} Open triage card.`}
                   className={cn(
                     "group grid gap-x-6 gap-y-1 rounded-md border border-l-[6px] border-cl-line bg-cl-surface px-4 py-3 transition-colors hover:border-cl-ink/40",
                     "md:grid-cols-[minmax(10rem,14rem)_minmax(0,1fr)_auto_auto] md:items-center",
@@ -79,13 +81,23 @@ export function TodayList() {
                     )}
                   </RecommendationText>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-base md:justify-end">
+                    {reopened && (
+                      <StatusText icon={RotateCcw} tone="escalate">
+                        Card reopened: decide it first
+                      </StatusText>
+                    )}
+                    {f.awaitingClearance && (
+                      <StatusText icon={PauseCircle} tone="confirm">
+                        Waiting for clinician clearance
+                      </StatusText>
+                    )}
                     {tries && (
                       <StatusText icon={PhoneMissed} tone="confirm">
                         {tries}
                       </StatusText>
                     )}
                     <span className="text-cl-muted tabular-nums">
-                      Opened <time dateTime={new Date(f.openedAt).toISOString()}>{formatTime(f.openedAt)}</time>
+                      Opened <time dateTime={new Date(f.openedAt).toISOString()}>{formatWhen(f.openedAt)}</time>
                     </span>
                     {s.demoData && <DemoBadge />}
                   </div>

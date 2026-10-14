@@ -10,6 +10,9 @@ RUN npm run build && npm prune --omit=dev
 
 FROM node:22-slim
 WORKDIR /app
+# Due dates are local-midnight timestamps (lib/cadence.ts dueOn): compute them in the clinic's timezone, the same one
+# the demo's patients and console use, not the container's UTC default.
+ENV TZ=America/New_York
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=8080 HOSTNAME=0.0.0.0
 COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules ./node_modules

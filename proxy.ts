@@ -12,7 +12,7 @@ const COOKIE = "rise_console"
 function isConsoleApi(pathname: string, method: string): boolean {
   if (pathname === "/api/sessions") return true // GET list, POST invite
   if (pathname === "/api/sessions/stream" || pathname === "/api/sessions/reset") return true
-  if (/^\/api\/sessions\/[^/]+\/(approval|crew)$/.test(pathname)) return true
+  if (/^\/api\/sessions\/[^/]+\/(approval|crew|followup)$/.test(pathname)) return true
   // Consent records are for the care team, not the public crew API.
   if (pathname.startsWith("/api/crew/consent/")) return true
   return method === "GET" && pathname.startsWith("/api/sessions/")

@@ -35,12 +35,12 @@ describe("patient next check-in label", () => {
 })
 
 describe("fetchNextCheckIn", () => {
-  it("returns the next check-in from the API", async () => {
+  it("returns only the day from the API (no reason, phase, or source reach the patient)", async () => {
     const nc = await fetchNextCheckIn("rise-03", { fetchImpl: respond(200, { riseId: "rise-03", nextCheckIn: sample }) })
-    expect(nc).toEqual(sample)
+    expect(nc).toEqual({ inDays: sample.inDays, dueOn: sample.dueOn, paused: sample.paused })
   })
 
-  it("throws on an error status, a bad shape, or another patient's data, so the seed value stays", async () => {
+  it("throws on an error status, a bad shape, or another patient's data, so the neutral line shows instead", async () => {
     await expect(fetchNextCheckIn("rise-03", { fetchImpl: respond(404, { error: "unknown patient" }) })).rejects.toThrow()
     await expect(fetchNextCheckIn("rise-03", { fetchImpl: respond(200, { riseId: "rise-03" }) })).rejects.toThrow()
     await expect(

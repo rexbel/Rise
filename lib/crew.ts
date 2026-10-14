@@ -9,6 +9,7 @@ import { randomBytes } from "node:crypto"
 import protocol from "@/config/protocol.default.json"
 import peersFile from "@/content/play-board-peers.json"
 import ui from "@/content/play-ui.json"
+import { markDirty } from "@/lib/dirty"
 import { procedureFamily } from "@/lib/play/programs"
 import { triage } from "@/lib/rules"
 import { getPatient, patients } from "@/lib/seed"
@@ -31,6 +32,7 @@ type Peer = (typeof peersFile.peers)[number]
 type LiveCheer = { from: string; to: string; cheerId: CheerId; at: number; client: string }
 
 const C = protocol.crew
+const MAX_CONSENT = 1000
 const PHOTO_IDS = new Set(["rise-01", "rise-02", "rise-03", "rise-04", "rise-05", "rise-06", "rise-07", ...peersFile.peers.filter((p) => p.photo).map((p) => p.id)])
 
 type Membership = { joinedAt: number; showPhoto: boolean; source: ConsentRecord["source"] }
@@ -275,6 +277,9 @@ export function resetCrew() {
 
 function logConsent(riseId: string, action: ConsentRecord["action"], now: number, source: ConsentRecord["source"]) {
   store.consent.push({ riseId, action, consentVersion: CREW_CONSENT_VERSION, source, at: now })
+  // Bounded: join/leave loops can't grow the saved snapshot without limit.
+  if (store.consent.length > MAX_CONSENT) store.consent = store.consent.slice(-MAX_CONSENT)
+  markDirty()
 }
 
 /** True when `token` is this patient's device token. */
