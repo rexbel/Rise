@@ -48,7 +48,7 @@ export function nextSessionLabel(days: number): string {
 }
 
 /** Shown instead of a day while check-ins are paused (e.g. sent for urgent care). No date, no reason, no numbers. */
-export const NEXT_PAUSED_LABEL = "Your care team will let you know"
+export const NEXT_PAUSED_LABEL = ui.home.next_paused
 
 const DAY_MS = 86_400_000
 
