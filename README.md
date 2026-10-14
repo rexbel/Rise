@@ -12,7 +12,7 @@ Rise has three parts:
 
 Built for the Real-Time Video Agents Hack – NYC (VAST Builders Challenge). All patient data is synthetic.
 
-**Live demo:** https://rise.nextrex.health (served from the demo laptop through a Cloudflare tunnel, so it's only up while the laptop runs it). Tap **Try a demo** for Ellen's session, no camera needed.
+**Live demo:** https://rise.nextrex.health (a Cloudflare Worker in front of one Cloudflare Container running the Next.js server). Tap **Try a demo** for Ellen's session, no camera needed, or open the clinic console from the staff link.
 
 <p>
   <img src="docs/images/01-landing.jpg" alt="RehabNinja start screen: Play, Try a demo, and a staff link to the clinical launch and monitoring platform" width="200">
@@ -139,12 +139,13 @@ Phone camera ──> pose on-device (YOLO11n-pose ONNX via WebGPU/WASM, MediaPip
                                                └─> CDC score + deterministic triage rules ──> live clinic board (SSE) ──> human decision ──> audit trail
 Crew: opt-in membership, consent log, device-token cheers, auto-hold on escalation
 Voice: ElevenLabs lines pre-rendered to public/voice (hash-keyed; browser speech fallback)
-Hosting: Next.js on the demo laptop ──> Cloudflare Tunnel ──> rise.nextrex.health
+Hosting: rise.nextrex.health ──> Cloudflare Worker (rise-edge) ──> one Cloudflare Container (next start)
 ```
 
 - **Pose tiers:** YOLO is kept only at 15 fps or more on the phone (benchmarked at 16.6 fps with WebGPU on Rex's phone). MediaPipe is preloaded and takes over mid-set if YOLO drops under 12 fps for 2 s. A demo replay drives the same code with no camera.
 - **Counter:** knee angle plus hip rise with hysteresis, the CDC half-way rule at 30 s, arm use, mid-rise asymmetry, and pauses. Arm use is judged against the patient's own seated arms-crossed pose, so a phone propped side-on or in front both work. Unit-tested against all seven seed patients and the recorded demo fixture.
 - **Cosmos second look:** when YOLO flags a form break or loses tracking during live play, the last ~2 s of camera frames (4 downscaled JPEGs, never stored) and YOLO's numbers go to Cosmos through `POST /api/cosmos/second-look`. It uses an OpenAI-compatible endpoint (`COSMOS_BASE_URL`, `COSMOS_API_KEY`, `COSMOS_MODEL` in `.env.local`; check it with `npm run cosmos:probe`). When Cosmos is unavailable, a pose-only fallback is shown, badged "Demo data".
+- **Hosting:** Cloudflare Worker `rise-edge` and one Cloudflare Container (`cloudflare/`, `Dockerfile`).
 - **Clinic and crew state:** in-memory session and crew stores, a server-sent event stream to the console, Zod contracts in [`lib/types.ts`](lib/types.ts), and a console gate in [`proxy.ts`](proxy.ts).
 - **Built, not yet wired:** a W&B agent note (Weave-traced), VAST clip ingest and semantic search, Twilio invites, and the FHIR handoff have typed contracts and stubs in `lib/ai/` and `lib/adapters/`, but make no live calls yet.
 
@@ -161,7 +162,15 @@ npm run tunnel:named          # https://rise.nextrex.health -> :3400 (named tunn
 bash scripts/install-tunnel-service.sh  # same tunnel as a login service (survives restarts)
 ```
 
-Phone camera access needs HTTPS, so test on a phone through the tunnel. The YOLO model (`public/models/pose.onnx`) is not committed; export it with `scripts/export_pose_onnx.py` (version pins for Intel Macs are in [docs/PREFLIGHT.md](docs/PREFLIGHT.md)). Without it, RehabNinja uses MediaPipe.
+**Deploy (rise.nextrex.health):** `cloudflare/` holds the `rise-edge` Worker, which forwards every request to a single `RiseContainer`. It runs one instance on purpose, because the session board, crew, and live stream live in that server's memory. The container image is the root `Dockerfile` (`next start` on :8080). It needs Docker running locally (`colima start`) and wrangler signed in. Deploy with:
+
+```bash
+cd cloudflare && npm install && npx wrangler deploy
+```
+
+After 2 hours without traffic the container sleeps; the next request wakes it in about 10 s with fresh demo data.
+
+Phone camera access needs HTTPS, so test on a phone through the tunnel or the deployed site. The YOLO model (`public/models/pose.onnx`) is not committed; export it with `scripts/export_pose_onnx.py` (version pins for Intel Macs are in [docs/PREFLIGHT.md](docs/PREFLIGHT.md)). Without it, RehabNinja uses MediaPipe.
 
 Pages: `/` (start), `/play` (your week and crew), `/play/<patient>` (home and play), `/p/<patient>` (classic check-in), and `/clinic` (console; set `CONSOLE_KEY` before exposing it). Dev pages: `/dev/pose` (fps benchmark per tier) and `/dev/fixtures` (record keypoint fixtures; `?clip=/demo/sit-to-stand.mp4` records from the demo video).
 
