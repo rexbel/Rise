@@ -15,17 +15,22 @@ import * as server from "../lib/sessions"
 import { getPatient, scriptedResult } from "../lib/seed"
 import type { Recommendation, SessionSnapshot } from "../lib/types"
 
+// Writes to an invited session need its invite token (lib/sessions checkInviteToken).
+function inviteAndReport(riseId: string, surface: "play" | "classic", report: (sessionId: string, token: string) => void, ...rest: unknown[]) {
+  // Scripted seed results are demo data: a demo invite.
+  const [user, now] = rest as [string | undefined, number | undefined]
+  const r = server.invite(riseId, surface, user, now, true)
+  report(r.sessionId, new URL(r.path, "https://x").searchParams.get("i")!)
+  return r
+}
+
+
 beforeEach(() => server.resetSessions())
 
 describe("patient link", () => {
-  it("prefixes the origin and appends demo=1 to an existing query", () => {
-    expect(buildPatientLink("https://rise.example", "/play/rise-01?s=rise-01-abc123", false)).toBe(
-      "https://rise.example/play/rise-01?s=rise-01-abc123",
-    )
-    expect(buildPatientLink("https://rise.example/", "/play/rise-01?s=rise-01-abc123", true)).toBe(
-      "https://rise.example/play/rise-01?s=rise-01-abc123&demo=1",
-    )
-    expect(buildPatientLink("http://localhost:3000", "/p/rise-02", true)).toBe("http://localhost:3000/p/rise-02?demo=1")
+  it("prefixes the origin to the server's path; demo is in the invite, never added to the link", () => {
+    expect(buildPatientLink("https://rise.example", "/play/rise-01?i=abcDEF123_-xyz456789")).toBe("https://rise.example/play/rise-01?i=abcDEF123_-xyz456789")
+    expect(buildPatientLink("https://rise.example/", "/p/rise-02?i=tok")).toBe("https://rise.example/p/rise-02?i=tok")
   })
 })
 
@@ -45,8 +50,7 @@ describe("status words", () => {
 describe("decision semantics match the server", () => {
   it("finalRecommendation mirrors lib/sessions.ts through a real approve/downgrade", () => {
     const ellen = getPatient("rise-01")!
-    const { sessionId } = server.invite("rise-01", "classic", "Demo coordinator", 1000)
-    server.applyResult(sessionId, scriptedResult(ellen, { sessionId }), 2000)
+    const { sessionId } = inviteAndReport("rise-01", "classic", (id, token) => server.applyResult(id, scriptedResult(ellen, { sessionId: id }), 2000, token), "Demo coordinator", 1000)
     let snap = server.getSession(sessionId)!
     expect(finalRecommendation(snap)).toBe(server.finalRecommendation(snap))
     expect(finalRecommendation(snap)).toBe("escalate_urgent")
@@ -64,8 +68,7 @@ describe("decision semantics match the server", () => {
     for (const from of all) {
       for (const to of downgradeOptions(from)) {
         const ellen = getPatient("rise-01")!
-        const { sessionId } = server.invite("rise-01", "classic")
-        server.applyResult(sessionId, scriptedResult(ellen, { sessionId }))
+        const { sessionId } = inviteAndReport("rise-01", "classic", (id, token) => server.applyResult(id, scriptedResult(ellen, { sessionId: id }), undefined, token))
         // Force the card to the "from" recommendation to probe the server's rule.
         const s = server.getSession(sessionId)!
         s.card!.recommendation = from

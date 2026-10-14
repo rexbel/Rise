@@ -3,13 +3,25 @@
  * Until those routes exist (404) or when offline, it logs to the browser console and carries on:
  * the patient's test never waits on the network.
  */
-import type { RepEvent, SessionResult } from "@/lib/types"
+import { INVITE_HEADER, type RepEvent, type SessionResult } from "@/lib/types"
 
 let warned = false
 
+/**
+ * The invite token from the patient page (server-validated). Sent as x-rise-invite on every write, so only the phone
+ * holding the link can report for an invited session. Unset for unlinked visits.
+ */
+let inviteToken: string | null = null
+export function setInviteToken(token: string | null) {
+  inviteToken = token
+}
+export function inviteHeaders(): Record<string, string> {
+  return inviteToken ? { [INVITE_HEADER]: inviteToken } : {}
+}
+
 async function post(path: string, body: unknown) {
   try {
-    const res = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), keepalive: true })
+    const res = await fetch(path, { method: "POST", headers: { "content-type": "application/json", ...inviteHeaders() }, body: JSON.stringify(body), keepalive: true })
     if (!res.ok) throw new Error(`${res.status}`)
   } catch (e) {
     if (!warned) {
@@ -38,7 +50,7 @@ export async function sendResult(r: SessionResult): Promise<boolean> {
     try {
       const res = await fetch(path, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...inviteHeaders() },
         body: JSON.stringify(r),
         keepalive: true,
         signal: AbortSignal.timeout(RESULT_TIMEOUT_MS),

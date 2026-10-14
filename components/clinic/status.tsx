@@ -6,6 +6,7 @@ import {
   Activity,
   Calculator,
   Camera,
+  CameraOff,
   CircleCheck,
   CirclePause,
   ClipboardCheck,
@@ -60,6 +61,7 @@ export const STATUS_ICON: Record<SessionStatus, LucideIcon> = {
   scoring: Calculator,
   ready: ClipboardCheck,
   needs_confirmation: UserCheck,
+  could_not_complete: CameraOff,
 }
 
 export const RECOMMENDATION_ICON: Record<Recommendation, LucideIcon> = {

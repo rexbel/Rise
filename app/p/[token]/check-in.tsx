@@ -6,7 +6,7 @@
  * Setup and closing go one screen at a time: one picture, one question, one big button.
  * Never shows a score, a stand count, a norm, or "below average". Every instruction is spoken and captioned.
  */
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { AlertTriangle, ArrowLeft, Check, Loader2, Phone, Square, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -22,9 +22,9 @@ import { StandCounter, type CounterSummary } from "@/lib/pose/counter"
 import { triage } from "@/lib/rules"
 import { resolvePlaySessionId } from "@/lib/play/playResult"
 import { SetupGuide } from "./setup-guide"
-import { sendEvent, sendResult } from "@/lib/session-client"
+import { sendEvent, sendResult, setInviteToken } from "@/lib/session-client"
 import { steadiScore } from "@/lib/steadi"
-import type { CheckIn as PriorCheckIn, Recommendation, SeedPatient, SessionResult, SessionStatus, Symptoms, Trend } from "@/lib/types"
+import type { CheckIn as PriorCheckIn, PatientInvite, Recommendation, SeedPatient, SessionResult, SessionStatus, Symptoms, Trend } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { ptCta, ptSecondary, ptStop } from "@/components/play/ptClasses"
 import { usePose } from "./use-pose"
@@ -63,26 +63,28 @@ const btn2 = ptSecondary
 export function CheckIn({
   patient,
   clinicName,
-  sessionParam,
+  invite,
   demoParam = false,
 }: {
   patient: SeedPatient
   clinicName: string
-  /** ?s= from the console invite; ignored unless it is a valid id for this patient. */
-  sessionParam?: string
-  /** ?demo=1: start with the demo recording switched on. */
+  /** The console invite behind ?i=, resolved on the server (null for an unlinked visit). */
+  invite: PatientInvite | null
+  /** ?demo=1 on an unlinked visit: start with the demo recording on. Ignored when there is an invite. */
   demoParam?: boolean
 }) {
   const firstName = patient.display_name.split(" ")[0]
   const prev = patient.checkins[patient.checkins.length - 1]
-  const [sessionId] = useState(() => resolvePlaySessionId(patient.rise_id, sessionParam, Date.now()))
+  // A valid invite (resolved on the server) fixes the session, the token for every write, and demo vs real.
+  const [sessionId] = useState(() => invite?.sessionId ?? resolvePlaySessionId(patient.rise_id, undefined, Date.now()))
+  useLayoutEffect(() => setInviteToken(invite?.token ?? null), [invite?.token])
 
   const [step, setStep] = useState<Step>("welcome")
   const [checks, setChecks] = useState<Record<string, boolean>>({})
   /** 0..2 = a safety check, 3 = framing. */
   const [setupIdx, setSetupIdx] = useState(0)
   const [facing, setFacing] = useState<"environment" | "user">("environment")
-  const [demo, setDemo] = useState(demoParam)
+  const [demo, setDemo] = useState(invite ? invite.demo : demoParam)
   const [countdown, setCountdown] = useState<number | null>(null)
   const [elapsed, setElapsed] = useState(0)
   const [repPulse, setRepPulse] = useState(0)

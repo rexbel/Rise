@@ -1,7 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { patients, scriptedResult } from "../lib/seed"
-import { applyResult, approve, getSession, invite, resetSessions } from "../lib/sessions"
+import { applyResult, approve, getSession, invite, resetSessions, applyEvent } from "../lib/sessions"
 import { __test, loadSnapshot } from "../lib/persist"
+
+// Writes to an invited session need its invite token (lib/sessions checkInviteToken). These wrappers remember the
+// token each invite() returned and pass it on, so tests read like the phone: invite, then report with the link.
+const __tokens = new Map<string, string>()
+function inv(riseId: string, surface: Parameters<typeof invite>[1], user?: string, now?: number, demo = true) {
+  // Scripted seed results are demo data, so test invites are demo invites unless a test says otherwise.
+  const r = invite(riseId, surface, user, now, demo)
+  __tokens.set(r.sessionId, new URL(r.path, "https://x").searchParams.get("i")!)
+  return r
+}
+const res = (id: string, r: Parameters<typeof applyResult>[1], now?: number) => applyResult(id, r, now, __tokens.get(id))
+const ev = (id: string, e: Parameters<typeof applyEvent>[1], now?: number) => applyEvent(id, e, now, __tokens.get(id))
+
 
 const ellen = patients.find((p) => p.rise_id === "rise-01")!
 
@@ -19,8 +32,8 @@ function stubStore(get: () => Response) {
 }
 
 function decidedSession() {
-  const { sessionId } = invite("rise-01", "classic", "Nurse A", 1000)
-  applyResult(sessionId, scriptedResult(ellen, { sessionId }), 2000)
+  const { sessionId } = inv("rise-01", "classic", "Nurse A", 1000)
+  res(sessionId, scriptedResult(ellen, { sessionId }), 2000)
   approve(sessionId, { action: "approve", user: "Nurse A" }, 3000)
   return sessionId
 }

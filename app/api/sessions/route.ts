@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   const body = await readBody(request, InviteRequest)
   if ("error" in body) return body.error
   try {
-    return Response.json(invite(body.data.riseId, body.data.surface), { status: 201 })
+    return Response.json(invite(body.data.riseId, body.data.surface, undefined, Date.now(), body.data.demo), { status: 201 })
   } catch (e) {
     return handle(e)
   }

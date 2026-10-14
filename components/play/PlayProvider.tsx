@@ -13,7 +13,7 @@ import { createPlaySession, reducePlaySession } from "@/lib/play/sessionMachine"
 import type { PlayAction, PlaySession } from "@/lib/play/types"
 import { subscribeCaption, subscribeSpeaking, unlockPlayback } from "@/lib/play/speak"
 import { setVoiceStopEnabled } from "@/lib/play/voiceStop"
-import { sendEvent, sendResult } from "@/lib/session-client"
+import { sendEvent, sendResult, setInviteToken } from "@/lib/session-client"
 import type { PoseTier, SeedPatient, SessionResult, SessionStatus } from "@/lib/types"
 
 export type HitLogKind = "hit" | "miss"
@@ -39,8 +39,10 @@ type PlayContextValue = {
   addCosmosLook: (look: CosmosLook) => void
   resolveCosmosLook: (id: string, look: CosmosLook) => void
   sessionId: string
-  /** True when sessionId came from the console invite (?s=), the same on the server render and in the browser. */
+  /** True when sessionId came from a valid console invite (?i=, checked on the server). */
   invited: boolean
+  /** The invite token: sent with every write (lib/session-client) and kept on the "Your week" link. null if uninvited. */
+  inviteToken: string | null
   clinicName: string
   /** Last result sent to the care team (null until close or emergency). */
   result: SessionResult | null
@@ -60,6 +62,7 @@ export function PlayProvider({
   patient,
   sessionId,
   invited,
+  inviteToken,
   clinicName,
   demo,
   children,
@@ -67,11 +70,14 @@ export function PlayProvider({
   patient: SeedPatient
   sessionId: string
   invited: boolean
+  inviteToken: string | null
   clinicName: string
   demo: boolean
   children: ReactNode
 }) {
   const [session, setSession] = useState(() => createPlaySession(patient.rise_id, demo))
+  // Every write for this session carries the invite token (checked on the server).
+  useLayoutEffect(() => setInviteToken(inviteToken), [inviteToken])
   const sessionRef = useRef(session)
   useLayoutEffect(() => {
     sessionRef.current = session
@@ -265,6 +271,7 @@ export function PlayProvider({
       resolveCosmosLook,
       sessionId,
       invited,
+      inviteToken,
       clinicName,
       result,
       delivery,
@@ -291,6 +298,7 @@ export function PlayProvider({
       resolveCosmosLook,
       sessionId,
       invited,
+      inviteToken,
       clinicName,
       result,
       delivery,

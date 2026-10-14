@@ -6,7 +6,7 @@
  */
 
 import ui from "@/content/play-ui.json"
-import { CheerResponse, CREW_CONSENT_VERSION, CrewBoard, type CheerId, type CrewMember, type CrewStatus } from "@/lib/types"
+import { CheerResponse, CREW_CONSENT_VERSION, CrewBoard, INVITE_HEADER, type CheerId, type CrewMember, type CrewStatus } from "@/lib/types"
 
 const C = ui.crew
 
@@ -230,10 +230,10 @@ export async function postCheer(
 
 /* ---------- Membership calls (join, photo, leave) ---------- */
 
-function postJson(doFetch: FetchLike, url: string, body: unknown, timeoutMs: number): Promise<Response> {
+function postJson(doFetch: FetchLike, url: string, body: unknown, timeoutMs: number, extraHeaders: Record<string, string> = {}): Promise<Response> {
   return doFetch(url, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...extraHeaders },
     body: JSON.stringify(body),
     // The device token is an httpOnly same-origin cookie: join sets it and every other write needs it.
     credentials: "same-origin",
@@ -256,15 +256,15 @@ export type JoinOutcome =
   | { kind: "need_invite" }
   | { kind: "failed" }
 
-/** POST /api/crew/join with the consent version of the card the patient read. Not retried: it is a consent act. */
-/** The console invite's session id from this page's ?s=, which proves the join comes from the patient's own link. */
-export function inviteSessionId(search: string = typeof window === "undefined" ? "" : window.location.search): string | undefined {
-  const s = new URLSearchParams(search).get("s")
-  return s && /^rise-\d{2}-[a-z0-9]{4,24}$/.test(s) ? s : undefined
+/** The invite token from this page's ?i=, which proves the join comes from the patient's own link. */
+export function inviteToken(search: string = typeof window === "undefined" ? "" : window.location.search): string | undefined {
+  const t = new URLSearchParams(search).get("i")
+  return t && /^[A-Za-z0-9_-]{16,100}$/.test(t) ? t : undefined
 }
 
+/** POST /api/crew/join with the consent version of the card the patient read. Not retried: it is a consent act. */
 export async function joinCrewCall(
-  req: { riseId: string; showPhoto?: boolean; sessionId?: string },
+  req: { riseId: string; showPhoto?: boolean; inviteToken?: string },
   opts: { fetchImpl?: FetchLike; timeoutMs?: number; consentVersion?: string } = {},
 ): Promise<JoinOutcome> {
   const doFetch = opts.fetchImpl ?? ((input, init) => fetch(input, init))
@@ -272,8 +272,9 @@ export async function joinCrewCall(
     const res = await postJson(
       doFetch,
       "/api/crew/join",
-      { riseId: req.riseId, showPhoto: req.showPhoto, sessionId: req.sessionId, consentVersion: opts.consentVersion ?? CREW_CONSENT_VERSION },
+      { riseId: req.riseId, showPhoto: req.showPhoto, consentVersion: opts.consentVersion ?? CREW_CONSENT_VERSION },
       opts.timeoutMs ?? CREW_TIMEOUT_MS,
+      req.inviteToken ? { [INVITE_HEADER]: req.inviteToken } : {},
     )
     if (res.status === 409) return { kind: "changed" }
     if (res.status === 403) {
@@ -327,6 +328,7 @@ export async function leaveCrewCall(riseId: string, opts: { fetchImpl?: FetchLik
  * Only an id that came from the invite (?s=) is carried: a locally generated id differs between the server render
  * and the browser (hydration mismatch) and could never verify a join anyway.
  */
-export function weekHref(riseId: string, sessionId: string | undefined, invited: boolean): string {
-  return invited && sessionId?.startsWith(`${riseId}-`) ? `/play?s=${encodeURIComponent(sessionId)}` : "/play"
+/** "Your week", keeping the invite token so the crew can verify the patient's own link. */
+export function weekHref(token: string | null | undefined): string {
+  return token ? `/play?i=${encodeURIComponent(token)}` : "/play"
 }

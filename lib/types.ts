@@ -122,7 +122,8 @@ export const Keypoint = z.tuple([z.number(), z.number(), z.number()])
 export const Keypoints17 = z.array(Keypoint).length(17)
 export type Keypoints17 = z.infer<typeof Keypoints17>
 
-export const SessionStatus = z.enum(["invited", "setting_up", "testing", "paused", "questions", "scoring", "ready", "needs_confirmation"])
+/** could_not_complete = a real patient's camera or body tracker failed and they told the care team (no replay). */
+export const SessionStatus = z.enum(["invited", "setting_up", "testing", "paused", "questions", "scoring", "ready", "needs_confirmation", "could_not_complete"])
 export type SessionStatus = z.infer<typeof SessionStatus>
 
 /** Epoch ms. */
@@ -136,6 +137,12 @@ export const RepEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("stop"), sessionId: z.string(), reason: z.enum(["button", "no_stand"]), at: At }),
   z.object({ type: z.literal("resume"), sessionId: z.string(), at: At }),
   z.object({ type: z.literal("finished_early"), sessionId: z.string(), at: At }),
+  /** A pre-test safety confirmation (classic: chair, helper, phone; RehabNinja's combined card: ready). */
+  z.object({ type: z.literal("setup_confirmed"), sessionId: z.string(), check: z.enum(["chair", "helper", "phone", "ready"]), at: At }),
+  /** Demo only: a presenter skipped the safety screens. Rejected on a real (non-demo) invite. */
+  z.object({ type: z.literal("setup_skipped"), sessionId: z.string(), at: At }),
+  /** A real patient couldn't do the check-in (camera or tracker failed) and chose to tell the care team. */
+  z.object({ type: z.literal("could_not_complete"), sessionId: z.string(), reason: z.enum(["camera", "tracker"]), at: At }),
   /** Downsampled keypoint stream, batched (about 5 per second; config pose.upload_keypoints_hz). */
   z.object({ type: z.literal("keypoints"), sessionId: z.string(), frames: z.array(z.object({ t: At, kp: Keypoints17 })), at: At }),
 ])
@@ -343,12 +350,13 @@ export const Surface = z.enum(["play", "classic"])
 export type Surface = z.infer<typeof Surface>
 
 /** Console -> POST /api/sessions. Creates an "invited" session and its link. */
-export const InviteRequest = z.object({ riseId: z.string().regex(/^rise-\d{2}$/), surface: Surface })
+/** demo = the link plays the demo recording; decided here, on the server, never by the link's own parameters. */
+export const InviteRequest = z.object({ riseId: z.string().regex(/^rise-\d{2}$/), surface: Surface, demo: z.boolean().default(false) })
 export type InviteRequest = z.infer<typeof InviteRequest>
 
 export const InviteResponse = z.object({
   sessionId: z.string(),
-  /** Path on this app, e.g. /play/rise-01?s=rise-01-abc123. The console prefixes the public origin. */
+  /** Path on this app with the unguessable invite token, e.g. /p/rise-01?i=<token>. The console prefixes the origin. */
   path: z.string(),
   /** Twilio is not wired yet: always { sent: false, demoData: true } until it is. */
   sms: z.object({ sent: z.boolean(), demoData: z.boolean() }),
@@ -404,6 +412,7 @@ export const AuditEntry = z.object({
     "followup_attempt",
     "followup_closed",
     "followup_cancelled",
+    "could_not_complete",
   ]),
   from: Recommendation.optional(),
   to: Recommendation.optional(),
@@ -460,6 +469,16 @@ export const FollowUpRequest = z.object({
 })
 export type FollowUpRequest = z.infer<typeof FollowUpRequest>
 
+/**
+ * What the patient page learns from a valid invite token (server-side; the page passes it to the phone).
+ * The phone sends `token` as the x-rise-invite header on every write to this session.
+ */
+export const PatientInvite = z.object({ sessionId: z.string(), token: z.string(), demo: z.boolean(), surface: Surface })
+export type PatientInvite = z.infer<typeof PatientInvite>
+
+/** Header the phone uses to prove it holds the invite. */
+export const INVITE_HEADER = "x-rise-invite"
+
 /** One tile on the live board (C2), pushed over SSE on every change. */
 export const SessionSnapshot = z.object({
   sessionId: z.string(),
@@ -477,6 +496,14 @@ export const SessionSnapshot = z.object({
   invitedAt: At.nullable(),
   updatedAt: At,
   demoData: z.boolean(),
+  /** null = not sent from the console (an unlinked visit); otherwise whether the invite was for the demo recording. */
+  inviteDemo: z.boolean().nullable().optional(),
+  /** sha256 of the invite token (never the token). Writes to an invited session must present the token. */
+  inviteTokenHash: z.string().nullable().optional(),
+  /** Safety confirmations the patient gave before the test, in order, and whether a demo skipped them. */
+  setup: z.object({ confirmed: z.array(z.enum(["chair", "helper", "phone", "ready"])), skipped: z.boolean(), at: At.nullable() }).optional(),
+  /** Set when a real patient couldn't complete the check-in and told the care team. */
+  couldNotComplete: z.object({ reason: z.enum(["camera", "tracker"]), at: At }).optional(),
   /** Present once a decided card needs a person to follow up. */
   followUp: FollowUp.optional(),
   /** Present once the card is decided (and updated when the follow-up closes). */

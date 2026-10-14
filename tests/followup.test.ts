@@ -14,8 +14,20 @@ import {
   patientNextCheckIn,
   recordFollowUp,
   resetSessions,
-  SessionError,
-} from "../lib/sessions"
+  SessionError, applyEvent } from "../lib/sessions"
+
+// Writes to an invited session need its invite token (lib/sessions checkInviteToken). These wrappers remember the
+// token each invite() returned and pass it on, so tests read like the phone: invite, then report with the link.
+const __tokens = new Map<string, string>()
+function inv(riseId: string, surface: Parameters<typeof invite>[1], user?: string, now?: number, demo = true) {
+  // Scripted seed results are demo data, so test invites are demo invites unless a test says otherwise.
+  const r = invite(riseId, surface, user, now, demo)
+  __tokens.set(r.sessionId, new URL(r.path, "https://x").searchParams.get("i")!)
+  return r
+}
+const res = (id: string, r: Parameters<typeof applyResult>[1], now?: number) => applyResult(id, r, now, __tokens.get(id))
+const ev = (id: string, e: Parameters<typeof applyEvent>[1], now?: number) => applyEvent(id, e, now, __tokens.get(id))
+
 
 const ellen = patients.find((p) => p.rise_id === "rise-01")!
 const gary = patients.find((p) => p.rise_id === "rise-04")!
@@ -24,8 +36,8 @@ const T0 = new Date(2026, 9, 14, 9, 0).getTime()
 
 /** A decided card for a seed patient's scripted session. */
 function decided(p: typeof ellen, how: "approve" | { to: "nurse_callback" | "continue_plan" } = "approve") {
-  const { sessionId } = invite(p.rise_id, "classic", "Nurse A", T0)
-  const card = applyResult(sessionId, scriptedResult(p, { sessionId }), T0)
+  const { sessionId } = inv(p.rise_id, "classic", "Nurse A", T0)
+  const card = res(sessionId, scriptedResult(p, { sessionId }), T0)
   if (how === "approve") approve(sessionId, { action: "approve", user: "Nurse A" }, T0 + 1000)
   else approve(sessionId, { action: "downgrade", to: how.to, reasonCode: "spoke_with_patient", user: "Nurse A" }, T0 + 1000)
   return { sessionId, card }
@@ -82,7 +94,7 @@ describe("follow-up after a decision", () => {
 
   it("a card reopened by new patient input must be decided again before the follow-up is recorded", () => {
     const { sessionId } = decided(ellen)
-    applyResult(sessionId, scriptedResult(ellen, { sessionId, symptoms: { ...ellen.scripted_today.symptoms, pain_0_10: 9 } }), T0 + 5000)
+    res(sessionId, scriptedResult(ellen, { sessionId, symptoms: { ...ellen.scripted_today.symptoms, pain_0_10: 9 } }), T0 + 5000)
     expect(getSession(sessionId)!.card?.approval).toBe("pending")
     expect(() => recordFollowUp(sessionId, { outcome: "reached_plan_continues", user: "N" })).toThrow(/decide it first/)
   })
@@ -105,7 +117,7 @@ describe("follow-up after a decision", () => {
   it("a pause stands over a newer invite or a later routine decision, until it is cleared", () => {
     const { sessionId } = decided(ellen)
     recordFollowUp(sessionId, { outcome: "reached_urgent_care", user: "Nurse A" }, T0 + 2000)
-    invite("rise-01", "play", "Nurse A", T0 + 3000)
+    inv("rise-01", "play", "Nurse A", T0 + 3000)
     expect(patientNextCheckIn("rise-01")).toMatchObject({ paused: true })
     // The console patient list uses the same rule.
     expect(standingNextCheckIn(listSessions(), "rise-01")).toEqual(patientNextCheckIn("rise-01"))
@@ -113,7 +125,7 @@ describe("follow-up after a decision", () => {
 
   it("open follow-ups are kept when the store is full", () => {
     const { sessionId } = decided(ellen)
-    for (let i = 0; i < 105; i++) invite("rise-04", "play", "N", T0 + 10_000 + i)
+    for (let i = 0; i < 105; i++) inv("rise-04", "play", "N", T0 + 10_000 + i)
     expect(getSession(sessionId)?.followUp?.status).toBe("open")
   })
 })

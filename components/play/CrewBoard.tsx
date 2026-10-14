@@ -24,7 +24,7 @@ import {
   cheerPhrase,
   cheersCountLabel,
   crewPanels,
-  inviteSessionId,
+  inviteToken,
   fetchCrewBoard,
   goalView,
   joinCrewCall,
@@ -352,7 +352,7 @@ function JoinCard({
   const join = async () => {
     setSending(true)
     // A member re-joining from another phone keeps their photo choice unless they touched the switch.
-    const out = await joinCrewCall({ riseId, showPhoto: elsewhere && !photoTouched ? undefined : showPhoto, sessionId: inviteSessionId() })
+    const out = await joinCrewCall({ riseId, showPhoto: elsewhere && !photoTouched ? undefined : showPhoto, inviteToken: inviteToken() })
     if (out.kind === "ok") return onJoined(out.board)
     setSending(false)
     if (out.kind === "changed") await onChanged()
