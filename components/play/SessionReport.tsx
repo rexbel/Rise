@@ -91,19 +91,19 @@ export function SessionReport({ patient }: { patient: SeedPatient }) {
         </h2>
       </div>
 
-      {/* No per-rep hit/miss record here: on the closing screen it reads as a pass/fail score. The clinic strip keeps it. */}
+      {/* No per-rep hit/miss record here: on the closing screen it reads as a pass/fail score. The clinic strip keeps it.
+          Each step's last spoken line (correction action, next step, closure) is left to the caption bar under the
+          card, so it is not printed twice. */}
       {step === "tip" && close.correction ? (
         <section className="flex flex-1 flex-col gap-3">
           <p className="text-2xl font-semibold leading-snug text-pt-ink">{close.correction.what}</p>
           <p className="text-xl leading-snug text-pt-muted">{close.correction.why}</p>
-          <p className="text-xl leading-snug text-pt-ink">{close.correction.action}</p>
         </section>
       ) : null}
 
       {step === "today" ? (
         <section className="flex flex-1 flex-col gap-4">
           <p className={`${playDisplay.className} text-2xl font-bold leading-snug text-pt-ink`}>{trendLine}</p>
-          {nextLine ? <p className="text-xl leading-snug text-pt-ink">{nextLine}</p> : null}
         </section>
       ) : null}
 
@@ -113,7 +113,6 @@ export function SessionReport({ patient }: { patient: SeedPatient }) {
             <p className="rounded-2xl bg-pt-surface-2 px-4 py-3 text-xl text-pt-ink" role="status">
               {noteDone === "sent" ? ui.note.sent : ui.note.skipped}
             </p>
-            {closureLine ? <p className="text-xl leading-snug text-pt-ink">{closureLine}</p> : null}
           </section>
         ) : (
           <NoteBox onDone={setNoteDone} />
