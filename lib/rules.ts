@@ -22,7 +22,36 @@ import type { CheckIn, Route, SessionResult, TriageDecision } from "@/lib/types"
 const T = protocol.thresholds
 const TANDEM_MIN_S = protocol.addons.balance_tandem.fall_risk_if_hold_under_s
 
+const QUESTION_LABEL: Record<string, string> = {
+  pain_0_10: "pain",
+  dizzy: "dizziness",
+  short_of_breath_or_chest_pain: "shortness of breath or chest pain",
+  calf_pain_or_swelling: "calf pain or swelling",
+}
+
+/**
+ * The patient left during the questions (pending clinical sign-off: docs/clinical-review/leave-mid-questions.md).
+ * Unanswered questions are never read as "No": the recommendation is at least "confirm with a person", and an
+ * escalation from the answers they did give still stands, with the unanswered questions listed.
+ */
 export function triage(result: SessionResult, previous: CheckIn | undefined, postOpDay: number): TriageDecision {
+  const base = triageAnswered(result, previous, postOpDay)
+  const unanswered = result.questionsUnanswered ?? []
+  if (!unanswered.length) return base
+  const missing = `Questions not finished: ${unanswered.map((q: string) => QUESTION_LABEL[q] ?? q).join(", ")} not answered`
+  if (base.recommendation === "escalate_urgent" || base.recommendation === "human_confirm") {
+    return { ...base, reasons: [...base.reasons, missing] }
+  }
+  return {
+    recommendation: "human_confirm",
+    route: "care_coordinator",
+    ruleFired: "questions_unfinished",
+    reasons: [missing, ...(base.ruleFired !== "on_track" ? base.reasons.map((r) => `Also present: ${r}`) : [])],
+    emergency: false,
+  }
+}
+
+function triageAnswered(result: SessionResult, previous: CheckIn | undefined, postOpDay: number): TriageDecision {
   const s = result.symptoms
   const surgicalRoute: Route = postOpDay <= T.route_surgeon_if_pod_lte ? "surgeon_on_call" : "primary_care"
   const decide = (d: Omit<TriageDecision, "emergency">, emergency = false): TriageDecision => ({ ...d, emergency })

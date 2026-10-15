@@ -62,6 +62,7 @@ export const STATUS_LABEL: Record<SessionStatus, string> = {
   ready: "Ready",
   needs_confirmation: "Needs confirmation",
   could_not_complete: "Couldn't complete",
+  left: "Left the check-in",
 }
 
 export const SURFACE_LABEL: Record<Surface, string> = {
@@ -202,6 +203,8 @@ export function auditActionLabel(a: AuditEntry): string {
       return "Follow-up cancelled"
     case "could_not_complete":
       return "Patient couldn't complete the check-in"
+    case "left_flow":
+      return "Patient left the check-in"
     case "followup_closed":
       return "Follow-up closed"
   }

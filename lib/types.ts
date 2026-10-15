@@ -123,7 +123,16 @@ export const Keypoints17 = z.array(Keypoint).length(17)
 export type Keypoints17 = z.infer<typeof Keypoints17>
 
 /** could_not_complete = a real patient's camera or body tracker failed and they told the care team (no replay). */
-export const SessionStatus = z.enum(["invited", "setting_up", "testing", "paused", "questions", "scoring", "ready", "needs_confirmation", "could_not_complete"])
+/** left = the patient left the check-in (Leave) before any result; the step is in leftFlow. */
+export const SessionStatus = z.enum(["invited", "setting_up", "testing", "paused", "questions", "scoring", "ready", "needs_confirmation", "could_not_complete", "left"])
+
+/** Where a patient can leave a check-in from (Leave in the patient flow header). */
+export const FlowStep = z.enum(["welcome", "setup", "frame", "instructions", "countdown", "test", "questions", "help", "closing"])
+export type FlowStep = z.infer<typeof FlowStep>
+
+/** Symptom questions the phone asks; listed when the patient left before answering them. */
+export const QuestionKey = z.enum(["pain_0_10", "dizzy", "short_of_breath_or_chest_pain", "calf_pain_or_swelling"])
+export type QuestionKey = z.infer<typeof QuestionKey>
 export type SessionStatus = z.infer<typeof SessionStatus>
 
 /** Epoch ms. */
@@ -143,6 +152,8 @@ export const RepEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("setup_skipped"), sessionId: z.string(), at: At }),
   /** A real patient couldn't do the check-in (camera or tracker failed) and chose to tell the care team. */
   z.object({ type: z.literal("could_not_complete"), sessionId: z.string(), reason: z.enum(["camera", "tracker"]), at: At }),
+  /** The patient chose Leave (and confirmed). Before a result: the board shows "Left at <step>". */
+  z.object({ type: z.literal("left_flow"), sessionId: z.string(), step: FlowStep, at: At }),
   /** Downsampled keypoint stream, batched (about 5 per second; config pose.upload_keypoints_hz). */
   z.object({ type: z.literal("keypoints"), sessionId: z.string(), frames: z.array(z.object({ t: At, kp: Keypoints17 })), at: At }),
 ])
@@ -186,6 +197,11 @@ export const SessionResult = z.object({
   tandemHoldS: z.number().min(0).optional(),
   gaitObservations: z.array(z.string().max(200)).max(20).default([]),
   symptoms: Symptoms,
+  /**
+   * Questions the patient left without answering (Leave during the questions). Their symptoms values are
+   * placeholders, never answers: the card shows "Not answered" and the rules ask a person to confirm.
+   */
+  questionsUnanswered: z.array(QuestionKey).max(4).optional(),
   patientNote: z.string().max(2000).optional(),
   tier: PoseTier,
   /** True when any part came from a seeded fallback; shows the "Demo data" badge. */
@@ -312,6 +328,8 @@ export type ApprovalState = z.infer<typeof ApprovalState>
 /** The console's triage card (C3). Built server-side from SessionResult + TriageDecision + Cosmos + agent. */
 export const TriageCard = TriageDecision.extend({
   sessionId: z.string(),
+  /** Copied from the result: symptom questions the patient left unanswered. */
+  questionsUnanswered: z.array(QuestionKey).optional(),
   riseId: z.string(),
   protocol: SessionProtocol,
   exerciseId: z.string().optional(),
@@ -413,6 +431,7 @@ export const AuditEntry = z.object({
     "followup_closed",
     "followup_cancelled",
     "could_not_complete",
+    "left_flow",
   ]),
   from: Recommendation.optional(),
   to: Recommendation.optional(),
@@ -504,6 +523,8 @@ export const SessionSnapshot = z.object({
   inviteTokenHash: z.string().nullable().optional(),
   /** Safety confirmations the patient gave before the test, in order, and whether a demo skipped them. */
   setup: z.object({ confirmed: z.array(z.enum(["chair", "helper", "phone", "ready"])), skipped: z.boolean(), at: At.nullable() }).optional(),
+  /** Set when the patient chose Leave before any result. */
+  leftFlow: z.object({ step: FlowStep, at: At }).optional(),
   /** Set when a real patient couldn't complete the check-in and told the care team. */
   couldNotComplete: z.object({ reason: z.enum(["camera", "tracker"]), at: At }).optional(),
   /** Present once a decided card needs a person to follow up. */
