@@ -2,7 +2,8 @@
 
 /**
  * Live camera framing before countdown. Continue enabled when hips/knees visible.
- * On a real invite a camera or tracker failure shows help (Try again, Tell my care team) instead of the demo replay.
+ * On a real invite a camera or tracker failure shows help (Try again, Tell my care team, Not now) instead of the demo replay.
+ * Back (to the ready card) and Leave are in the flow header above (PhoneColumn).
  */
 
 import Link from "next/link"
@@ -31,7 +32,7 @@ export function FrameGate({
   /** cameraFailed: the camera or tracker did not start here, so the set should not try again. */
   onOk: (cameraFailed: boolean) => void
 }) {
-  const { invited, sessionId } = usePlay()
+  const { invited, sessionId, dispatch } = usePlay()
   const real = isRealPlay(invited, demo)
   const [bodyOk, setBodyOk] = useState(false)
   const [fallbackHint, setFallbackHint] = useState<string | null>(null)
@@ -107,6 +108,11 @@ export function FrameGate({
         state={trouble}
         onRetry={retry}
         onTell={() => void tell()}
+        onNotNow={() => {
+          // Leave without telling: the board shows "Left the check-in · camera help"; the link stays valid.
+          stop()
+          dispatch({ type: "LEAVE", step: "help" })
+        }}
         headingClassName={playDisplay.className}
         doneExtra={<DoneLink />}
       />

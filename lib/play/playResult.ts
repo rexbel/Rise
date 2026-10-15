@@ -11,13 +11,14 @@
 import { closingLines } from "@/lib/feedback"
 import { formatCorrection, pickFinding } from "@/lib/play/formatPatient"
 import { QUESTION_ORDER } from "@/lib/play/phaseView"
-import type { FinishedSet, PatientFeedback, PlayPhase, QuestionAnswers } from "@/lib/play/types"
+import type { FinishedSet, PatientFeedback, PlayPhase, QuestionAnswers, QuestionId } from "@/lib/play/types"
 import { triage } from "@/lib/rules"
 import { steadiScore } from "@/lib/steadi"
 import {
   SESSION_ID,
   type CheckIn,
   type PoseTier,
+  type QuestionKey,
   type Recommendation,
   type SeedPatient,
   type SessionResult,
@@ -59,6 +60,22 @@ export function lastCheckIn(patient: SeedPatient): CheckIn | undefined {
   return patient.checkins[patient.checkins.length - 1]
 }
 
+/** The phone's question ids, as the shared result names them. */
+export const QUESTION_KEY: Record<QuestionId, QuestionKey> = {
+  pain: "pain_0_10",
+  dizzy: "dizzy",
+  breath_chest: "short_of_breath_or_chest_pain",
+  calf: "calf_pain_or_swelling",
+}
+
+/**
+ * Questions the patient has not answered, in question order (Leave during the questions, or after "I tapped Yes by
+ * mistake" cleared the red-flag answer). Their symptom values are placeholders; the card shows "Not answered".
+ */
+export function unansweredQuestions(answers: QuestionAnswers): QuestionKey[] {
+  return QUESTION_ORDER.filter((id) => answers[id] === undefined).map((id) => QUESTION_KEY[id])
+}
+
 /** Unanswered yes/no questions (e.g. calf after an emergency Yes) are sent as "no"; pain defaults to 0. */
 export function playSymptoms(answers: QuestionAnswers, patient: SeedPatient, demo: boolean): Symptoms {
   return {
@@ -91,6 +108,8 @@ export type PlayResultInput = {
   startedAt: number
   finishedAt: number
   patientNote?: string
+  /** Leave during the questions: the ones not answered (omitted when every question was answered). */
+  questionsUnanswered?: QuestionKey[]
 }
 
 export function buildPlayResult(input: PlayResultInput): SessionResult {
@@ -118,6 +137,7 @@ export function buildPlayResult(input: PlayResultInput): SessionResult {
     gaitObservations: demo ? (scripted.gait_observations ?? []) : [],
     symptoms: playSymptoms(input.answers, patient, demo),
     patientNote: input.patientNote,
+    ...(input.questionsUnanswered?.length ? { questionsUnanswered: input.questionsUnanswered } : {}),
     tier: input.tier,
     demoData: demo || input.seeded || input.tier === "seeded",
     // Only a ?demo=1 run copies scripted fields; a camera fallback replays movement but scripts no answers.

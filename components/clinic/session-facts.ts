@@ -2,7 +2,7 @@
  * Console labels for how a check-in was run: a real invite or a demo, which safety checks the patient confirmed,
  * and why a real check-in couldn't be completed. Pure (no React), so vitest covers them.
  */
-import type { SessionSnapshot } from "@/lib/types"
+import type { SessionSnapshot, TriageCard } from "@/lib/types"
 
 type Setup = NonNullable<SessionSnapshot["setup"]>
 export type SetupCheck = Setup["confirmed"][number]
@@ -62,4 +62,21 @@ export const COULD_NOT_COMPLETE_LABEL: Record<CouldNotCompleteReason, string> = 
 /** "Couldn't complete: camera problem". */
 export function couldNotCompleteText(reason: CouldNotCompleteReason): string {
   return `Couldn't complete: ${COULD_NOT_COMPLETE_LABEL[reason]}`
+}
+
+/**
+ * The phone sends booleans for every symptom, but a red-flag Yes ends the questions before the calf question,
+ * and incontinence is never asked on the phone (demo sessions carry the scripted value). Showing "No" for
+ * those would read as a negative answer the patient never gave. A question the patient left without answering
+ * (questionsUnanswered) is "Not answered": it was put to them, so neither "No" nor "Not asked".
+ */
+export function symptomAsked(
+  card: Pick<TriageCard, "symptoms" | "scripted" | "questionsUnanswered">,
+  key: keyof TriageCard["symptoms"],
+): "asked" | "not_asked" | "not_answered" | "scripted" {
+  if (key !== "new_incontinence" && card.questionsUnanswered?.includes(key)) return "not_answered"
+  if (key === "pain_0_10") return "asked"
+  if (key === "calf_pain_or_swelling" && card.symptoms.short_of_breath_or_chest_pain) return "not_asked"
+  if (key === "new_incontinence") return card.scripted.includes("new_incontinence") ? "scripted" : "not_asked"
+  return "asked"
 }

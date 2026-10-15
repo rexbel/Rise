@@ -8,6 +8,7 @@ import {
   CameraOff,
   Check,
   CircleCheck,
+  CircleHelp,
   CircleMinus,
   History,
   Hourglass,
@@ -54,6 +55,7 @@ import {
   ROUTE_LABEL,
   ruleLabel,
   statusText,
+  FLOW_STEP_LABEL,
   SURFACE_LABEL,
   TIER_LABEL,
   type PatientSummary,
@@ -71,7 +73,7 @@ import {
   TONE_WASH,
   focusRing,
 } from "./status"
-import { checkInKind, COULD_NOT_COMPLETE_LABEL, couldNotCompleteText, setupSummary, type SetupSummary } from "./session-facts"
+import { checkInKind, COULD_NOT_COMPLETE_LABEL, couldNotCompleteText, setupSummary, symptomAsked, type SetupSummary } from "./session-facts"
 import { DEMO_USER, useClinic, useNow } from "./store"
 
 const serif = "font-[family-name:var(--font-cl-serif)]"
@@ -164,14 +166,25 @@ function Detail({ s, p }: { s: SessionSnapshot; p: PatientSummary | undefined })
 }
 
 function Waiting({ s }: { s: SessionSnapshot }) {
+  const left = s.status === "left" ? s.leftFlow : undefined
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-md border border-cl-line bg-cl-surface p-5" role="status">
       <Hourglass aria-hidden className="size-6 text-cl-muted" />
       <div className="min-w-0 flex-1">
         <p className="text-xl font-semibold">No triage card yet</p>
-        <p className="text-base text-cl-muted">
-          The rules run when the patient finishes the test and questions. This page updates on its own.
-        </p>
+        {left ? (
+          <p className="text-base text-cl-muted">
+            The patient chose Leave at {FLOW_STEP_LABEL[left.step]} (
+            <time className="tabular-nums" dateTime={new Date(left.at).toISOString()}>
+              {formatTime(left.at)}
+            </time>
+            ), before the test result, so the rules did not run. The link still works if they start again.
+          </p>
+        ) : (
+          <p className="text-base text-cl-muted">
+            The rules run when the patient finishes the test and questions. This page updates on its own.
+          </p>
+        )}
       </div>
       <StatusText icon={STATUS_ICON[s.status]} tone="neutral" className="text-lg">
         {statusText(s)}
@@ -441,15 +454,14 @@ const NOT_ASKED: Record<(typeof SYMPTOMS)[number]["key"], string> = {
   new_incontinence: "Not asked on the phone",
 }
 
-/**
- * The phone sends booleans for every symptom, but a red-flag Yes ends the questions before the calf question,
- * and incontinence is never asked on the phone (demo sessions carry the scripted value). Showing "No" for
- * those would read as a negative answer the patient never gave.
- */
-function symptomAsked(card: TriageCard, key: (typeof SYMPTOMS)[number]["key"]): "asked" | "not_asked" | "scripted" {
-  if (key === "calf_pain_or_swelling" && card.symptoms.short_of_breath_or_chest_pain) return "not_asked"
-  if (key === "new_incontinence") return card.scripted.includes("new_incontinence") ? "scripted" : "not_asked"
-  return "asked"
+/** The patient left before answering: an icon and words, never read as "No". */
+function NotAnswered() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-sm border border-status-confirm/60 bg-status-confirm/15 px-1.5 py-0.5 text-sm font-semibold text-cl-ink">
+      <CircleHelp aria-hidden className="size-4 text-status-confirm" strokeWidth={2.5} />
+      Not answered
+    </span>
+  )
 }
 
 function SymptomsAndNote({ card }: { card: TriageCard }) {
@@ -461,7 +473,13 @@ function SymptomsAndNote({ card }: { card: TriageCard }) {
       <dl className="grid gap-x-6 gap-y-2 text-lg sm:grid-cols-2">
         <div className="flex items-baseline justify-between gap-3 border-b border-cl-line py-1">
           <dt>Pain right now</dt>
-          <dd className="font-semibold tabular-nums">{card.symptoms.pain_0_10} / 10</dd>
+          {symptomAsked(card, "pain_0_10") === "not_answered" ? (
+            <dd className="shrink-0">
+              <NotAnswered />
+            </dd>
+          ) : (
+            <dd className="font-semibold tabular-nums">{card.symptoms.pain_0_10} / 10</dd>
+          )}
         </div>
         {SYMPTOMS.map((q) => {
           const yes = card.symptoms[q.key]
@@ -470,7 +488,9 @@ function SymptomsAndNote({ card }: { card: TriageCard }) {
             <div key={q.key} className="flex items-baseline justify-between gap-3 border-b border-cl-line py-1">
               <dt>{q.label}</dt>
               <dd className={cn("shrink-0", asked === "not_asked" ? "text-base text-cl-muted" : "font-semibold")}>
-                {asked === "not_asked"
+                {asked === "not_answered" ? (
+                  <NotAnswered />
+                ) : asked === "not_asked"
                   ? NOT_ASKED[q.key]
                   : yes
                     ? q.red
@@ -1231,6 +1251,8 @@ function Audit({ s }: { s: SessionSnapshot }) {
                 <p className="text-base text-cl-muted">
                   {a.action.startsWith("followup_") ? (
                     <>Outcome: {outcomeLabel(a.reasonCode)}</>
+                  ) : a.action === "left_flow" ? (
+                    <>Left at: {FLOW_STEP_LABEL[a.reasonCode as keyof typeof FLOW_STEP_LABEL] ?? a.reasonCode}</>
                   ) : a.action === "could_not_complete" ? (
                     <>Reason: {COULD_NOT_COMPLETE_LABEL[a.reasonCode as keyof typeof COULD_NOT_COMPLETE_LABEL] ?? a.reasonCode}</>
                   ) : (

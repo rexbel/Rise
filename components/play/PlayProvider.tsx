@@ -8,13 +8,13 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import type { CosmosLook } from "@/lib/play/cosmosClient"
 import { rulePack } from "@/lib/play/exerciseRules"
-import { buildPlayResult, playStatusFor } from "@/lib/play/playResult"
+import { buildPlayResult, playStatusFor, unansweredQuestions } from "@/lib/play/playResult"
 import { createPlaySession, reducePlaySession } from "@/lib/play/sessionMachine"
 import type { PlayAction, PlaySession } from "@/lib/play/types"
 import { subscribeCaption, subscribeSpeaking, unlockPlayback } from "@/lib/play/speak"
 import { setVoiceStopEnabled } from "@/lib/play/voiceStop"
 import { sendEvent, sendResult, setInviteToken } from "@/lib/session-client"
-import type { PoseTier, SeedPatient, SessionResult, SessionStatus } from "@/lib/types"
+import type { PoseTier, QuestionKey, SeedPatient, SessionResult, SessionStatus } from "@/lib/types"
 
 export type HitLogKind = "hit" | "miss"
 
@@ -54,6 +54,8 @@ type PlayContextValue = {
   sendNote: (note: string) => Promise<boolean>
   /** Delivery of the latest result: the emergency screen says "your care team is being told" only when "ok". */
   delivery: "idle" | "sending" | "ok" | "failed"
+  /** Send the latest result again (Try again after it did not go through). Resolves true once acknowledged. */
+  retryResult: () => Promise<boolean>
 }
 
 const PlayContext = createContext<PlayContextValue | null>(null)
@@ -139,7 +141,8 @@ export function PlayProvider({
       const r = relay.current
       const now = Date.now()
       if (next.phase === "live" && r.startedAt === 0) r.startedAt = now
-      if (action.type === "STOP" && before.phase !== next.phase) {
+      // Stop during the countdown only cancels it (nothing was testing); the board hears about a live Stop.
+      if (action.type === "STOP" && before.phase !== next.phase && next.phase === "paused") {
         sendEvent({ type: "stop", sessionId, reason: "button", at: now })
       }
       if (action.type === "RESUME" && before.phase === "paused" && next.phase === "live") {
@@ -158,8 +161,8 @@ export function PlayProvider({
         r.lastStatus = status
         sendEvent({ type: "status", sessionId, status, tier: r.startedAt ? r.tier : undefined, at: now })
       }
-      const closing = next.phase === "close" || next.phase === "emergency"
-      if (closing && before.phase !== next.phase && next.finishedSet) {
+      const send = (questionsUnanswered?: QuestionKey[]) => {
+        if (!next.finishedSet) return
         const out = buildPlayResult({
           sessionId,
           patient,
@@ -174,10 +177,22 @@ export function PlayProvider({
           seeded: r.seeded,
           startedAt: r.startedAt,
           finishedAt: r.finishedAt || now,
+          questionsUnanswered,
         })
         resultRef.current = out
         setResult(out)
         void deliver(out)
+      }
+      const closing = next.phase === "close" || next.phase === "emergency"
+      if (closing && before.phase !== next.phase && next.finishedSet) send()
+      // "I tapped Yes by mistake": re-send with the red-flag answer cleared (listed as not answered), so the card
+      // never keeps a red flag the patient took back, and the server records the retraction.
+      if (action.type === "EMERGENCY_MISTAP" && next.phase === "questions") send(unansweredQuestions(next.answers))
+      if (action.type === "LEAVE" && next.phase === "left") {
+        // Leaving the questions after a finished set sends the result with the questions not answered; anywhere
+        // else (no result yet) the board shows "Left the check-in" with the step.
+        if (before.phase === "questions" && next.finishedSet) send(unansweredQuestions(next.answers))
+        else if (next.leftFrom) sendEvent({ type: "left_flow", sessionId, step: next.leftFrom, at: now })
       }
     },
     [sessionId, patient, demo, deliver],
@@ -232,6 +247,11 @@ export function PlayProvider({
     [deliver],
   )
 
+  const retryResult = useCallback(async () => {
+    const base = resultRef.current
+    return base ? deliver(base) : false
+  }, [deliver])
+
   useEffect(() => subscribeCaption(setCaption), [])
   useEffect(() => subscribeSpeaking(setSpeaking), [])
   useEffect(() => {
@@ -278,6 +298,7 @@ export function PlayProvider({
       recordRep,
       setSetSource,
       sendNote,
+      retryResult,
     }),
     [
       session,
@@ -305,6 +326,7 @@ export function PlayProvider({
       recordRep,
       setSetSource,
       sendNote,
+      retryResult,
     ],
   )
 

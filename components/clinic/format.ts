@@ -5,6 +5,7 @@
 import type {
   ApprovalState,
   AuditEntry,
+  FlowStep,
   PoseTier,
   Recommendation,
   Route,
@@ -104,8 +105,24 @@ export function recommendationWithRoute(rec: Recommendation, route: Route | null
   return route ? `${RECOMMENDATION_LABEL[rec]} → ${ROUTE_LABEL[route]}` : RECOMMENDATION_LABEL[rec]
 }
 
-/** Status line for a tile; testing carries the live count in words. */
-export function statusText(s: Pick<SessionSnapshot, "status" | "count" | "surface">): string {
+/** Where in the patient flow the patient chose Leave, in plain words. */
+export const FLOW_STEP_LABEL: Record<FlowStep, string> = {
+  welcome: "welcome",
+  setup: "safety checks",
+  frame: "framing",
+  instructions: "instructions",
+  countdown: "countdown",
+  test: "the test",
+  questions: "questions",
+  help: "camera help",
+  closing: "closing",
+}
+
+/** Status line for a tile; testing carries the live count in words, and a leave says where. */
+export function statusText(s: Pick<SessionSnapshot, "status" | "count" | "surface"> & Partial<Pick<SessionSnapshot, "leftFlow">>): string {
+  if (s.status === "left") {
+    return s.leftFlow ? `${STATUS_LABEL.left} · ${FLOW_STEP_LABEL[s.leftFlow.step]}` : STATUS_LABEL.left
+  }
   if (s.status === "testing") {
     const unit = s.surface === "play" ? (s.count === 1 ? "rep" : "reps") : s.count === 1 ? "stand" : "stands"
     return `Testing · ${s.count} ${unit}`

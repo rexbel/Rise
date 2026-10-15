@@ -4,6 +4,7 @@
  */
 
 import type { ExerciseId } from "@/lib/play/programs"
+import type { FlowStep } from "@/lib/types"
 
 export type SessionState = "stable" | "compensating" | "overloaded" | "unsafe" | "recovery"
 
@@ -69,6 +70,8 @@ export type PlayPhase =
   | "questions"
   | "emergency"
   | "close"
+  /** The patient chose Leave (and confirmed). leftFrom says where; answers and finishedSet are kept. */
+  | "left"
 
 export type QuestionId = "pain" | "dizzy" | "breath_chest" | "calf"
 
@@ -92,6 +95,12 @@ export interface PlaySession {
   exerciseId: ExerciseId
   /** The framing step could not use the camera or the body tracker, so the set goes straight to demo replay. */
   cameraFailed?: boolean
+  /** The question on screen. Back moves it one question back and keeps every answer. Unset = first unanswered. */
+  question?: QuestionId
+  /** Index of the closing step on screen (SessionReport clamps it to its own steps). */
+  closeStep?: number
+  /** Where the patient left from (phase "left"). */
+  leftFrom?: FlowStep
 }
 
 /** Clinic strip is this object — never hardcoded copy. */
@@ -105,6 +114,7 @@ export type PlayAction =
   | { type: "COUNTDOWN_DONE" }
   | { type: "TRACKING_LOST" }
   | { type: "TRACKING_OK" }
+  /** Live set: pause. Countdown: cancel back to framing (or the start screen in a demo). */
   | { type: "STOP" }
   | { type: "PAUSE" }
   | { type: "RESUME" }
@@ -117,3 +127,9 @@ export type PlayAction =
   | { type: "SELECT_EXERCISE"; exerciseId: ExerciseId }
   | { type: "PRESENTER_SKIP_TO_LIVE" }
   | { type: "PRESENTER_JUMP_TO_QUESTIONS" }
+  /** One step back in the current flow (ready, frame, questions, closing steps). Never past an answered red flag. */
+  | { type: "BACK" }
+  /** Next closing step. */
+  | { type: "CLOSE_NEXT" }
+  /** Leave (confirmed). step overrides the phase's own step, e.g. "help" from the camera help screen. */
+  | { type: "LEAVE"; step?: FlowStep }
