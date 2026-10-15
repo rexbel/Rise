@@ -5,6 +5,7 @@
 import type {
   ApprovalState,
   AuditEntry,
+  FlowStep,
   PoseTier,
   Recommendation,
   Route,
@@ -62,6 +63,7 @@ export const STATUS_LABEL: Record<SessionStatus, string> = {
   ready: "Ready",
   needs_confirmation: "Needs confirmation",
   could_not_complete: "Couldn't complete",
+  left: "Left the check-in",
 }
 
 export const SURFACE_LABEL: Record<Surface, string> = {
@@ -103,8 +105,24 @@ export function recommendationWithRoute(rec: Recommendation, route: Route | null
   return route ? `${RECOMMENDATION_LABEL[rec]} → ${ROUTE_LABEL[route]}` : RECOMMENDATION_LABEL[rec]
 }
 
-/** Status line for a tile; testing carries the live count in words. */
-export function statusText(s: Pick<SessionSnapshot, "status" | "count" | "surface">): string {
+/** Where in the patient flow the patient chose Leave, in plain words. */
+export const FLOW_STEP_LABEL: Record<FlowStep, string> = {
+  welcome: "welcome",
+  setup: "safety checks",
+  frame: "framing",
+  instructions: "instructions",
+  countdown: "countdown",
+  test: "the test",
+  questions: "questions",
+  help: "camera help",
+  closing: "closing",
+}
+
+/** Status line for a tile; testing carries the live count in words, and a leave says where. */
+export function statusText(s: Pick<SessionSnapshot, "status" | "count" | "surface"> & Partial<Pick<SessionSnapshot, "leftFlow">>): string {
+  if (s.status === "left") {
+    return s.leftFlow ? `${STATUS_LABEL.left} · ${FLOW_STEP_LABEL[s.leftFlow.step]}` : STATUS_LABEL.left
+  }
   if (s.status === "testing") {
     const unit = s.surface === "play" ? (s.count === 1 ? "rep" : "reps") : s.count === 1 ? "stand" : "stands"
     return `Testing · ${s.count} ${unit}`
@@ -142,11 +160,15 @@ export function downgradeOptions(from: Recommendation): Recommendation[] {
 }
 
 /** Tone for a tile: the decided recommendation when a card exists, otherwise the live status. */
-export function sessionTone(s: Pick<SessionSnapshot, "card" | "audit" | "status">): Tone {
+export function sessionTone(s: Pick<SessionSnapshot, "card" | "audit" | "status" | "leftFlow">): Tone {
+  // The patient was shown the 911 screen, then took it back: a person decides, whatever the later answers say.
+  if (s.card?.approval === "pending" && s.card.warnings.some((w) => w.startsWith("Red flag retracted"))) return "confirm"
   const rec = finalRecommendation(s)
   if (rec) return RECOMMENDATION_TONE[rec]
   // Couldn't complete: a real patient tried and the camera failed, so a person should look.
   if (s.status === "needs_confirmation" || s.status === "paused" || s.status === "could_not_complete") return "confirm"
+  // Left mid-test (including after Stop): possibly a safety event, so it stays as visible as a pause.
+  if (s.status === "left" && (s.leftFlow?.step === "test" || s.leftFlow?.step === "countdown")) return "confirm"
   return "neutral"
 }
 
@@ -202,6 +224,8 @@ export function auditActionLabel(a: AuditEntry): string {
       return "Follow-up cancelled"
     case "could_not_complete":
       return "Patient couldn't complete the check-in"
+    case "left_flow":
+      return "Patient left the check-in"
     case "followup_closed":
       return "Follow-up closed"
   }

@@ -5,10 +5,12 @@
  * <-> P3a paused -> P4 four questions -> P5 closing (or the emergency screen alone on a red flag).
  * Setup and closing go one screen at a time: one picture, one question, one big button.
  * Never shows a score, a stand count, a norm, or "below average". Every instruction is spoken and captioned.
+ * Every screen has a way back or out in the same place (components/patient/FlowHeader): Back one step, and Leave
+ * (confirmed). The test itself keeps Stop; the emergency screen keeps 911 first and "I tapped Yes by mistake".
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import Link from "next/link"
-import { AlertTriangle, ArrowLeft, Check, Loader2, Phone, Square, X } from "lucide-react"
+import { AlertTriangle, Check, Loader2, Phone, Square, Undo2, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -24,19 +26,24 @@ import { resolvePlaySessionId } from "@/lib/play/playResult"
 import { SetupGuide } from "./setup-guide"
 import { sendEvent, sendResult, setInviteToken } from "@/lib/session-client"
 import { steadiScore } from "@/lib/steadi"
-import type { CheckIn as PriorCheckIn, PatientInvite, Recommendation, SeedPatient, SessionResult, SessionStatus, Symptoms, Trend } from "@/lib/types"
+import type { CheckIn as PriorCheckIn, FlowStep, PatientInvite, QuestionKey, Recommendation, SeedPatient, SessionResult, SessionStatus, Symptoms, Trend } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { ptCta, ptSecondary, ptStop } from "@/components/play/ptClasses"
 import { CameraTrouble, type CameraTroubleState } from "@/components/play/CameraTrouble"
 import { failureReason, isRealInvite, reportCouldNotComplete } from "@/components/play/couldNotComplete"
+import { FlowHeader, type FlowLeave } from "@/components/patient/FlowHeader"
+import { unansweredKeys, withoutAnswer } from "@/components/patient/flow"
+import { LeftCheckIn, type LeftDelivery } from "@/components/patient/LeftCheckIn"
 import { usePose } from "./use-pose"
 import { useVoice } from "./use-voice"
 
-type Step = "welcome" | "setup" | "instructions" | "test" | "paused" | "questions" | "closing" | "emergency" | "could_not_complete"
+type Step = "welcome" | "setup" | "instructions" | "test" | "paused" | "questions" | "closing" | "emergency" | "could_not_complete" | "left"
 
 const DURATION_MS = protocol.test.duration_s * 1000
 const RESUME_WINDOW_MS = protocol.thresholds.stop_resume_window_s * 1000
 const QUESTIONS = protocol.symptom_questions
+const QUESTION_IDS = QUESTIONS.map((q) => q.id)
+const RED_FLAG_ID = "short_of_breath_or_chest_pain"
 const SETUP_CHECKS = [
   { id: "chair", voice: "setup_chair", confirm: "My chair is ready" },
   { id: "helper", voice: "setup_helper", confirm: "Someone is nearby" },
@@ -111,6 +118,10 @@ export function CheckIn({
   const [note, setNote] = useState("")
   const [noteSent, setNoteSent] = useState<"open" | "sent" | "skipped">("open")
   const [result, setResult] = useState<SessionResult | null>(null)
+  /** Leave: where from, whether answers went out on the way (questions), and Done from the closing. */
+  const [left, setLeft] = useState<{ from: FlowStep | "done"; delivery: LeftDelivery } | null>(null)
+  /** The Leave sheet is open: hold the paused screen's auto-finish so nothing changes behind it. */
+  const [leaveOpen, setLeaveOpen] = useState(false)
 
   const voice = useVoice()
   const { videoRef, canvasRef, setFrameHandler, setTierHandler, tier, status: poseStatus, error: poseError, visible, ready, demoVideo, startLive, startSeeded, stop: stopPose } = usePose()
@@ -215,10 +226,10 @@ export function CheckIn({
 
   // Paused with no answer: treat as finished early after the resume window.
   useEffect(() => {
-    if (step !== "paused") return
+    if (step !== "paused" || leaveOpen) return
     const id = setTimeout(() => finishTest(true), RESUME_WINDOW_MS)
     return () => clearTimeout(id)
-  }, [step, finishTest])
+  }, [step, finishTest, leaveOpen])
 
   // ---- step actions
   const begin = () => {
@@ -345,6 +356,9 @@ export function CheckIn({
     void voice.say("could_not_complete_done", lines.could_not_complete.done)
   }
 
+  /** Where the open Leave sheet was opened from (the instructions stop when it opens). */
+  const leaveRef = useRef<FlowStep | null>(null)
+
   const allChecked = SETUP_CHECKS.every((c) => checks[c.id])
   const framed = demo || visible
   const canStart = allChecked && ready && framed
@@ -407,7 +421,7 @@ export function CheckIn({
   }
 
   const buildResult = useCallback(
-    (symptoms: Symptoms, patientNote?: string): SessionResult => {
+    (symptoms: Symptoms, patientNote?: string, questionsUnanswered?: QuestionKey[]): SessionResult => {
       const s = summary.current!
       const scripted = patient.scripted_today
       return {
@@ -428,6 +442,8 @@ export function CheckIn({
         gaitObservations: demo ? (scripted.gait_observations ?? []) : [],
         symptoms,
         patientNote,
+        // Leave mid-questions: these values are placeholders, never answers (the card shows "Not answered").
+        ...(questionsUnanswered?.length ? { questionsUnanswered } : {}),
         tier: tier ?? "seeded",
         demoData: demo || tier === "seeded",
         scripted: demo ? ["new_incontinence", "gait", "tandem"] : [],
@@ -449,15 +465,46 @@ export function CheckIn({
     } else finishQuestions(next)
   }
 
+  /** Unanswered questions become placeholders (0 / false); questionsUnanswered on the result says which they are. */
+  const symptomsFrom = (a: Partial<Symptoms>): Symptoms => ({
+    pain_0_10: Number(a.pain_0_10 ?? 0),
+    dizzy: !!a.dizzy,
+    short_of_breath_or_chest_pain: !!a.short_of_breath_or_chest_pain,
+    calf_pain_or_swelling: !!a.calf_pain_or_swelling,
+    new_incontinence: demo ? patient.scripted_today.symptoms.new_incontinence : false,
+  })
+
+  /** Back on the questions: one question back, every answer kept (the slider keeps its value). */
+  const backQuestion = () => {
+    if (qi === 0) return
+    const i = qi - 1
+    const given = answers[QUESTIONS[i].id as keyof Symptoms]
+    if (typeof given === "number") setPain(given)
+    setQi(i)
+    void voice.say(`q_${QUESTIONS[i].id}`)
+  }
+
+  /**
+   * "I tapped Yes by mistake": back to the breath/chest question with that answer removed (not set to No), and the
+   * result re-sent with it listed as not answered, so the card drops the red flag only with a recorded retraction.
+   */
+  const mistap = () => {
+    voice.stop()
+    const a = withoutAnswer(answers, RED_FLAG_ID)
+    setAnswers(a)
+    setQi(QUESTION_IDS.indexOf(RED_FLAG_ID))
+    setStep("questions")
+    status("questions")
+    const r = buildResult(symptomsFrom(a), undefined, unansweredKeys(QUESTION_IDS, a))
+    setResult(r)
+    void sendResult(r)
+    void voice.say(`q_${RED_FLAG_ID}`)
+  }
+
   const finishQuestions = (a: Partial<Symptoms>) => {
-    const symptoms: Symptoms = {
-      pain_0_10: Number(a.pain_0_10 ?? 0),
-      dizzy: !!a.dizzy,
-      short_of_breath_or_chest_pain: !!a.short_of_breath_or_chest_pain,
-      calf_pain_or_swelling: !!a.calf_pain_or_swelling,
-      new_incontinence: demo ? patient.scripted_today.symptoms.new_incontinence : false,
-    }
-    const r = buildResult(symptoms)
+    // A red-flag Yes ends the questions early: anything after it goes as not answered, never as "No".
+    const unanswered = unansweredKeys(QUESTION_IDS, a)
+    const r = buildResult(symptomsFrom(a), undefined, unanswered.length ? unanswered : undefined)
     setResult(r)
     void sendResult(r)
     status("scoring")
@@ -517,6 +564,34 @@ export function CheckIn({
     void voice.say("closure", closing[2])
   }
 
+  /** Send the answers so far (Leave during the questions). Says "went to your care team" only once acknowledged. */
+  const sendLeftAnswers = async (r: SessionResult) => {
+    setLeft({ from: "questions", delivery: "sending" })
+    const ok = await sendResult(r)
+    if (!ok) sendEvent({ type: "left_flow", sessionId, step: "questions", at: Date.now() })
+    setLeft({ from: "questions", delivery: ok ? "ok" : "failed" })
+  }
+
+  /** Confirmed Leave (or Not now on camera help): stop everything, tell the board, then the calm left screen. */
+  const leave = (from: FlowStep) => {
+    voice.stop()
+    cancelCountdown()
+    setClock(clock(), false)
+    stopPose()
+    setLeaveOpen(false)
+    setStep("left")
+    if (from === "questions" && summary.current) {
+      const r = buildResult(symptomsFrom(answers), undefined, unansweredKeys(QUESTION_IDS, answers))
+      setResult(r)
+      void sendLeftAnswers(r)
+      void voice.say("left_checkin_sent")
+      return
+    }
+    setLeft({ from, delivery: null })
+    sendEvent({ type: "left_flow", sessionId, step: from, at: Date.now() })
+    void voice.say("left_checkin")
+  }
+
   /** Leave the demo from any screen: stop speaking and the countdown, then go back to the start screen. */
   const exitDemo = () => {
     voice.stop()
@@ -530,15 +605,75 @@ export function CheckIn({
   const picture = step === "setup" && setupIdx < SETUP_CHECKS.length
   const isDemo = demo || tier === "seeded"
 
+  // ---- Back and Leave (same place on every screen)
+  const framingStep = step === "setup" && setupIdx === SETUP_CHECKS.length
+  const leaveFrom: FlowStep | null =
+    step === "welcome" ? "welcome"
+    : step === "setup" ? (cameraTrouble ? "help" : framingStep ? "frame" : "setup")
+    : step === "instructions" ? (countdown !== null ? "countdown" : "instructions")
+    : step === "paused" ? "test"
+    : step === "questions" ? "questions"
+    : null
+  const goWelcome = () => {
+    voice.stop()
+    voice.setCaption("")
+    setStep("welcome")
+  }
+  const back: (() => void) | null =
+    step === "setup" ? (setupIdx === 0 ? goWelcome : backSetup)
+    : step === "questions" && qi > 0 ? backQuestion
+    : step === "closing" && closeIdx > 0 ? () => goClose(closeIdx - 1)
+    : null
+  const finish = () => {
+    voice.stop()
+    setLeft({ from: "done", delivery: null })
+    setStep("left")
+    void voice.say("closure", closing[2])
+  }
+  const flowLeave: FlowLeave | null =
+    step === "closing"
+      ? { kind: "done", onClick: finish }
+      : leaveFrom
+        ? {
+            kind: "confirm",
+            body: step === "questions" ? lines.leave.confirm_body_questions : lines.leave.confirm_body,
+            onOpenChange: (open) => {
+              setLeaveOpen(open)
+              if (!open) {
+                leaveRef.current = null
+                voice.stop()
+                return
+              }
+              leaveRef.current = leaveFrom
+              // Like Stop: the instructions and the 3-2-1 must not run on into the test behind the sheet.
+              if (step === "instructions") {
+                voice.stop()
+                cancelCountdown()
+                setStep("setup")
+              }
+              void voice.say(step === "questions" ? "leave_confirm_questions" : "leave_confirm")
+            },
+            onConfirm: () => leave(leaveRef.current ?? leaveFrom),
+          }
+        : null
+
   if (step === "emergency") {
     return (
       <main className="flex min-h-dvh flex-col justify-center gap-8 bg-pt-danger-fill px-5 py-10 text-white" role="alert">
         <AlertTriangle aria-hidden className="size-16" />
         <p className="text-3xl font-semibold leading-snug">{lines.emergency.line}</p>
-        <Button asChild size="lg" className="h-16 bg-white text-2xl text-pt-danger-fill hover:bg-white/90">
+        <Button asChild size="lg" className="h-16 bg-white text-2xl text-pt-danger-fill hover:bg-white/90 outline-none focus-visible:ring-[3px] focus-visible:ring-pt-focus focus-visible:ring-offset-2 focus-visible:ring-offset-pt-danger-fill">
           <a href="tel:911">
             <Phone aria-hidden className="size-6" /> Call 911
           </a>
+        </Button>
+        {/* Secondary and quieter than 911: back to the breath/chest question, with that answer cleared. */}
+        <Button
+          size="lg"
+          className="h-14 min-h-14 self-center rounded-xl border border-white/50 bg-transparent px-5 text-xl font-semibold text-white hover:bg-white/10 outline-none focus-visible:ring-[3px] focus-visible:ring-pt-focus focus-visible:ring-offset-2 focus-visible:ring-offset-pt-danger-fill"
+          onClick={mistap}
+        >
+          <Undo2 aria-hidden className="size-5" /> {lines.emergency.mistap}
         </Button>
       </main>
     )
@@ -569,6 +704,28 @@ export function CheckIn({
           </div>
         )}
       </header>
+
+      {/* Back and Leave: same place on every screen. The test keeps its Stop instead (held space, no jump). */}
+      {step !== "left" && step !== "could_not_complete" && (
+        <div className="-mt-2 min-h-14">
+          <FlowHeader back={back} leave={flowLeave} />
+        </div>
+      )}
+
+      {step === "left" && left && (
+        <LeftCheckIn
+          as="h1"
+          delivery={left.delivery}
+          finished={left.from === "done"}
+          onRetry={() => result && void sendLeftAnswers(result)}
+        >
+          {left.from !== "done" && !left.delivery && (
+            <Button size="lg" className={btn} onClick={() => window.location.reload()}>
+              {lines.leave.start_again}
+            </Button>
+          )}
+        </LeftCheckIn>
+      )}
 
       {/* Camera / skeleton: mounted across setup and test so the stream survives step changes. */}
       <div
@@ -624,18 +781,11 @@ export function CheckIn({
           <Button size="lg" className={btn} onClick={confirmCheck}>
             <Check aria-hidden className="size-6" /> {SETUP_CHECKS[setupIdx].confirm}
           </Button>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            {setupIdx > 0 ? (
-              <Button size="lg" className={cn(btn2, "w-auto border-0 bg-transparent")} onClick={backSetup}>
-                <ArrowLeft aria-hidden className="size-5" /> Back
-              </Button>
-            ) : <span />}
-            {demo && !real && (
-              <Button size="lg" className={cn(btn2, "w-auto border-0 bg-transparent text-pt-muted")} onClick={skipSetup}>
-                Skip setup (demo)
-              </Button>
-            )}
-          </div>
+          {demo && !real && (
+            <Button size="lg" className={cn(btn2, "w-auto self-end border-0 bg-transparent text-pt-muted")} onClick={skipSetup}>
+              Skip setup (demo)
+            </Button>
+          )}
         </section>
       )}
 
@@ -645,6 +795,7 @@ export function CheckIn({
           state={tellState}
           onRetry={() => retryCamera()}
           onTell={() => void tellCareTeam()}
+          onNotNow={() => leave("help")}
           switchCamera={{
             label: facing === "user" ? lines.could_not_complete.use_back : lines.could_not_complete.use_front,
             onClick: () => retryCamera(facing === "user" ? "environment" : "user"),
@@ -680,16 +831,11 @@ export function CheckIn({
           <Button size="lg" className={cn(btn, "sticky bottom-4 z-10")} disabled={!canStart} onClick={() => void startInstructions()}>
             I&apos;m ready
           </Button>
-          <div className="flex flex-wrap items-center justify-between gap-3 text-xl">
-            <Button size="lg" className={cn(btn2, "w-auto border-0 bg-transparent")} onClick={backSetup}>
-              <ArrowLeft aria-hidden className="size-5" /> Back
+          {!demo && (
+            <Button size="lg" className={cn(btn2, "w-auto self-start border-0 bg-transparent")} onClick={() => { const f = facing === "user" ? "environment" : "user"; setFacing(f); startCamera(f) }}>
+              Use {facing === "user" ? "back" : "front"} camera
             </Button>
-            {!demo && (
-              <Button size="lg" className={cn(btn2, "w-auto border-0 bg-transparent")} onClick={() => { const f = facing === "user" ? "environment" : "user"; setFacing(f); startCamera(f) }}>
-                Use {facing === "user" ? "back" : "front"} camera
-              </Button>
-            )}
-          </div>
+          )}
           {!real && (
             <div className="flex items-center gap-3">
               <Switch id="demo" checked={demo} onCheckedChange={toggleDemo} />
@@ -731,6 +877,7 @@ export function CheckIn({
           index={qi}
           pain={pain}
           setPain={setPain}
+          given={answers[QUESTIONS[qi].id as keyof Symptoms]}
           onAnswer={(v) => void answer(QUESTIONS[qi].id, v)}
         />
       )}
@@ -791,11 +938,6 @@ export function CheckIn({
             {closeIdx < CLOSE_STEPS - 1 && (
               <Button size="lg" className={btn} onClick={() => goClose(closeIdx + 1)}>Next</Button>
             )}
-            {closeIdx > 0 && (
-              <Button size="lg" className={cn(btn2, "w-auto self-start border-0 bg-transparent")} onClick={() => goClose(closeIdx - 1)}>
-                <ArrowLeft aria-hidden className="size-5" /> Back
-              </Button>
-            )}
           </div>
         </section>
       )}
@@ -829,7 +971,7 @@ function TimeRing({ progress }: { progress: number }) {
 
 type Q = (typeof QUESTIONS)[number]
 
-function Question({ q, index, pain, setPain, onAnswer }: { q: Q; index: number; pain: number; setPain: (n: number) => void; onAnswer: (v: boolean | number) => void }) {
+function Question({ q, index, pain, setPain, given, onAnswer }: { q: Q; index: number; pain: number; setPain: (n: number) => void; given?: boolean | number; onAnswer: (v: boolean | number) => void }) {
   return (
     <section className="flex flex-col gap-5" aria-labelledby={`q-${q.id}`}>
       <p className="text-xl text-pt-muted">Question {index + 1} of {QUESTIONS.length}</p>
@@ -846,8 +988,19 @@ function Question({ q, index, pain, setPain, onAnswer }: { q: Q; index: number; 
         </>
       ) : (
         <div className="grid grid-cols-2 gap-3">
-          <Button size="lg" className={cn(btn2, "h-20 min-h-20 text-2xl")} onClick={() => onAnswer(true)}>Yes</Button>
-          <Button size="lg" className={cn(btn2, "h-20 min-h-20 text-2xl")} onClick={() => onAnswer(false)}>No</Button>
+          {/* After Back, the earlier answer is marked with a check and a heavier border (not color alone). */}
+          {([true, false] as const).map((v) => (
+            <Button
+              key={String(v)}
+              size="lg"
+              aria-pressed={given === v}
+              className={cn(btn2, "h-20 min-h-20 text-2xl", given === v && "border-2 border-pt-ink bg-pt-surface-2")}
+              onClick={() => onAnswer(v)}
+            >
+              {given === v && <Check aria-hidden className="size-6" />}
+              {v ? "Yes" : "No"}
+            </Button>
+          ))}
         </div>
       )}
     </section>

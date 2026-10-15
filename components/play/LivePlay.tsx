@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { Pause as PauseIcon, Square, Zap } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { FlowHeader } from "@/components/patient/FlowHeader"
 import { CameraTrouble, type CameraTroubleState } from "@/components/play/CameraTrouble"
 import { failureReason, isRealPlay, reportCouldNotComplete } from "@/components/play/couldNotComplete"
 import { HitTimeline } from "@/components/play/HitTimeline"
@@ -22,7 +23,7 @@ import { coachLine, exerciseById } from "@/lib/play/programs"
 import { createReplayBus, createSyntheticBus, type SyntheticBus } from "@/lib/play/poseBus"
 import { frameAt, LOOP_MS, VIDEO_LOOPS, videoReplayFrames } from "@/lib/play/videoReplay"
 import { DEMO_VIDEO_SRC, fromDemoVideo, loadFixture } from "@/lib/pose/seeded"
-import { speak } from "@/lib/play/speak"
+import { cancel, speak, speakLines } from "@/lib/play/speak"
 import { playTone } from "@/lib/play/tones"
 import { clientLog } from "@/lib/play/clientLog"
 import { usePlayCamera } from "@/lib/play/usePlayCamera"
@@ -467,7 +468,24 @@ export function LivePlay() {
         ) : null}
 
         {paused ? (
-          <div className="absolute inset-0 flex flex-col justify-center gap-3 bg-pt-bg/90 p-6 sm:mx-auto sm:max-w-md">
+          <div className="absolute inset-0 z-20 flex flex-col gap-3 bg-pt-bg/90 p-6 pt-[max(1rem,env(safe-area-inset-top))] sm:mx-auto sm:max-w-md">
+            {/* Paused is the one live screen with Leave: the set is stopped, so nothing is duplicated over the game. */}
+            <FlowHeader
+              sheetClassName={playBody.className}
+              leave={{
+                kind: "confirm",
+                body: lines.leave.confirm_body,
+                onOpenChange: (open) => {
+                  if (open) void speakLines([lines.leave.confirm_title, lines.leave.confirm_body])
+                  else cancel()
+                },
+                onConfirm: () => {
+                  cancel()
+                  dispatch({ type: "LEAVE" })
+                },
+              }}
+            />
+            <div className="flex flex-1 flex-col justify-center gap-3">
             <h2 className={`${playDisplay.className} text-3xl font-bold leading-snug`}>{ui.paused.title}</h2>
             <Button type="button" className={ptCta} onClick={() => dispatch({ type: "RESUME" })}>
               {ui.paused.keep_going}
@@ -479,6 +497,7 @@ export function LivePlay() {
             >
               {ui.paused.finish_here}
             </Button>
+            </div>
           </div>
         ) : null}
 
@@ -514,6 +533,7 @@ export function LivePlay() {
               state={trouble}
               onRetry={retryCamera}
               onTell={() => void tellCareTeam()}
+              onNotNow={() => dispatch({ type: "LEAVE", step: "help" })}
               headingClassName={playDisplay.className}
               doneExtra={
                 <Link href={weekHref(inviteToken)} className={`${ptLink} inline-flex min-h-14 items-center self-start`}>

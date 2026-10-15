@@ -18,7 +18,8 @@
     "line": "Because you told us you're short of breath or have chest pain, please call 911 now. If someone is with you, ask them to stay with you.",
     "care_team_told": "Your care team is being told right now.",
     "mistap_confirm": "Did you mean to say you are short of breath or have chest pain?",
-    "follow_up": "Please keep your phone nearby."
+    "follow_up": "Please keep your phone nearby.",
+    "mistap": "I tapped Yes by mistake"
   },
   "note_prompt": "Is there anything you'd like your nurse to know? You can skip this.",
   "could_not_complete": {
@@ -38,5 +39,25 @@
     "send_failed": "That didn't go through yet. Check your connection, then try again.",
     "done_title": "Thank you for letting us know",
     "done": "Your care team will see that the check-in didn't work today. There's nothing else you need to do right now."
+  },
+  "leave": {
+    "back": "Back",
+    "leave": "Leave",
+    "done": "Done",
+    "confirm_title": "Leave this check-in?",
+    "confirm_body": "You can come back and start again whenever you're ready.",
+    "confirm_body_questions": "Your answers so far will go to your care team. Any question you skip will show as not answered.",
+    "keep_going": "Keep going",
+    "confirm_leave": "Leave",
+    "left_title": "You left the check-in",
+    "left_body": "That's okay, and you didn't do anything wrong. You can start again whenever you're ready.",
+    "left_body_sent": "That's okay, and you didn't do anything wrong.",
+    "sending": "Sending your answers so far…",
+    "sent": "Your answers so far went to your care team.",
+    "not_sent": "Your answers didn't go through yet. Check your connection, then try again.",
+    "retry": "Try again",
+    "start_again": "Start again",
+    "done_title": "You're all done",
+    "not_now": "Not now"
   }
 }

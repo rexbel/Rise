@@ -290,6 +290,19 @@ export function applyEvent(sessionId: string, e: RepEvent, now = Date.now(), tok
       updatedAt: now,
     })
   }
+  if (e.type === "left_flow") {
+    // Leaving after a result (e.g. from the closing) changes nothing: the card stands.
+    if (s.card || s.status === "could_not_complete") return s
+    if (s.status === "left" && s.leftFlow?.step === e.step) return s
+    const entry: AuditEntry = { sessionId, riseId: s.riseId, action: "left_flow", reasonCode: e.step, user: "Patient phone", at: now }
+    return put({ ...s, status: "left", leftFlow: { step: e.step, at: now }, audit: [...s.audit, entry].slice(-MAX_AUDIT), updatedAt: now })
+  }
+  // A new attempt after leaving starts over; the leave stays in the audit trail.
+  if (s.status === "left" && e.type === "status" && e.status === "setting_up") {
+    return put({ ...s, status: "setting_up", leftFlow: undefined, updatedAt: now })
+  }
+  // A late stop, rep or status from before the leave can't move the session back to testing or paused.
+  if (s.status === "left") return s
   // After a reported couldn't-complete, stray phone events (a voice "stop", a late status) can't hide it. Only an
   // explicit new attempt (status setting_up) starts over; the report stays in the audit trail and on Today.
   if (s.status === "could_not_complete" && !(e.type === "status" && e.status === "setting_up")) return s
@@ -376,6 +389,7 @@ export function buildCard(result: SessionResult): TriageCard {
     patientNote: result.patientNote,
     noteNeedsReview: needsReview,
     scripted,
+    questionsUnanswered: result.questionsUnanswered ?? [],
     evidenceFrameUrls: [],
     tier: result.tier,
     approval: "pending",
@@ -440,7 +454,8 @@ export function applyResult(sessionId: string, result: SessionResult, now = Date
   // see "Today" (or cheer) while the patient is being told to call 911. A later re-answer of the same session
   // does not count either; a retracted red flag waits for a person, not the crew.
   if (!prev && !card.emergency) markActive(result.riseId, now)
-  const status = card.recommendation === "human_confirm" || card.noteNeedsReview ? "needs_confirmation" : "ready"
+  const retractedPending = card.approval === "pending" && card.warnings.some((w) => w.startsWith(RETRACTED_PREFIX))
+  const status = card.recommendation === "human_confirm" || card.noteNeedsReview || retractedPending ? "needs_confirmation" : "ready"
   put({
     ...s,
     status,

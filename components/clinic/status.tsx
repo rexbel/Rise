@@ -7,6 +7,7 @@ import {
   Calculator,
   Camera,
   CameraOff,
+  LogOut,
   CircleCheck,
   CirclePause,
   ClipboardCheck,
@@ -63,6 +64,7 @@ export const STATUS_ICON: Record<SessionStatus, LucideIcon> = {
   ready: ClipboardCheck,
   needs_confirmation: UserCheck,
   could_not_complete: CameraOff,
+  left: LogOut,
 }
 
 export const RECOMMENDATION_ICON: Record<Recommendation, LucideIcon> = {

@@ -20,6 +20,7 @@ export function CameraTrouble({
   state,
   onRetry,
   onTell,
+  onNotNow,
   retrying = false,
   switchCamera,
   headingClassName,
@@ -30,6 +31,8 @@ export function CameraTrouble({
   state: CameraTroubleState
   onRetry: () => void
   onTell: () => void
+  /** "Not now": leave without telling the care team (the link stays valid for later). */
+  onNotNow?: () => void
   /** The camera is restarting after Try again. */
   retrying?: boolean
   /** Offer the other camera (classic check-in only; RehabNinja uses the front camera). */
@@ -106,6 +109,17 @@ export function CameraTrouble({
             copy.tell
           )}
         </Button>
+        {onNotNow && (
+          <Button
+            type="button"
+            size="lg"
+            className={cn(ptSecondary, "border-0 bg-transparent text-pt-muted hover:text-pt-ink")}
+            onClick={onNotNow}
+            disabled={sending}
+          >
+            {lines.leave.not_now}
+          </Button>
+        )}
       </div>
     </section>
   )

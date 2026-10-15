@@ -2,22 +2,25 @@
 
 import Link from "next/link"
 import { useEffect, useId, useMemo, useState } from "react"
-import { Phone, TriangleAlert, Undo2 } from "lucide-react"
+import { Check, Phone, Square, TriangleAlert, Undo2 } from "lucide-react"
 import { Slider as SliderPrimitive } from "radix-ui"
+import { FlowHeader, type FlowLeave } from "@/components/patient/FlowHeader"
+import { LeftCheckIn } from "@/components/patient/LeftCheckIn"
 import { Button } from "@/components/ui/button"
 import { FrameGate } from "@/components/play/FrameGate"
 import { PlayerHome } from "@/components/play/PlayerHome"
 import { SessionReport } from "@/components/play/SessionReport"
 import { usePlay } from "@/components/play/PlayProvider"
-import { playBody, playDisplay, ptCta, ptFocus, ptLink, ptSecondary } from "@/components/play/playTheme"
+import { playBody, playDisplay, ptCta, ptFocus, ptLink, ptSecondary, ptStop } from "@/components/play/playTheme"
 import ui from "@/content/play-ui.json"
 import lines from "@/content/patient-lines.json"
 import { playerHome } from "@/lib/play/playerHome"
 import type { ExerciseId } from "@/lib/play/programs"
-import { isLiveShell, nextQuestionId, QUESTION_ORDER } from "@/lib/play/phaseView"
+import { isLiveShell, QUESTION_ORDER } from "@/lib/play/phaseView"
 import { questionNumber } from "@/lib/play/playResult"
 import { questionKind, questionText } from "@/lib/play/questionCopy"
-import { speak, speakLines } from "@/lib/play/speak"
+import { currentQuestion, playExits } from "@/lib/play/sessionMachine"
+import { cancel, speak, speakLines } from "@/lib/play/speak"
 import type { QuestionId } from "@/lib/play/types"
 import type { SeedPatient } from "@/lib/types"
 import { weekHref } from "@/lib/play/crewView"
@@ -53,8 +56,11 @@ export function PhoneColumn({ patient }: { patient: SeedPatient }) {
         {session.demo && !onHome ? (
           <span className="shrink-0 whitespace-nowrap rounded-full border border-pt-accent/50 px-3 py-0.5 text-xl text-pt-ink">{ui.frame.demo_badge}</span>
         ) : null}
+        {/* The wide home has no card header: Leave sits on the brand row instead of adding a row above the cards. */}
+        {onHome ? <PlayFlowHeader /> : null}
       </header>
-      <div className={cn("flex min-h-0 flex-1 flex-col", onHome ? "px-1 pb-6 sm:px-0" : "p-4 sm:p-6")}>
+      <div className={cn("flex min-h-0 flex-1 flex-col", onHome ? "px-1 pb-6 sm:px-0" : "p-4 pt-2 sm:p-6 sm:pt-3")}>
+        {!onHome ? <PlayFlowHeader className="mb-2" /> : null}
         <PhoneBody patient={patient} />
       </div>
       {caption ? (
@@ -73,7 +79,7 @@ export function PhoneColumn({ patient }: { patient: SeedPatient }) {
 }
 
 function PhoneBody({ patient }: { patient: SeedPatient }) {
-  const { session, dispatch, begin, voiceStopOn, setVoiceStopOn, inviteToken, sessionId } = usePlay()
+  const { session, dispatch, begin, voiceStopOn, setVoiceStopOn, inviteToken, sessionId, countdownHeld } = usePlay()
   const { phase } = session
   const home = useMemo(() => playerHome(patient), [patient])
   const missionKey = home.missions.map((m) => m.id).join("|")
@@ -149,7 +155,7 @@ function PhoneBody({ patient }: { patient: SeedPatient }) {
     )
   }
   if (phase === "frame") return <FrameGate demo={session.demo} onOk={(cameraFailed) => dispatch({ type: "FRAME_OK", cameraFailed })} />
-  if (phase === "countdown") return <Countdown />
+  if (phase === "countdown") return <Countdown key={countdownHeld ? "held" : "running"} />
   // Live / paused render full-screen via PlaySessionView (not the phone column).
   if (isLiveShell(phase) || phase === "paused") {
     return <p className="text-xl text-pt-muted">Opening full-screen play…</p>
@@ -157,7 +163,83 @@ function PhoneBody({ patient }: { patient: SeedPatient }) {
   if (phase === "questions") return <Questions />
   if (phase === "emergency") return <Emergency />
   if (phase === "close") return <SessionReport patient={patient} />
+  if (phase === "left") return <Left />
   return null
+}
+
+/**
+ * Back and Leave, in the same place on every phone screen (components/patient/FlowHeader). Which ones show comes from
+ * the pure playExits (lib/play/sessionMachine). The live set keeps its own Stop and Pause, so this is not shown there.
+ */
+function PlayFlowHeader({ className }: { className?: string }) {
+  const { session, dispatch, inviteToken, setCountdownHeld } = usePlay()
+  const exits = playExits(session)
+  const questions = session.phase === "questions" && !!session.finishedSet
+  const body = questions ? lines.leave.confirm_body_questions : lines.leave.confirm_body
+
+  let leave: FlowLeave | null = null
+  if (exits.leave === "confirm") {
+    leave = {
+      kind: "confirm",
+      body,
+      onOpenChange: (open) => {
+        // Opening Leave during 3-2-1 holds the countdown in place (the screen under the sheet doesn't change).
+        setCountdownHeld(open && session.phase === "countdown")
+        if (!open) {
+          cancel()
+          return
+        }
+        void speakLines([lines.leave.confirm_title, body])
+      },
+      onConfirm: () => {
+        cancel()
+        setCountdownHeld(false)
+        dispatch({ type: "LEAVE" })
+      },
+    }
+  } else if (exits.leave === "done") {
+    leave = { kind: "done", href: weekHref(inviteToken), onClick: cancel }
+  }
+
+  return (
+    <FlowHeader
+      className={className}
+      sheetClassName={playBody.className}
+      back={
+        exits.back
+          ? () => {
+              cancel()
+              dispatch({ type: "BACK" })
+            }
+          : null
+      }
+      leave={leave}
+    />
+  )
+}
+
+/** After a confirmed Leave: calm, no score. Answers left mid-questions show as sent only once acknowledged. */
+function Left() {
+  const { session, delivery, retryResult, inviteToken } = usePlay()
+  const sentAnswers = !!session.finishedSet && session.leftFrom === "questions"
+  const state = sentAnswers ? (delivery === "idle" ? "sending" : delivery) : null
+
+  useEffect(() => {
+    void speakLines([lines.leave.left_title, sentAnswers ? lines.leave.left_body_sent : lines.leave.left_body])
+  }, [sentAnswers])
+
+  useEffect(() => {
+    if (state === "ok") speak(lines.leave.sent)
+    else if (state === "failed") speak(lines.leave.not_sent)
+  }, [state])
+
+  return (
+    <LeftCheckIn delivery={state} onRetry={() => void retryResult()} headingClassName={playDisplay.className}>
+      <Button asChild className={ptCta}>
+        <Link href={weekHref(inviteToken)}>{ui.home.back_week}</Link>
+      </Button>
+    </LeftCheckIn>
+  )
 }
 
 /**
@@ -202,17 +284,19 @@ function Emergency() {
         onClick={() => dispatch({ type: "EMERGENCY_MISTAP" })}
       >
         <Undo2 className="size-5" aria-hidden />
-        {ui.emergency.mistap_undo}
+        {lines.emergency.mistap}
       </Button>
     </div>
   )
 }
 
 function Countdown() {
-  const { dispatch } = usePlay()
+  const { dispatch, countdownHeld } = usePlay()
   const [i, setI] = useState(0)
 
   useEffect(() => {
+    // Held under the Leave sheet: nothing ticks. Keep going remounts it (keyed on the hold), so it starts from 3.
+    if (countdownHeld) return
     speak(ui.countdown[0])
     let n = 0
     const id = window.setInterval(() => {
@@ -226,20 +310,34 @@ function Countdown() {
       speak(ui.countdown[n])
     }, 700)
     return () => window.clearInterval(id)
-  }, [dispatch])
+  }, [dispatch, countdownHeld])
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 bg-gradient-to-b from-pt-accent/10 to-transparent">
-      <p className={`${playDisplay.className} text-7xl font-extrabold text-pt-accent`} aria-live="assertive">
-        {ui.countdown[i]}
-      </p>
+    <div className="flex flex-1 flex-col gap-4">
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-2xl bg-gradient-to-b from-pt-accent/10 to-transparent">
+        <p className={`${playDisplay.className} text-7xl font-extrabold text-pt-accent`} aria-live="assertive">
+          {ui.countdown[i]}
+        </p>
+      </div>
+      {/* Stop cancels the countdown back to framing; the set never starts. */}
+      <Button
+        type="button"
+        className={cn(ptStop, "h-16 min-h-16 text-2xl")}
+        onClick={() => {
+          speak(ui.live.stop)
+          dispatch({ type: "STOP" })
+        }}
+      >
+        <Square className="size-6 fill-current" aria-hidden />
+        {ui.live.stop}
+      </Button>
     </div>
   )
 }
 
 function Questions() {
   const { session } = usePlay()
-  const id = nextQuestionId(session.answers) ?? "calf"
+  const id = currentQuestion(session)
   const text = questionText(id)
   const kind = questionKind(id)
   const titleId = useId()
@@ -262,8 +360,10 @@ function Questions() {
 }
 
 function PainControl({ id, titleId }: { id: QuestionId; titleId: string }) {
-  const { dispatch } = usePlay()
-  const [value, setValue] = useState(0)
+  const { dispatch, session } = usePlay()
+  // Back keeps answers: the slider opens on the value given before.
+  const given = session.answers[id]
+  const [value, setValue] = useState(typeof given === "number" ? given : 0)
   const valueText = ui.questions.pain_value.replace("{n}", String(value))
   return (
     <>
@@ -299,16 +399,32 @@ function PainControl({ id, titleId }: { id: QuestionId; titleId: string }) {
 }
 
 function YesNo({ id }: { id: QuestionId }) {
-  const { dispatch } = usePlay()
+  const { dispatch, session } = usePlay()
+  const given = session.answers[id]
   return (
     <div className="grid grid-cols-2 gap-3">
-      <Button type="button" className={cn(ptSecondary, "h-20 min-h-20 text-2xl")} onClick={() => dispatch({ type: "ANSWER", id, value: true })}>
+      <AnswerButton chosen={given === true} onClick={() => dispatch({ type: "ANSWER", id, value: true })}>
         {ui.questions.yes}
-      </Button>
-      <Button type="button" className={cn(ptSecondary, "h-20 min-h-20 text-2xl")} onClick={() => dispatch({ type: "ANSWER", id, value: false })}>
+      </AnswerButton>
+      <AnswerButton chosen={given === false} onClick={() => dispatch({ type: "ANSWER", id, value: false })}>
         {ui.questions.no}
-      </Button>
+      </AnswerButton>
     </div>
+  )
+}
+
+/** After Back, the earlier answer is marked with a check and a heavier border (not color alone) and announced. */
+function AnswerButton({ chosen, onClick, children }: { chosen: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <Button
+      type="button"
+      aria-pressed={chosen}
+      className={cn(ptSecondary, "h-20 min-h-20 text-2xl", chosen && "border-2 border-pt-ink bg-pt-surface-2")}
+      onClick={onClick}
+    >
+      {chosen ? <Check className="size-6" aria-hidden /> : null}
+      {children}
+    </Button>
   )
 }
 

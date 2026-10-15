@@ -4,6 +4,7 @@
  * Closing steps after a RehabNinja set. The lines come from the same deterministic rules the server runs
  * (lib/rules.ts via lib/play/playResult.playClose) on the exact result that was sent, never the seed's
  * expected_triage. Shows no hit count, rep count, rank, or score. Everything shown is also spoken and captioned.
+ * Back (previous step) and Done (back to the week) are in the flow header above every step (PhoneColumn).
  */
 
 import Link from "next/link"
@@ -35,8 +36,9 @@ export function SessionReport({ patient }: { patient: SeedPatient }) {
     [result, finishedSet, patient, clinicName],
   )
   const steps: Step[] = close?.correction ? ["tip", "today", "nurse"] : ["today", "nurse"]
-  const [stepIndex, setStepIndex] = useState(0)
-  const step = steps[Math.min(stepIndex, steps.length - 1)]
+  // The step lives in the session so the flow header's Back can step back through it.
+  const stepIndex = Math.min(session.closeStep ?? 0, steps.length - 1)
+  const step = steps[stepIndex]
   const [noteDone, setNoteDone] = useState<"sent" | "skipped" | null>(null)
   const headingRef = useRef<HTMLHeadingElement>(null)
 
@@ -56,9 +58,12 @@ export function SessionReport({ patient }: { patient: SeedPatient }) {
     void speakLines(spokenKey.split("\n"))
   }, [spokenKey])
 
-  // Move focus to the new step's heading so screen readers follow the page change.
+  // Move focus to the new step's heading (Next or Back) so screen readers follow the page change.
+  const shownStep = useRef(stepIndex)
   useEffect(() => {
-    if (stepIndex > 0) headingRef.current?.focus()
+    if (shownStep.current === stepIndex) return
+    shownStep.current = stepIndex
+    headingRef.current?.focus()
   }, [stepIndex])
 
   if (!close) {
@@ -72,7 +77,7 @@ export function SessionReport({ patient }: { patient: SeedPatient }) {
   const label = step === "tip" ? ui.close.tip_label : step === "today" ? ui.close.today_label : ui.close.nurse_label
   const next = () => {
     cancel()
-    setStepIndex((i) => Math.min(i + 1, steps.length - 1))
+    if (stepIndex < steps.length - 1) dispatch({ type: "CLOSE_NEXT" })
   }
 
   return (

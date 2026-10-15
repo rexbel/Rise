@@ -216,6 +216,22 @@
     {
       "id": "could_not_complete_done",
       "text": "Your care team will see that the check-in didn't work today. There's nothing else you need to do right now."
+    },
+    {
+      "id": "leave_confirm",
+      "text": "Leave this check-in? You can come back and start again whenever you're ready."
+    },
+    {
+      "id": "leave_confirm_questions",
+      "text": "Leave this check-in? Your answers so far will go to your care team. Any question you skip will show as not answered."
+    },
+    {
+      "id": "left_checkin",
+      "text": "You left the check-in. That's okay, and you didn't do anything wrong. You can start again whenever you're ready."
+    },
+    {
+      "id": "left_checkin_sent",
+      "text": "You left the check-in. That's okay, and you didn't do anything wrong."
     }
   ]
 }
