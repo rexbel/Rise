@@ -58,6 +58,12 @@ function playLines(): string[] {
   add(patientLines.emergency.line)
   add(patientLines.emergency.care_team_told)
   add(patientLines.emergency.follow_up)
+  // Camera trouble (components/play/CameraTrouble.tsx): the spoken lines, not the button labels.
+  add(patientLines.could_not_complete.spoken)
+  add(patientLines.could_not_complete.done)
+  // Leave sheet and the "You left" screen (components/play/PhoneColumn.tsx, LivePlay.tsx): spoken lines only.
+  const leave = patientLines.leave
+  ;[leave.confirm_title, leave.confirm_body, leave.confirm_body_questions, leave.left_title, leave.left_body, leave.left_body_sent, leave.sent, leave.not_sent].forEach(add)
   // The closing tip speaks the correction's "what" and "action".
   const walk = (o: unknown) => {
     if (!o || typeof o !== "object") return
