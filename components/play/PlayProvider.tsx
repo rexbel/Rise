@@ -56,6 +56,9 @@ type PlayContextValue = {
   delivery: "idle" | "sending" | "ok" | "failed"
   /** Send the latest result again (Try again after it did not go through). Resolves true once acknowledged. */
   retryResult: () => Promise<boolean>
+  /** True while the Leave sheet is open over 3-2-1: the countdown holds (and starts again from 3 on Keep going). */
+  countdownHeld: boolean
+  setCountdownHeld: (held: boolean) => void
 }
 
 const PlayContext = createContext<PlayContextValue | null>(null)
@@ -184,7 +187,11 @@ export function PlayProvider({
         void deliver(out)
       }
       const closing = next.phase === "close" || next.phase === "emergency"
-      if (closing && before.phase !== next.phase && next.finishedSet) send()
+      // A red-flag Yes ends the questions early: the rest go as not answered, never as "No".
+      if (closing && before.phase !== next.phase && next.finishedSet) {
+        const unanswered = unansweredQuestions(next.answers)
+        send(unanswered.length ? unanswered : undefined)
+      }
       // "I tapped Yes by mistake": re-send with the red-flag answer cleared (listed as not answered), so the card
       // never keeps a red flag the patient took back, and the server records the retraction.
       if (action.type === "EMERGENCY_MISTAP" && next.phase === "questions") send(unansweredQuestions(next.answers))
@@ -264,6 +271,8 @@ export function PlayProvider({
     return () => setVoiceStopEnabled(false, null)
   }, [voiceStopOn, demo, dispatch])
 
+  const [countdownHeld, setCountdownHeld] = useState(false)
+
   const begin = useCallback(() => {
     unlockPlayback()
     dispatch({ type: "BEGIN" })
@@ -299,6 +308,8 @@ export function PlayProvider({
       setSetSource,
       sendNote,
       retryResult,
+      countdownHeld,
+      setCountdownHeld,
     }),
     [
       session,
@@ -327,6 +338,7 @@ export function PlayProvider({
       setSetSource,
       sendNote,
       retryResult,
+      countdownHeld,
     ],
   )
 

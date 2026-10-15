@@ -301,6 +301,8 @@ export function applyEvent(sessionId: string, e: RepEvent, now = Date.now(), tok
   if (s.status === "left" && e.type === "status" && e.status === "setting_up") {
     return put({ ...s, status: "setting_up", leftFlow: undefined, updatedAt: now })
   }
+  // A late stop, rep or status from before the leave can't move the session back to testing or paused.
+  if (s.status === "left") return s
   // After a reported couldn't-complete, stray phone events (a voice "stop", a late status) can't hide it. Only an
   // explicit new attempt (status setting_up) starts over; the report stays in the audit trail and on Today.
   if (s.status === "could_not_complete" && !(e.type === "status" && e.status === "setting_up")) return s
@@ -452,7 +454,8 @@ export function applyResult(sessionId: string, result: SessionResult, now = Date
   // see "Today" (or cheer) while the patient is being told to call 911. A later re-answer of the same session
   // does not count either; a retracted red flag waits for a person, not the crew.
   if (!prev && !card.emergency) markActive(result.riseId, now)
-  const status = card.recommendation === "human_confirm" || card.noteNeedsReview ? "needs_confirmation" : "ready"
+  const retractedPending = card.approval === "pending" && card.warnings.some((w) => w.startsWith(RETRACTED_PREFIX))
+  const status = card.recommendation === "human_confirm" || card.noteNeedsReview || retractedPending ? "needs_confirmation" : "ready"
   put({
     ...s,
     status,

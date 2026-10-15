@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useId, useMemo, useRef, useState } from "react"
+import { useEffect, useId, useMemo, useState } from "react"
 import { Check, Phone, Square, TriangleAlert, Undo2 } from "lucide-react"
 import { Slider as SliderPrimitive } from "radix-ui"
 import { FlowHeader, type FlowLeave } from "@/components/patient/FlowHeader"
@@ -79,7 +79,7 @@ export function PhoneColumn({ patient }: { patient: SeedPatient }) {
 }
 
 function PhoneBody({ patient }: { patient: SeedPatient }) {
-  const { session, dispatch, begin, voiceStopOn, setVoiceStopOn, inviteToken, sessionId } = usePlay()
+  const { session, dispatch, begin, voiceStopOn, setVoiceStopOn, inviteToken, sessionId, countdownHeld } = usePlay()
   const { phase } = session
   const home = useMemo(() => playerHome(patient), [patient])
   const missionKey = home.missions.map((m) => m.id).join("|")
@@ -155,7 +155,7 @@ function PhoneBody({ patient }: { patient: SeedPatient }) {
     )
   }
   if (phase === "frame") return <FrameGate demo={session.demo} onOk={(cameraFailed) => dispatch({ type: "FRAME_OK", cameraFailed })} />
-  if (phase === "countdown") return <Countdown />
+  if (phase === "countdown") return <Countdown key={countdownHeld ? "held" : "running"} />
   // Live / paused render full-screen via PlaySessionView (not the phone column).
   if (isLiveShell(phase) || phase === "paused") {
     return <p className="text-xl text-pt-muted">Opening full-screen play…</p>
@@ -172,10 +172,8 @@ function PhoneBody({ patient }: { patient: SeedPatient }) {
  * the pure playExits (lib/play/sessionMachine). The live set keeps its own Stop and Pause, so this is not shown there.
  */
 function PlayFlowHeader({ className }: { className?: string }) {
-  const { session, dispatch, inviteToken } = usePlay()
+  const { session, dispatch, inviteToken, setCountdownHeld } = usePlay()
   const exits = playExits(session)
-  /** Opening Leave during 3-2-1 stops the countdown first; the leave still reports the countdown step. */
-  const openedFrom = useRef<"countdown" | null>(null)
   const questions = session.phase === "questions" && !!session.finishedSet
   const body = questions ? lines.leave.confirm_body_questions : lines.leave.confirm_body
 
@@ -185,20 +183,18 @@ function PlayFlowHeader({ className }: { className?: string }) {
       kind: "confirm",
       body,
       onOpenChange: (open) => {
+        // Opening Leave during 3-2-1 holds the countdown in place (the screen under the sheet doesn't change).
+        setCountdownHeld(open && session.phase === "countdown")
         if (!open) {
-          openedFrom.current = null
           cancel()
           return
-        }
-        if (session.phase === "countdown") {
-          openedFrom.current = "countdown"
-          dispatch({ type: "STOP" })
         }
         void speakLines([lines.leave.confirm_title, body])
       },
       onConfirm: () => {
         cancel()
-        dispatch({ type: "LEAVE", step: openedFrom.current ?? undefined })
+        setCountdownHeld(false)
+        dispatch({ type: "LEAVE" })
       },
     }
   } else if (exits.leave === "done") {
@@ -295,10 +291,12 @@ function Emergency() {
 }
 
 function Countdown() {
-  const { dispatch } = usePlay()
+  const { dispatch, countdownHeld } = usePlay()
   const [i, setI] = useState(0)
 
   useEffect(() => {
+    // Held under the Leave sheet: nothing ticks. Keep going remounts it (keyed on the hold), so it starts from 3.
+    if (countdownHeld) return
     speak(ui.countdown[0])
     let n = 0
     const id = window.setInterval(() => {
@@ -312,7 +310,7 @@ function Countdown() {
       speak(ui.countdown[n])
     }, 700)
     return () => window.clearInterval(id)
-  }, [dispatch])
+  }, [dispatch, countdownHeld])
 
   return (
     <div className="flex flex-1 flex-col gap-4">

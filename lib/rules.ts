@@ -44,7 +44,8 @@ export function triage(result: SessionResult, previous: CheckIn | undefined, pos
   }
   return {
     recommendation: "human_confirm",
-    route: "care_coordinator",
+    // A nurse callback already names who calls (e.g. physical therapy for balance); keep it.
+    route: base.recommendation === "nurse_callback" ? base.route : "care_coordinator",
     ruleFired: "questions_unfinished",
     reasons: [missing, ...(base.ruleFired !== "on_track" ? base.reasons.map((r) => `Also present: ${r}`) : [])],
     emergency: false,

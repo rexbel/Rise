@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import { triage } from "../lib/rules"
 import { lastCheckIn, patients, scriptedResult } from "../lib/seed"
+import { sessionTone } from "../components/clinic/format"
 import { applyEvent, applyResult, getSession, invite, resetSessions } from "../lib/sessions"
 
 const gary = patients.find((p) => p.rise_id === "rise-04")!
@@ -52,5 +53,49 @@ describe("leaving before a result", () => {
     applyResult(sessionId, scriptedResult(gary, { sessionId }), 2000, t)
     const before = getSession(sessionId)!.status
     expect(applyEvent(sessionId, { type: "left_flow", sessionId, step: "closing", at: 1 }, 3000, t).status).toBe(before)
+  })
+})
+
+describe("review fixes", () => {
+  it("a nurse callback keeps its route when questions are unfinished", () => {
+    const r = scriptedResult(gary, { sessionId: "rise-04-leave03" })
+    r.symptoms = { ...r.symptoms, dizzy: true }
+    const base = triage(r, lastCheckIn(gary), gary.episode.post_op_day_today)
+    expect(base.recommendation).toBe("nurse_callback")
+    const d = triage({ ...r, questionsUnanswered: ["calf_pain_or_swelling"] }, lastCheckIn(gary), gary.episode.post_op_day_today)
+    expect(d).toMatchObject({ recommendation: "human_confirm", ruleFired: "questions_unfinished", route: base.route })
+  })
+
+  it("a retracted red flag waits for a person even when the later answers are on track", () => {
+    const { sessionId, path } = invite("rise-04", "classic", "Nurse A", 1000, true)
+    const t = tokenOf(path)
+    const r = scriptedResult(gary, { sessionId })
+    applyResult(sessionId, { ...r, symptoms: { ...r.symptoms, short_of_breath_or_chest_pain: true } }, 2000, t)
+    const card = applyResult(sessionId, r, 3000, t)
+    expect(card.recommendation).toBe("continue_plan")
+    const s = getSession(sessionId)!
+    expect(s.status).toBe("needs_confirmation")
+    expect(sessionTone(s)).toBe("confirm")
+  })
+
+  it("a late phone event can't move a left session back to testing", () => {
+    const { sessionId, path } = invite("rise-04", "play", "Nurse A", 1000, false)
+    const t = tokenOf(path)
+    applyEvent(sessionId, { type: "left_flow", sessionId, step: "test", at: 1 }, 2000, t)
+    applyEvent(sessionId, { type: "stop", sessionId, reason: "button", at: 2 }, 2100, t)
+    applyEvent(sessionId, { type: "status", sessionId, status: "testing", at: 3 }, 2200, t)
+    const s = getSession(sessionId)!
+    expect(s).toMatchObject({ status: "left", leftFlow: { step: "test" } })
+    expect(sessionTone(s)).toBe("confirm")
+  })
+
+  it("leaving before the test stays neutral; a repeat leave from the same step is not audited twice", () => {
+    const { sessionId, path } = invite("rise-04", "play", "Nurse A", 1000, false)
+    const t = tokenOf(path)
+    applyEvent(sessionId, { type: "left_flow", sessionId, step: "welcome", at: 1 }, 2000, t)
+    const n = getSession(sessionId)!.audit.length
+    const s = applyEvent(sessionId, { type: "left_flow", sessionId, step: "welcome", at: 2 }, 2100, t)
+    expect(s.audit.length).toBe(n)
+    expect(sessionTone(s)).toBe("neutral")
   })
 })

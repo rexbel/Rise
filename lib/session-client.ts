@@ -44,7 +44,19 @@ const RESULT_TIMEOUT_MS = 5000
  * caller learns whether the server acknowledged it (the phone only says "your care team is being told" after).
  * 4xx answers other than 408/429 are not retried: the same body would fail again.
  */
-export async function sendResult(r: SessionResult): Promise<boolean> {
+export function sendResult(r: SessionResult): Promise<boolean> {
+  // One at a time, in order: a mistap re-send must never land before the red-flag result it takes back.
+  const run = resultQueue.then(() => postResult(r))
+  resultQueue = run.then(
+    () => undefined,
+    () => undefined,
+  )
+  return run
+}
+
+let resultQueue: Promise<unknown> = Promise.resolve()
+
+async function postResult(r: SessionResult): Promise<boolean> {
   const path = `/api/sessions/${encodeURIComponent(r.sessionId)}/result`
   for (let attempt = 0; attempt < RESULT_ATTEMPTS; attempt++) {
     try {

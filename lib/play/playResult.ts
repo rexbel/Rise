@@ -76,7 +76,7 @@ export function unansweredQuestions(answers: QuestionAnswers): QuestionKey[] {
   return QUESTION_ORDER.filter((id) => answers[id] === undefined).map((id) => QUESTION_KEY[id])
 }
 
-/** Unanswered yes/no questions (e.g. calf after an emergency Yes) are sent as "no"; pain defaults to 0. */
+/** Unanswered yes/no questions fill as "no" (pain 0) to fit the schema; the result also lists them in questionsUnanswered. */
 export function playSymptoms(answers: QuestionAnswers, patient: SeedPatient, demo: boolean): Symptoms {
   return {
     pain_0_10: typeof answers.pain === "number" ? Math.max(0, Math.min(10, Math.round(answers.pain))) : 0,

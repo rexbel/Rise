@@ -502,7 +502,9 @@ export function CheckIn({
   }
 
   const finishQuestions = (a: Partial<Symptoms>) => {
-    const r = buildResult(symptomsFrom(a))
+    // A red-flag Yes ends the questions early: anything after it goes as not answered, never as "No".
+    const unanswered = unansweredKeys(QUESTION_IDS, a)
+    const r = buildResult(symptomsFrom(a), undefined, unanswered.length ? unanswered : undefined)
     setResult(r)
     void sendResult(r)
     status("scoring")
@@ -566,6 +568,7 @@ export function CheckIn({
   const sendLeftAnswers = async (r: SessionResult) => {
     setLeft({ from: "questions", delivery: "sending" })
     const ok = await sendResult(r)
+    if (!ok) sendEvent({ type: "left_flow", sessionId, step: "questions", at: Date.now() })
     setLeft({ from: "questions", delivery: ok ? "ok" : "failed" })
   }
 
